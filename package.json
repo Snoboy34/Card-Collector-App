@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "lint": "echo \"No linter configured\""
+    "lint": "echo \"No linter configured\"",
+    "prepare-sharp": "node ./scripts/prepare-sharp.js",
+    "rebuild-sharp": "npm rebuild sharp --update-binary || npx prebuild-install --platform=linux --arch=x64 --force --verbose || npm install --arch=x64 --platform=linux --unsafe-perm sharp",
+    "postinstall": "npm run prepare-sharp"
   },
   "author": "Your Team",
   "license": "MIT",
