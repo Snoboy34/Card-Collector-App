@@ -17,9 +17,10 @@ const morgan = require('morgan');
 const multer = require('multer');
 
 const grading = require('./services/grading_engine');
+const storage = require('./services/storage_engine');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 /* =========================
    Middlewares
@@ -42,7 +43,7 @@ app.use(express.static(publicDir));
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
-const storage = multer.diskStorage({
+const storageDisk = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadsDir);
   },
@@ -53,7 +54,7 @@ const storage = multer.diskStorage({
     cb(null, `${ts}_${safe}`);
   }
 });
-const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
+const upload = multer({ storage: storageDisk, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
 
 // Memory storage for grading route (req.file.buffer expected)
 const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -121,11 +122,22 @@ app.get('/api/inventory', (req, res) => {
   res.json({ ok: true, inventory });
 });
 
+/* Persisted cards listing */
+app.get('/api/cards', async (req, res) => {
+  try {
+    const cards = await storage.getAllCards();
+    return res.json({ ok: true, cards });
+  } catch (err) {
+    console.error('Error reading cards DB', err);
+    return res.status(500).json({ error: 'could not read cards' });
+  }
+});
+
 /* New grading endpoint (memory-buffer via multer)
    This route now saves the uploaded buffer to the local uploads directory,
    runs the grading engine on the buffer, and returns a full `item` object
    (matching the legacy /api/grade/upload response) so the frontend can
-   stay consistent. In Phase 2 you may switch to cloud storage and a DB.
+   stay consistent. It also persists the item to the simple JSON DB.
 */
 app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
   try {
@@ -160,6 +172,13 @@ app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
 
     inventory.unshift(item);
 
+    // Persist to JSON DB (best-effort)
+    try {
+      await storage.saveCard(item);
+    } catch (err) {
+      console.error('Failed to save card to JSON DB', err);
+    }
+
     // Return the same shape the frontend expects
     return res.json({ ok: true, item });
   } catch (err) {
@@ -169,7 +188,7 @@ app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
 });
 
 /* Upload & grade endpoint (disk-backed, legacy Phase 1 route kept for compatibility) */
-app.post('/api/grade/upload', upload.single('image'), (req, res) => {
+app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'image file is required' });
 
   // Run mock grading (replace with real pipeline in Phase 2)
@@ -185,6 +204,14 @@ app.post('/api/grade/upload', upload.single('image'), (req, res) => {
   };
 
   inventory.unshift(item); // add to inventory head
+
+  // Persist to JSON DB (best-effort)
+  try {
+    await storage.saveCard(item);
+  } catch (err) {
+    console.error('Failed to save card to JSON DB', err);
+  }
+
   // For Phase 1 we do not persist to DB; in Phase 2 persist to DB and cloud storage.
 
   res.json({ ok: true, item });
