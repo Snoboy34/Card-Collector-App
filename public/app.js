@@ -12,7 +12,8 @@
    Utilities
    ------------------------- */
 const api = {
-  getInventory: () => fetch('/api/inventory').then(r => r.json()),
+  // Load persisted cards from the server-side JSON DB
+  getInventory: () => fetch('/api/cards').then(r => r.json()),
   // Use the new memory-buffer grading endpoint so uploads are graded by the real engine.
   uploadImage: (formData) => fetch('/api/grade', { method: 'POST', body: formData }).then(r => r.json()),
   signup: (payload) => fetch('/api/auth/signup', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json()),
@@ -267,14 +268,10 @@ cameraInput.addEventListener('change', async (ev) => {
     try {
       const res = await api.uploadImage(fd);
       if (!res.ok) throw new Error(res.error || 'Upload failed');
-      // Server returns the full item object; push into state
       state.inventory.unshift(res.item);
       status.innerHTML = 'Upload complete. Report ready.';
-      // Re-render dashboard and wallet
       renderDashboard();
-      // Open report modal for the freshly uploaded item
       openReportModal(res.item);
-      // Clear input
       cameraInput.value = '';
     } catch (err) {
       status.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(err.message || String(err))}</span>`;
@@ -282,7 +279,6 @@ cameraInput.addEventListener('change', async (ev) => {
   });
 });
 
-/* Auth mock */
 loginBtn.addEventListener('click', async () => {
   const username = prompt('Enter a username for Phase 1 (no password required):');
   if (!username) return;
@@ -309,7 +305,7 @@ async function bootstrap() {
   // load inventory from server
   try {
     const res = await api.getInventory();
-    if (res.ok) state.inventory = res.inventory || [];
+    if (res.ok) state.inventory = res.cards || res.inventory || [];
   } catch (err) {
     console.warn('Could not fetch inventory', err);
   }
