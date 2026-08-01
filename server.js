@@ -25,10 +25,13 @@ const PORT = process.env.PORT || 5000;
 /* =========================
    Middlewares
    ========================= */
-app.use(helmet());
+// Disable CSP — Replit proxies requests through a different origin so
+// helmet's default "default-src 'self'" blocks all fetch() API calls.
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Raise limits to 20 MB so base64-encoded card images (300–600 KB) are accepted
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 app.use(morgan('dev'));
 
 /* =========================
@@ -215,6 +218,67 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
   // For Phase 1 we do not persist to DB; in Phase 2 persist to DB and cloud storage.
 
   res.json({ ok: true, item });
+});
+
+/* ── Stats endpoint ──────────────────────────────────────────────────────────
+   Returns a unified snapshot used by the dashboard: inventory size, wallet
+   total value (grade-based modifier × $100 PSA-10 placeholder), and category
+   breakdown by centering grade.  Replace the $100 placeholder with a live
+   pricing API in Phase 3.
+   ─────────────────────────────────────────────────────────────────────────── */
+const wallet = require('./services/wallet_engine');
+
+function buildStatsPayload() {
+  const PSA10_PLACEHOLDER = 100; // $100 mock PSA-10 reference; replace with live data in Phase 3
+  let totalValue = 0;
+  const categoryCounts = {};
+
+  inventory.forEach(item => {
+    const report = item.gradingReport || {};
+    const grade  = report.numericGrade || 0;
+    if (grade > 0) {
+      totalValue += wallet.getModifierForGrade(grade) * PSA10_PLACEHOLDER;
+    }
+    const label = report.centeringGrade || report.label || 'Ungraded';
+    categoryCounts[label] = (categoryCounts[label] || 0) + 1;
+  });
+
+  return {
+    ok: true,
+    stats: {
+      inventorySize:   inventory.length,
+      categoryCounts,
+      wallet: { totalValue: Math.round(totalValue * 100) / 100 },
+    },
+  };
+}
+
+app.get('/api/stats', (req, res) => {
+  res.json(buildStatsPayload());
+});
+
+/* ── Server-Sent Events endpoint ─────────────────────────────────────────────
+   Streams live stats updates to the dashboard every 10 seconds.
+   Falls back gracefully: if the client can't use EventSource the dashboard
+   already has a polling fallback in app.js.
+   ─────────────────────────────────────────────────────────────────────────── */
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // disable Nginx buffering if present
+  res.flushHeaders();
+
+  // Send initial payload immediately so the dashboard doesn't wait 10 s
+  const initial = buildStatsPayload();
+  res.write(`event: stats\ndata: ${JSON.stringify(initial)}\n\n`);
+
+  const interval = setInterval(() => {
+    const payload = buildStatsPayload();
+    res.write(`event: stats\ndata: ${JSON.stringify(payload)}\n\n`);
+  }, 10000);
+
+  req.on('close', () => clearInterval(interval));
 });
 
 /* Serve uploaded images statically (Phase 1). In production, serve from secure storage/CDN. */

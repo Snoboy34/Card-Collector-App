@@ -1,49 +1,85 @@
-const fs = require('fs');
+/**
+ * services/storage_engine.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Lightweight JSON-file persistence layer (Phase 2).
+ *
+ * Stores card inventory to data/cards.json so records survive server restarts.
+ * Drop-in replacement path for Phase 3: swap the file read/write calls here
+ * for database queries without touching server.js or any other module.
+ *
+ * Guard clauses:
+ *   • Missing data directory  → created automatically on first write
+ *   • Corrupt / missing file  → getAllCards() returns [] instead of throwing
+ *   • Write failure           → propagates the error so the caller can log it
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+'use strict';
+
+const fs   = require('fs');
 const path = require('path');
 
-const dbDir = path.join(__dirname, '..', 'data');
-const dbPath = path.join(dbDir, 'database.json');
+const DATA_DIR = path.join(__dirname, '..', 'data');
+const DB_PATH  = path.join(DATA_DIR, 'cards.json');
 
-async function ensureDB() {
-  try {
-    await fs.promises.access(dbPath, fs.constants.R_OK | fs.constants.W_OK);
-  } catch (err) {
-    // Create directory and file with empty array
-    await fs.promises.mkdir(dbDir, { recursive: true });
-    await fs.promises.writeFile(dbPath, '[]', 'utf8');
-  }
+// Ensure the data directory exists at module load time
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-async function readDB() {
-  await ensureDB();
-  const raw = await fs.promises.readFile(dbPath, 'utf8');
+/**
+ * getAllCards() → Promise<Array>
+ * Reads and parses the cards JSON file.
+ * Returns an empty array if the file does not exist or is malformed.
+ */
+async function getAllCards() {
   try {
-    return JSON.parse(raw);
+    const raw = await fs.promises.readFile(DB_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
-    // Recover by overwriting with an empty array
-    await fs.promises.writeFile(dbPath, '[]', 'utf8');
+    // File not found or JSON parse error — return empty array (not an error)
+    if (err.code !== 'ENOENT') {
+      console.warn('[storage_engine] getAllCards read error:', err.message);
+    }
     return [];
   }
 }
 
-async function writeDB(data) {
-  await ensureDB();
-  await fs.promises.writeFile(dbPath, JSON.stringify(data, null, 2), 'utf8');
+/**
+ * saveCard(card) → Promise<void>
+ * Upserts a card into the JSON file.
+ * If a card with the same id already exists it is replaced; otherwise prepended.
+ *
+ * @param {Object} card  Card object with at least an `id` property
+ * @throws {Error}       If the file cannot be written
+ */
+async function saveCard(card) {
+  if (!card || !card.id) throw new Error('saveCard: card must have an id');
+  const cards = await getAllCards();
+  const idx   = cards.findIndex(c => c.id === card.id);
+  if (idx >= 0) {
+    cards[idx] = card;            // update in place
+  } else {
+    cards.unshift(card);          // prepend so newest is first
+  }
+  await fs.promises.writeFile(DB_PATH, JSON.stringify(cards, null, 2), 'utf8');
 }
 
-async function getAllCards() {
-  return await readDB();
+/**
+ * deleteCard(id) → Promise<boolean>
+ * Removes a card by id.  Returns true if a card was removed, false if not found.
+ *
+ * @param {string} id
+ */
+async function deleteCard(id) {
+  if (!id) throw new Error('deleteCard: id is required');
+  const cards  = await getAllCards();
+  const before = cards.length;
+  const after  = cards.filter(c => c.id !== id);
+  if (after.length === before) return false;
+  await fs.promises.writeFile(DB_PATH, JSON.stringify(after, null, 2), 'utf8');
+  return true;
 }
 
-async function saveCard(item) {
-  const cards = await readDB();
-  // Prepend so newest appear first
-  cards.unshift(item);
-  await writeDB(cards);
-  return item;
-}
-
-module.exports = {
-  getAllCards,
-  saveCard
-};
+module.exports = { getAllCards, saveCard, deleteCard };

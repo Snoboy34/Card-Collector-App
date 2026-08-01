@@ -12,9 +12,11 @@
    Utilities
    ------------------------- */
 const api = {
-  // Load persisted cards from the server-side JSON DB
-  getInventory: () => fetch('/api/cards').then(r => r.json()),
-  // Use the new memory-buffer grading endpoint so uploads are graded by the real engine.
+  // Inventory fetch (keeps legacy behavior if available)
+  getInventory: () => fetch('/api/inventory').then(r => r.json()),
+  // GET unified stats from the backend
+  getStats: () => fetch('/api/stats').then(r => r.json()),
+  // Use the memory-buffer grading endpoint so uploads are graded by the real engine.
   uploadImage: (formData) => fetch('/api/grade', { method: 'POST', body: formData }).then(r => r.json()),
   signup: (payload) => fetch('/api/auth/signup', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json()),
   login: (payload) => fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json())
@@ -27,11 +29,41 @@ const navBtns = Array.from(document.querySelectorAll('.nav-btn'));
 const loginBtn = document.getElementById('loginBtn');
 
 /* -------------------------
+   Inject small CSS for SSE badge + badge utility styles
+   (so you can paste this single file without editing CSS files)
+   ------------------------- */
+(function injectSseBadgeStyles() {
+  const css = `
+/* SSE status badge styles (inserted by public/app.js) */
+.sse-badge {
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:0.85rem;
+  font-weight:600;
+  line-height:1;
+  vertical-align:middle;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.sse-live { background:#10b981; color:#fff; }
+.sse-reconnecting { background:#f59e0b; color:#111; }
+.sse-polling { background:#fb923c; color:#111; }
+.sse-off { background:#6b7280; color:#fff; opacity:0.95; }
+.badge { padding:4px 8px; border-radius:999px; background:rgba(255,255,255,0.04); color:inherit; font-size:0.85rem; }
+`;
+  const s = document.createElement('style');
+  s.setAttribute('data-generated-by', 'public-app-sse-badge');
+  s.textContent = css;
+  document.head.appendChild(s);
+})();
+
+/* -------------------------
    Simple client-side state
    ------------------------- */
 let state = {
   inventory: [],
-  user: null
+  user: null,
+  stats: null
 };
 
 /* -------------------------
@@ -63,19 +95,25 @@ function renderDashboard() {
   appRoot.innerHTML = `
     <section class="grid cols-2">
       <div class="panel">
-        <div class="dashboard-top">
+        <div class="dashboard-top" style="display:flex; align-items:center; gap:12px;">
           <div>
             <h2>Quick Dashboard</h2>
             <p class="muted">Pre-grade scans & quick wallet overview</p>
           </div>
-          <div class="metrics">
-            <div class="metric"><div class="value">${state.inventory.length}</div><div class="label">Total Cards</div></div>
-            <div class="metric"><div class="value">—</div><div class="label">Avg Grade (mock)</div></div>
-            <div class="metric"><div class="value">0</div><div class="label">Pending Uploads</div></div>
+          <div style="margin-left:auto;">
+            <span id="sseStatusBadge" class="sse-badge sse-off" title="Realtime status">Realtime: offline</span>
           </div>
         </div>
 
-        <div class="panel" id="cardGridWrap">
+        <div style="margin-top:12px" class="metrics-row">
+          <div class="metrics">
+            <div class="metric"><div id="totalCardsValue" class="value">${state.inventory.length}</div><div class="label">Total Cards</div></div>
+            <div class="metric"><div id="walletValue" class="value">—</div><div class="label">Wallet Value (USD)</div></div>
+            <div class="metric"><div id="pendingUploadsValue" class="value">0</div><div class="label">Pending Uploads</div></div>
+          </div>
+        </div>
+
+        <div class="panel" id="cardGridWrap" style="margin-top:12px;">
           <h3>Your Cards</h3>
           <div id="cardGrid" class="card-grid" aria-live="polite"></div>
         </div>
@@ -84,12 +122,17 @@ function renderDashboard() {
       <aside class="panel">
         <h3>Wallet</h3>
         <div id="walletList" class="wallet-list"></div>
+        <div style="margin-top:12px">
+          <h4>Category Breakdown</h4>
+          <div id="categoryBadges" style="display:flex; gap:8px; flex-wrap:wrap"></div>
+        </div>
       </aside>
     </section>
   `;
 
   renderCardGrid();
   renderWallet();
+  updateStatsUI();
 }
 
 function renderCardGrid() {
@@ -124,6 +167,7 @@ function renderWallet() {
     list.innerHTML = `<div class="muted">Your wallet is empty.</div>`;
     return;
   }
+  // show top items
   state.inventory.slice(0, 12).forEach(item => {
     const row = document.createElement('div');
     row.className = 'wallet-item';
@@ -137,6 +181,15 @@ function renderWallet() {
     row.addEventListener('click', () => openReportModal(item));
     list.appendChild(row);
   });
+
+  // also show wallet totals if available
+  if (state.stats && state.stats.stats && state.stats.stats.wallet) {
+    const totalElem = document.getElementById('walletValue');
+    if (totalElem) {
+      const val = (state.stats.stats.wallet.totalValue != null) ? state.stats.stats.wallet.totalValue : 0;
+      totalElem.textContent = `$${Number(val).toFixed(2)}`;
+    }
+  }
 }
 
 function renderInventory() {
@@ -268,10 +321,19 @@ cameraInput.addEventListener('change', async (ev) => {
     try {
       const res = await api.uploadImage(fd);
       if (!res.ok) throw new Error(res.error || 'Upload failed');
+      // Server returns the full item object; push into state
       state.inventory.unshift(res.item);
       status.innerHTML = 'Upload complete. Report ready.';
+      // Re-render dashboard and wallet
+      // Fetch fresh stats from server to update wallet totals & counts
+      try {
+        const s = await api.getStats();
+        if (s && s.ok) state.stats = s;
+      } catch (e) { /* ignore stats refresh error */ }
       renderDashboard();
+      // Open report modal for the freshly uploaded item
       openReportModal(res.item);
+      // Clear input
       cameraInput.value = '';
     } catch (err) {
       status.innerHTML = `<span style="color:var(--danger)">Error: ${escapeHtml(err.message || String(err))}</span>`;
@@ -279,6 +341,7 @@ cameraInput.addEventListener('change', async (ev) => {
   });
 });
 
+/* Auth mock */
 loginBtn.addEventListener('click', async () => {
   const username = prompt('Enter a username for Phase 1 (no password required):');
   if (!username) return;
@@ -302,13 +365,24 @@ async function bootstrap() {
     try { state.user = JSON.parse(stored); loginBtn.textContent = `Hi ${state.user.username}`; } catch(e){ /* ignore */ }
   }
 
-  // load inventory from server
+  // load inventory from server (port 5000)
   try {
     const res = await api.getInventory();
-    if (res.ok) state.inventory = res.cards || res.inventory || [];
+    if (res && res.ok) state.inventory = res.inventory || [];
   } catch (err) {
     console.warn('Could not fetch inventory', err);
   }
+
+  // load unified stats from server (port 5000) — one-time fetch for immediate UI fill
+  try {
+    const s = await api.getStats();
+    if (s && s.ok) state.stats = s;
+  } catch (err) {
+    console.warn('Could not fetch stats (initial)', err);
+  }
+
+  // Start SSE for live updates (or polling fallback)
+  initSse();
 
   // initial render based on hash
   const route = location.hash.replace('#','') || 'dashboard';
@@ -322,7 +396,140 @@ bootstrap();
    ------------------------- */
 function escapeHtml(s) {
   if (!s) return '';
-  return String(s).replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;', '"':'&quot;',"'":'&#39;'})[m]; });
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return ({ '&': '&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'": '&#39;' })[c];
+  });
 }
 
-/* End of app.js */
+function updateStatsUI() {
+  // state.stats structure: { ok: true, stats: { inventorySize, categoryCounts, wallet } }
+  if (!state.stats || !state.stats.stats) return;
+  const stats = state.stats.stats;
+  // inventory size
+  const totalEl = document.getElementById('totalCardsValue');
+  if (totalEl) totalEl.textContent = stats.inventorySize != null ? String(stats.inventorySize) : String(state.inventory.length);
+  // wallet total
+  const walletEl = document.getElementById('walletValue');
+  if (walletEl) walletEl.textContent = `$${(stats.wallet && stats.wallet.totalValue ? stats.wallet.totalValue.toFixed(2) : (0).toFixed(2))}`;
+  // category badges
+  const badges = document.getElementById('categoryBadges');
+  if (badges) {
+    badges.innerHTML = '';
+    const cc = stats.categoryCounts || {};
+    Object.keys(cc).forEach(k => {
+      const b = document.createElement('div');
+      b.className = 'badge';
+      b.textContent = `${k}: ${cc[k]}`;
+      badges.appendChild(b);
+    });
+  }
+  // pending uploads (keep placeholder behavior)
+  const pendingEl = document.getElementById('pendingUploadsValue');
+  if (pendingEl) pendingEl.textContent = '0';
+}
+
+/* -------------------------
+   SSE status badge helper
+   ------------------------- */
+function updateSseStatus(status) {
+  // status: 'live' | 'reconnecting' | 'polling' | 'offline'
+  const badge = document.getElementById('sseStatusBadge');
+  if (!badge) return;
+  badge.classList.remove('sse-live','sse-reconnecting','sse-polling','sse-off');
+  switch (status) {
+    case 'live':
+      badge.textContent = 'Realtime: live';
+      badge.classList.add('sse-live');
+      badge.title = 'Realtime connection is live';
+      break;
+    case 'reconnecting':
+      badge.textContent = 'Realtime: reconnecting';
+      badge.classList.add('sse-reconnecting');
+      badge.title = 'Realtime connection is reconnecting';
+      break;
+    case 'polling':
+      badge.textContent = 'Realtime: polling';
+      badge.classList.add('sse-polling');
+      badge.title = 'Using polling fallback for realtime updates';
+      break;
+    default:
+      badge.textContent = 'Realtime: offline';
+      badge.classList.add('sse-off');
+      badge.title = 'Realtime connection is offline';
+      break;
+  }
+}
+
+/* -------------------------
+   Initialize Server-Sent Events for live stats updates (fallbacks to polling)
+   ------------------------- */
+function initSse() {
+  // Clear any previous
+  try { if (window._sseEventSource) { window._sseEventSource.close(); window._sseEventSource = null; } } catch(_) {}
+  try { if (window._ssePoller) { clearInterval(window._ssePoller); window._ssePoller = null; } } catch(_) {}
+
+  // If badge exists set offline while we try
+  updateSseStatus('reconnecting');
+
+  // Attempt native EventSource first
+  if (window.EventSource) {
+    try {
+      const es = new EventSource('/api/events');
+
+      es.addEventListener('stats', (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload && payload.ok) {
+            state.stats = payload;
+            updateStatsUI();
+            updateSseStatus('live');
+          }
+        } catch (err) {
+          console.warn('Failed to parse SSE stats payload', err);
+        }
+      });
+
+      es.onopen = () => {
+        console.log('SSE connected to /api/events');
+        updateSseStatus('live');
+      };
+      es.onerror = (err) => {
+        console.warn('SSE error, will attempt reconnect in 5s', err);
+        updateSseStatus('reconnecting');
+        try { es.close(); } catch (_) {}
+        // backoff reconnect
+        setTimeout(initSse, 5000);
+      };
+
+      // store reference to allow manual close if needed
+      window._sseEventSource = es;
+      return;
+    } catch (e) {
+      console.warn('SSE initialization failed, falling back to polling', e);
+    }
+  } else {
+    console.warn('EventSource not supported by browser; falling back to polling');
+  }
+
+  // Fallback: polling every 10s
+  updateSseStatus('polling');
+  let consecutiveFail = 0;
+  window._ssePoller = setInterval(async () => {
+    try {
+      const s = await api.getStats();
+      if (s && s.ok) {
+        state.stats = s;
+        updateStatsUI();
+        consecutiveFail = 0;
+        updateSseStatus('polling');
+      } else {
+        consecutiveFail++;
+      }
+    } catch (err) {
+      consecutiveFail++;
+    }
+    if (consecutiveFail >= 6) { // ~1 minute of failures
+      updateSseStatus('offline');
+    }
+  }, 10000);
+}
