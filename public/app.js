@@ -16,8 +16,28 @@ const api = {
   getInventory: () => fetch('/api/inventory').then(r => r.json()),
   // GET unified stats from the backend
   getStats: () => fetch('/api/stats').then(r => r.json()),
-  // Use the memory-buffer grading endpoint so uploads are graded by the real engine.
-  uploadImage: (formData) => fetch('/api/grade', { method: 'POST', body: formData }).then(r => r.json()),
+  // Convert a File to base64, then POST JSON to /api/grade.
+  // Sending multipart FormData through the Replit proxy can be silently dropped;
+  // plain JSON is always forwarded correctly.
+  uploadImage: (file, name) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // reader.result is a data-URL: "data:image/jpeg;base64,<b64>"
+      // Strip the prefix so the server receives a raw base64 string.
+      const dataUrl = reader.result;
+      const base64  = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+      fetch('/api/grade', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ image: base64, name: name || file.name || 'Scanned Card' }),
+      })
+        .then(r => r.json())
+        .then(resolve)
+        .catch(reject);
+    };
+    reader.onerror = () => reject(new Error('Could not read image file'));
+    reader.readAsDataURL(file);
+  }),
   signup: (payload) => fetch('/api/auth/signup', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json()),
   login: (payload) => fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json())
 };
@@ -152,7 +172,7 @@ function renderCardGrid() {
           <div class="name">${escapeHtml(item.name)}</div>
           <div class="sub muted">Added: ${new Date(item.createdAt).toLocaleString()}</div>
         </div>
-        <div class="grade">${item.gradingReport ? item.gradingReport.label : '—'}</div>
+        <div class="grade">${item.gradingReport ? (item.gradingReport.label || item.gradingReport.centeringGrade || '—') : '—'}</div>
       </div>
     `;
     el.addEventListener('click', () => openReportModal(item));
@@ -175,7 +195,7 @@ function renderWallet() {
       <img src="${item.imagePath}" alt="${escapeHtml(item.name)}" />
       <div class="meta">
         <div class="name">${escapeHtml(item.name)}</div>
-        <div class="sub">${item.gradingReport ? item.gradingReport.label + ' • ' + item.gradingReport.weighted : 'Unscanned'}</div>
+        <div class="sub">${item.gradingReport ? (item.gradingReport.label || item.gradingReport.centeringGrade || '—') + ' • ' + (item.gradingReport.weighted || ('Grade ' + item.gradingReport.numericGrade) || '—') : 'Unscanned'}</div>
       </div>
     `;
     row.addEventListener('click', () => openReportModal(item));
@@ -208,7 +228,7 @@ function renderInventory() {
       <img src="${item.imagePath}" alt="${escapeHtml(item.name)}" style="width:80px; height:64px; object-fit:cover; border-radius:8px;" />
       <div style="flex:1;">
         <div style="font-weight:700">${escapeHtml(item.name)}</div>
-        <div class="muted">${item.gradingReport ? item.gradingReport.label + ' • ' + item.gradingReport.weighted : 'Unscanned'}</div>
+        <div class="muted">${item.gradingReport ? (item.gradingReport.label || item.gradingReport.centeringGrade || '—') + ' • ' + (item.gradingReport.weighted || ('Grade ' + item.gradingReport.numericGrade) || '—') : 'Unscanned'}</div>
       </div>
       <div><button class="small" onclick="openReportFromId('${item.id}')">Report</button></div>
     </div>
@@ -244,14 +264,12 @@ function openReportModal(item) {
       <div style="display:flex; gap:12px; margin-top:12px;">
         <img src="${item.imagePath}" alt="${escapeHtml(item.name)}" style="width:180px; height:220px; object-fit:cover; border-radius:8px; flex-shrink:0;" />
         <div>
-          <h4 style="margin:0 0 8px 0;">Grade: <span style="color:var(--accent)">${item.gradingReport ? item.gradingReport.label : 'Unscanned'}</span></h4>
+          <h4 style="margin:0 0 8px 0;">Grade: <span style="color:var(--accent)">${item.gradingReport ? (item.gradingReport.label || item.gradingReport.centeringGrade || 'Unscanned') : 'Unscanned'}</span></h4>
           ${item.gradingReport ? `
             <ul>
               <li>Centering: ${item.gradingReport.centering}</li>
-              <li>Corners: ${item.gradingReport.corners}</li>
-              <li>Edges: ${item.gradingReport.edges}</li>
-              <li>Surface: ${item.gradingReport.surface}</li>
-              <li><strong>Weighted: ${item.gradingReport.weighted}</strong></li>
+              <li>Centering: ${item.gradingReport.centering ? item.gradingReport.centering.hRatio + ' H / ' + item.gradingReport.centering.vRatio + ' V' : (item.gradingReport.centering || 'N/A')}</li>
+              <li><strong>Weighted: ${item.gradingReport.weighted || ('Grade ' + item.gradingReport.numericGrade + ' — ' + (item.gradingReport.centeringGrade || item.gradingReport.label || '—'))}</strong></li>
             </ul>
             <p class="muted">${escapeHtml(item.gradingReport.notes)}</p>
           ` : `<p class="muted">No grading report available.</p>`}
@@ -311,15 +329,12 @@ cameraInput.addEventListener('change', async (ev) => {
 
   document.getElementById('uploadBtn').addEventListener('click', async () => {
     const fname = (nameInput && nameInput.value) || file.name || 'Scanned Card';
-    const fd = new FormData();
-    fd.append('image', file, file.name);
-    fd.append('name', fname);
 
     const status = document.getElementById('uploadStatus');
     status.innerHTML = 'Uploading...';
 
     try {
-      const res = await api.uploadImage(fd);
+      const res = await api.uploadImage(file, fname);
       if (!res.ok) throw new Error(res.error || 'Upload failed');
       // Server returns the full item object; push into state
       state.inventory.unshift(res.item);

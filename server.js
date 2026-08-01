@@ -136,57 +136,63 @@ app.get('/api/cards', async (req, res) => {
   }
 });
 
-/* New grading endpoint (memory-buffer via multer)
-   This route now saves the uploaded buffer to the local uploads directory,
-   runs the grading engine on the buffer, and returns a full `item` object
-   (matching the legacy /api/grade/upload response) so the frontend can
-   stay consistent. It also persists the item to the simple JSON DB.
-*/
-app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
+/* ── Primary grading endpoint ────────────────────────────────────────────────
+   Accepts: POST /api/grade  Content-Type: application/json
+   Body: { image: <base64 string, with or without data-URL prefix>, name?: string }
+
+   Why JSON instead of multipart FormData:
+     The Replit dev-server proxy silently drops multipart/form-data POST bodies
+     in certain configurations, causing the browser to receive a TCP reset and
+     report "TypeError: Failed to fetch" before any Express middleware runs.
+     Sending the image as a plain JSON base64 string goes through the proxy
+     identically to every other fetch() call in the app.
+   ──────────────────────────────────────────────────────────────────────────── */
+app.post('/api/grade', async (req, res) => {
   try {
-    if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'image buffer required' });
-    // options: cardType, debug, weights may be provided via body
-    const opts = {};
-    if (req.body.cardType) opts.cardType = req.body.cardType;
-    if (req.body.debug) opts.debug = req.body.debug === 'true' || req.body.debug === '1';
-    if (req.body.weights) {
-      try { opts.weights = JSON.parse(req.body.weights); } catch (e) { /* ignore */ }
+    // ── Guard: body must contain an image string ──────────────────────────
+    const raw = req.body && req.body.image;
+    if (!raw || typeof raw !== 'string') {
+      return res.status(400).json({ ok: false, error: 'body.image (base64 string) is required' });
     }
 
-    // Persist the buffer to the uploads dir so the frontend can reference it
-    const ts = Date.now();
-    const orig = req.file.originalname || 'upload';
-    const safe = String(orig).replace(/\s+/g, '_').replace(/[^\w.-]/g, '');
-    const filename = `${ts}_${safe}`;
+    // ── Strip optional data-URL prefix ("data:image/jpeg;base64,") ────────
+    const base64 = raw.includes(',') ? raw.split(',')[1] : raw;
+
+    // ── Run the grading engine ────────────────────────────────────────────
+    const report = await grading.analyzeImageBuffer(base64);
+
+    // ── Persist image to uploads dir so the UI can display a thumbnail ────
+    const ts       = Date.now();
+    const safeName = String(req.body.name || 'card')
+                       .replace(/\s+/g, '_')
+                       .replace(/[^\w.-]/g, '')
+                       .slice(0, 60);
+    const filename = `${ts}_${safeName}.jpg`;
     const filePath = path.join(uploadsDir, filename);
-    await fs.promises.writeFile(filePath, req.file.buffer);
+    await fs.promises.writeFile(filePath, Buffer.from(base64, 'base64'));
 
-    // Run the grading engine on the buffer
-    const report = await grading.gradeBuffer(req.file.buffer, opts);
-
-    // Create inventory entry
+    // ── Build inventory item ──────────────────────────────────────────────
     const item = {
-      id: String(Date.now()),
-      name: req.body.name || safe || 'Untitled Card',
-      imagePath: `/uploads/${filename}`,
+      id:           String(ts),
+      name:         req.body.name || safeName || 'Untitled Card',
+      imagePath:    `/uploads/${filename}`,
       gradingReport: report,
-      createdAt: new Date().toISOString()
+      createdAt:    new Date().toISOString(),
     };
 
     inventory.unshift(item);
 
-    // Persist to JSON DB (best-effort)
+    // ── Persist to JSON store (best-effort — never fail the response) ─────
     try {
       await storage.saveCard(item);
-    } catch (err) {
-      console.error('Failed to save card to JSON DB', err);
+    } catch (storeErr) {
+      console.error('[grade] JSON store write failed:', storeErr.message);
     }
 
-    // Return the same shape the frontend expects
     return res.json({ ok: true, item });
   } catch (err) {
-    console.error('Grading error', err);
-    return res.status(500).json({ error: err.message || 'grading failed' });
+    console.error('[grade] error:', err.message);
+    return res.status(500).json({ ok: false, error: err.message || 'grading failed' });
   }
 });
 

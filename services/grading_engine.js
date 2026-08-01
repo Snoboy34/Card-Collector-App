@@ -29,7 +29,10 @@
 
 'use strict';
 
-const Jimp = require('jimp');
+// Jimp v1 exports a named class and helpers — destructure them.
+// Using the whole module object (require('jimp')) gives a plain object
+// whose .read / .intToRGBA are undefined; the named imports are required.
+const { Jimp, intToRGBA } = require('jimp');
 
 // ─── Centering Grade Table ─────────────────────────────────────────────────
 //
@@ -81,7 +84,7 @@ function sampleRegionBrightness(image, cx, cy, radius) {
     for (let dx = -radius; dx <= radius; dx++) {
       const px = Math.min(Math.max(cx + dx, 0), width  - 1);
       const py = Math.min(Math.max(cy + dy, 0), height - 1);
-      const { r, g, b } = Jimp.intToRGBA(image.getPixelColor(px, py));
+      const { r, g, b } = intToRGBA(image.getPixelColor(px, py));
       total += perceptualBrightness(r, g, b);
       count++;
     }
@@ -120,7 +123,7 @@ function findArtworkEdge(image, axis, direction, midpoint, borderBrightness) {
     const px = axis === 'x' ? i : midpoint;
     const py = axis === 'x' ? midpoint : i;
 
-    const { r, g, b } = Jimp.intToRGBA(image.getPixelColor(px, py));
+    const { r, g, b } = intToRGBA(image.getPixelColor(px, py));
     const brightness   = perceptualBrightness(r, g, b);
 
     if (Math.abs(brightness - borderBrightness) > DEVIATION_THRESHOLD) {
@@ -181,9 +184,9 @@ async function analyzeImageBuffer(base64String) {
   }
 
   // ── Load & decode ──────────────────────────────────────────────────────
-  // Jimp.read throws if the buffer is not a valid image; let the error propagate
+  // Jimp.fromBuffer throws if the buffer is not a valid image; let the error propagate
   // to the caller (server.js catches it and returns HTTP 500 with the message).
-  const image  = await Jimp.read(buffer);
+  const image  = await Jimp.fromBuffer(buffer);
   const { width, height } = image.bitmap;
 
   if (width < 20 || height < 20) {
@@ -246,6 +249,10 @@ async function analyzeImageBuffer(base64String) {
     },
     numericGrade,      // 5–10  (used by wallet_engine.js for pricing)
     centeringGrade,    // human-readable label
+    // Aliased fields so existing frontend display sites (label, weighted) work
+    // without requiring a frontend schema migration.
+    label:    centeringGrade,                             // e.g. "Gem Mint"
+    weighted: `Grade ${numericGrade} — ${centeringGrade}`, // e.g. "Grade 10 — Gem Mint"
     // Raw pixel measurements stored for future ML retraining (Phase 3 flywheel)
     rawMeasurements: {
       leftPx, rightPx, topPx, bottomPx,
