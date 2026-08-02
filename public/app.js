@@ -215,10 +215,37 @@ function renderWallet() {
 function renderInventory() {
   appRoot.innerHTML = `
     <section>
-      <div class="panel">
-        <h2>Inventory</h2>
-        <p class="muted">Full wallet list</p>
-        <div id="inventoryList" style="margin-top:12px;"></div>
+         <div class="panel">
+      <h2>Portfolio Analytics</h2>
+      
+      <!-- Live Metrics Breakdown Widgets -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 15px 0 20px 0;">
+        <div style="background: #1e293b; padding: 12px; border-radius: 6px; border-left: 4px solid #10b981;">
+          <small style="color: #94a3b8; font-size: 0.8rem;">Portfolio Value</small>
+          <h3 style="margin: 4px 0 0 0; color: #10b981; font-size: 1.4rem;">
+            $${Number(state.stats?.stats?.wallet?.totalValue || 0).toFixed(2)}
+          </h3>
+        </div>
+        <div style="background: #1e293b; padding: 12px; border-radius: 6px; border-left: 4px solid #3b82f6;">
+          <small style="color: #94a3b8; font-size: 0.8rem;">Total Card Inventory</small>
+          <h3 style="margin: 4px 0 0 0; font-size: 1.4rem;">
+            ${state.inventory?.length || 0} Assets
+          </h3>
+        </div>
+      </div>
+      <!-- Search & Realtime Filtering Input Bar -->
+      <div style="margin-bottom: 20px;">
+        <input 
+          type="text" 
+          id="cardSearchInput" 
+          placeholder="🔍 Search cards by name, category, or grade..." 
+          style="width: 100%; padding: 10px 14px; background: #1e293b; border: 1px solid #334155; border-radius: 6px; color: white; font-size: 0.95rem; outline: none; box-sizing: border-box;"
+          oninput="filterInventoryList()"
+        />
+      </div>
+      <p class="muted">Full wallet list</p>
+      <div id="inventoryList" style="margin-top:12px;"></div>
+    </div> 
       </div>
     </section>
   `;
@@ -252,7 +279,30 @@ function renderScanView() {
 
   document.getElementById('openCamera').addEventListener('click', () => cameraInput.click());
 }
+/**
+ * Real-time frontend lookup filtering module for inventory elements
+ */
+function filterInventoryList() {
+  const query = document.getElementById('cardSearchInput').value.toLowerCase();
+  const listContainer = document.getElementById('inventoryList');
+  if (!listContainer) return;
 
+  // 1. Gather all individual element panel rows inside the view list container
+  const cardRows = listContainer.children;
+
+  // 2. Loop through row items and toggle display states dynamically
+  for (let i = 0; i < cardRows.length; i++) {
+    const row = cardRows[i];
+    const textContent = row.textContent.toLowerCase();
+
+    // Show row if it matches query strings, otherwise hide it seamlessly
+    if (textContent.includes(query)) {
+      row.style.display = 'flex';
+    } else {
+      row.style.display = 'none';
+    }
+  }
+}
 /* Modal report */
 function openReportModal(item) {
   const modal = document.createElement('div');
@@ -267,11 +317,13 @@ function openReportModal(item) {
           <h4 style="margin:0 0 8px 0;">Grade: <span style="color:var(--accent)">${item.gradingReport ? (item.gradingReport.label || item.gradingReport.centeringGrade || 'Unscanned') : 'Unscanned'}</span></h4>
           ${item.gradingReport ? `
             <ul>
-              <li>Centering: ${item.gradingReport.centering}</li>
-              <li>Centering: ${item.gradingReport.centering ? item.gradingReport.centering.hRatio + ' H / ' + item.gradingReport.centering.vRatio + ' V' : (item.gradingReport.centering || 'N/A')}</li>
-              <li><strong>Weighted: ${item.gradingReport.weighted || ('Grade ' + item.gradingReport.numericGrade + ' — ' + (item.gradingReport.centeringGrade || item.gradingReport.label || '—'))}</strong></li>
+              <li>Horizontal: ${item.gradingReport.centering ? item.gradingReport.centering.leftLabel + ' / ' + item.gradingReport.centering.rightLabel : 'N/A'}</li>
+              <li>Vertical: ${item.gradingReport.centering ? item.gradingReport.centering.topLabel + ' / ' + item.gradingReport.centering.bottomLabel : 'N/A'}</li>
+              <li>H split: ${item.gradingReport.centering ? item.gradingReport.centering.hRatio : 'N/A'}</li>
+              <li>V split: ${item.gradingReport.centering ? item.gradingReport.centering.vRatio : 'N/A'}</li>
+              <li><strong>Grade: ${item.gradingReport.weighted || ('Grade ' + item.gradingReport.numericGrade + ' — ' + (item.gradingReport.centeringGrade || item.gradingReport.label || '—'))}</strong></li>
             </ul>
-            <p class="muted">${escapeHtml(item.gradingReport.notes)}</p>
+            <p class="muted">${escapeHtml(item.gradingReport.notes || '')}</p>
           ` : `<p class="muted">No grading report available.</p>`}
         </div>
       </div>
@@ -364,7 +416,7 @@ loginBtn.addEventListener('click', async () => {
   if (res.ok) {
     state.user = { username: res.username, token: res.token };
     localStorage.setItem('phase1_user', JSON.stringify(state.user));
-    loginBtn.textContent = `Hi ${state.user.username}`;
+        loginBtn.textContent = `👤 ${state.user.username}`;
   } else {
     alert('Login failed');
   }
@@ -377,7 +429,7 @@ async function bootstrap() {
   // load cached user
   const stored = localStorage.getItem('phase1_user');
   if (stored) {
-    try { state.user = JSON.parse(stored); loginBtn.textContent = `Hi ${state.user.username}`; } catch(e){ /* ignore */ }
+    try { state.user = JSON.parse(stored); loginBtn.textContent = `👤 ${state.user.username}`; } catch(e){ /* ignore */ }
   }
 
   // load inventory from server (port 5000)
@@ -548,3 +600,69 @@ function initSse() {
     }
   }, 10000);
 }
+/**
+ * Dynamic User Authentication Modal Layout Engine
+ */
+function initializeLoginModal() {
+  // 1. Locate the existing Log In button in the navigation header bar
+  const navLinks = document.querySelectorAll('nav a, header a');
+  let loginBtn = null;
+  
+  navLinks.forEach(link => {
+    if (link.textContent.trim().toLowerCase() === 'log in') {
+      loginBtn = link;
+    }
+  });
+
+  if (!loginBtn) return;
+
+  // 2. Create the hidden modal container overlay layout structures
+  const modalOverlay = document.createElement('div');
+  modalOverlay.id = 'loginModalOverlay';
+  modalOverlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.75); display: none; align-items: center; justify-content: center; z-index: 1000; transition: opacity 0.2s ease;';
+
+  modalOverlay.innerHTML = `
+    <div style="background: #1e293b; padding: 30px; border-radius: 8px; width: 100%; max-width: 380px; box-sizing: border-box; border: 1px solid #334155; position: relative;">
+      <!-- Close Window Action X Button -->
+      <button id="closeLoginModal" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer; outline: none;">✕</button>
+      
+      <h2 style="margin: 0 0 8px 0; color: white;">Welcome Back</h2>
+      <p style="margin: 0 0 24px 0; color: #94a3b8; font-size: 0.9rem;">Sign in to access your card collections</p>
+      
+      <!-- Input Credential Forms -->
+      <form id="authForm" onsubmit="event.preventDefault(); alert('Authentication framework layout connected successfully.');">
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; color: #cbd5e1; font-size: 0.85rem; margin-bottom: 6px;">Email Address</label>
+          <input type="email" required placeholder="name@domain.com" style="width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: white; font-size: 0.95rem; box-sizing: border-box; outline: none;" />
+        </div>
+        <div style="margin-bottom: 24px;">
+          <label style="display: block; color: #cbd5e1; font-size: 0.85rem; margin-bottom: 6px;">Password</label>
+          <input type="password" required placeholder="••••••••" style="width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: white; font-size: 0.95rem; box-sizing: border-box; outline: none;" />
+        </div>
+        
+        <button type="submit" style="width: 100%; padding: 12px; background: #3b82f6; border: none; border-radius: 6px; color: white; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: background 0.15s ease;">
+          Sign In
+        </button>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(modalOverlay);
+
+  // 3. Attach click event handlers to animate and toggle display views
+  loginBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    modalOverlay.style.display = 'flex';
+  });
+
+  modalOverlay.querySelector('#closeLoginModal').addEventListener('click', () => {
+    modalOverlay.style.display = 'none';
+  });
+
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) modalOverlay.style.display = 'none';
+  });
+}
+
+// Automatically bind setup listeners when file processes
+setTimeout(initializeLoginModal, 500);

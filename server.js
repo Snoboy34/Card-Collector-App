@@ -7,20 +7,53 @@
  * - The grading endpoint uses services/grading_engine.js and memory-buffer uploads via multer.
  */
 
-require('dotenv').config();
-const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const multer = require('multer');
-
-const grading = require('./services/grading_engine');
-const storage = require('./services/storage_engine');
+require("dotenv").config();
+const express = require("express");
+const path = require("path");
+const fs = require("fs");
+const cors = require("cors");
+const helmet = require("helmet");
+const morgan = require("morgan");
+const multer = require("multer");
+const attributeParser = require("./services/attribute_parser");
+const grading = require("./services/grading_engine");
+const storage = require("./services/storage_engine");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+// ========================================================================
+// 💾 DATABASE PERSISTENCE STORAGE LAYER
+// ========================================================================
+const DB_FILE = path.join(__dirname, "database_vault.json");
+
+function loadDataVault() {
+  try {
+    if (!fs.existsSync(DB_FILE)) {
+      fs.writeFileSync(
+        DB_FILE,
+        JSON.stringify({ users: {}, inventories: {} }, null, 2),
+      );
+    }
+    return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+  } catch (err) {
+    console.error("[Database Error] Failed to read disk storage vault:", err);
+    return { users: {}, inventories: {} };
+  }
+}
+
+function saveDataVault(currentDataState) {
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(currentDataState, null, 2));
+  } catch (err) {
+    console.error(
+      "[Database Error] Failed to write updates to disk vault:",
+      err,
+    );
+  }
+}
+
+// Initialize our dynamic storage structure in memory
+let runtimeDb = loadDataVault();
 
 /* =========================
    Middlewares
@@ -30,20 +63,20 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 // Raise limits to 20 MB so base64-encoded card images (300–600 KB) are accepted
-app.use(express.json({ limit: '20mb' }));
-app.use(express.urlencoded({ extended: true, limit: '20mb' }));
-app.use(morgan('dev'));
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+app.use(morgan("dev"));
 
 /* =========================
    Static files
    ========================= */
-const publicDir = path.join(__dirname, 'public');
+const publicDir = path.join(__dirname, "public");
 app.use(express.static(publicDir));
 
 /* =========================
    Upload storage (local, Phase 1)
    ========================= */
-const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
 const storageDisk = multer.diskStorage({
@@ -53,19 +86,25 @@ const storageDisk = multer.diskStorage({
   filename: function (req, file, cb) {
     // keep simple, in production use UUIDs
     const ts = Date.now();
-    const safe = file.originalname.replace(/\s+/g, '_').replace(/[^\w.-]/g, '');
+    const safe = file.originalname.replace(/\s+/g, "_").replace(/[^\w.-]/g, "");
     cb(null, `${ts}_${safe}`);
-  }
+  },
 });
-const upload = multer({ storage: storageDisk, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
+const upload = multer({
+  storage: storageDisk,
+  limits: { fileSize: 10 * 1024 * 1024 },
+}); // 10MB
 
 // Memory storage for grading route (req.file.buffer expected)
-const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const memoryUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 /* =========================
    In-memory store (Phase 1)
    ========================= */
-let inventory = []; // Each item: { id, name, imagePath, gradingReport, createdAt }
+let inventory = runtimeDb.inventory || []; // Automatically pulls saved records from disk vault
 
 /* =========================
    Helper: Mock grading function (replace in Phase 2)
@@ -83,7 +122,16 @@ function mockGradeImage(filePath) {
   const weighted = Math.round((centering + corners + edges + surface) / 4);
 
   // Map to a "grade" label for Phase 1:
-  const label = weighted >= 95 ? 'Gem Mint' : weighted >= 90 ? 'Mint' : weighted >= 80 ? 'Near Mint' : weighted >= 70 ? 'Excellent' : 'Good';
+  const label =
+    weighted >= 95
+      ? "Gem Mint"
+      : weighted >= 90
+        ? "Mint"
+        : weighted >= 80
+          ? "Near Mint"
+          : weighted >= 70
+            ? "Excellent"
+            : "Good";
 
   return {
     centering,
@@ -92,7 +140,8 @@ function mockGradeImage(filePath) {
     surface,
     weighted,
     label,
-    notes: 'This is a mock report — replace with the real CV scoring engine in Phase 2.'
+    notes:
+      "This is a mock report — replace with the real CV scoring engine in Phase 2.",
   };
 }
 
@@ -101,38 +150,38 @@ function mockGradeImage(filePath) {
    ========================= */
 
 /* Health */
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, env: process.env.NODE_ENV || 'development' });
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, env: process.env.NODE_ENV || "development" });
 });
 
 /* Auth placeholders */
-app.post('/api/auth/signup', (req, res) => {
+app.post("/api/auth/signup", (req, res) => {
   // Minimal placeholder: in Phase 2, persist users and hashed passwords.
   const { username } = req.body;
-  if (!username) return res.status(400).json({ error: 'username required' });
+  if (!username) return res.status(400).json({ error: "username required" });
   // Return a fake token (in production, return JWT/session)
   return res.json({ ok: true, username, token: `phase1-token-${username}` });
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post("/api/auth/login", (req, res) => {
   const { username } = req.body;
-  if (!username) return res.status(400).json({ error: 'username required' });
+  if (!username) return res.status(400).json({ error: "username required" });
   return res.json({ ok: true, username, token: `phase1-token-${username}` });
 });
 
 /* Inventory endpoints (Phase 1: in-memory) */
-app.get('/api/inventory', (req, res) => {
+app.get("/api/inventory", (req, res) => {
   res.json({ ok: true, inventory });
 });
 
 /* Persisted cards listing */
-app.get('/api/cards', async (req, res) => {
+app.get("/api/cards", async (req, res) => {
   try {
     const cards = await storage.getAllCards();
     return res.json({ ok: true, cards });
   } catch (err) {
-    console.error('Error reading cards DB', err);
-    return res.status(500).json({ error: 'could not read cards' });
+    console.error("Error reading cards DB", err);
+    return res.status(500).json({ error: "could not read cards" });
   }
 });
 
@@ -147,119 +196,120 @@ app.get('/api/cards', async (req, res) => {
      Sending the image as a plain JSON base64 string goes through the proxy
      identically to every other fetch() call in the app.
    ──────────────────────────────────────────────────────────────────────────── */
-app.post('/api/grade', async (req, res) => {
+app.post("/api/grade", async (req, res) => {
   try {
     // ── Guard: body must contain an image string ──────────────────────────
     const raw = req.body && req.body.image;
-    if (!raw || typeof raw !== 'string') {
-      return res.status(400).json({ ok: false, error: 'body.image (base64 string) is required' });
+    if (!raw || typeof raw !== "string") {
+      return res
+        .status(400)
+        .json({ ok: false, error: "body.image (base64 string) is required" });
     }
+    // ... Strip optional data-URL prefix (data:image/jpeg;base64,)
+    const base64 = raw.includes(",") ? raw.split(",")[1] : raw;
 
-    // ── Strip optional data-URL prefix ("data:image/jpeg;base64,") ────────
-    const base64 = raw.includes(',') ? raw.split(',')[1] : raw;
-
-    // ── Run the grading engine ────────────────────────────────────────────
+    // -- Run the grading engines --
     const report = await grading.analyzeImageBuffer(base64);
 
-    // ── Persist image to uploads dir so the UI can display a thumbnail ────
-    const ts       = Date.now();
-    const safeName = String(req.body.name || 'card')
-                       .replace(/\s+/g, '_')
-                       .replace(/[^\w.-]/g, '')
-                       .slice(0, 60);
+    // -- Persist image to uploads dir so the UI can display a thumbnail --
+    const ts = Date.now();
+    const safeName = String(req.body.name || "card")
+      .replace(/\s+/g, "_")
+      .replace(/[^a-zA-Z0-9_-]/g, "")
+      .slice(0, 80);
     const filename = `${ts}_${safeName}.jpg`;
     const filePath = path.join(uploadsDir, filename);
-    await fs.promises.writeFile(filePath, Buffer.from(base64, 'base64'));
+    await fs.promises.writeFile(filePath, Buffer.from(base64, "base64"));
 
-    // ── Build inventory item ──────────────────────────────────────────────
+    // 1. Invoke Copilot's advanced attribute parser engine matching its export shape
+    const parsedData = attributeParser.parseAttributes(
+      req.body.name || safeName || "",
+    );
+
+    // 2. Compute dynamic market pricing matching your existing calculator setup
+    const priceReport = walletEngine.pricingReport({
+      cardName: req.body.name || safeName || "",
+      numericGrade: report.grade || 5,
+    });
+
+    // 3. Assemble the updated inventory item object with Copilot's extracted properties
     const item = {
-      id:           String(ts),
-      name:         req.body.name || safeName || 'Untitled Card',
-      imagePath:    `/uploads/${filename}`,
+      id: String(ts),
+      name: req.body.name || safeName || "Untitled Card",
+      imagePath: `/uploads/${filename}`,
       gradingReport: report,
-      createdAt:    new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      valuation: priceReport.finalValuation,
+
+      // Map safely to Copilot's specific structural output shape arrays and booleans
+      year:
+        Array.isArray(parsedData.years) && parsedData.years.length > 0
+          ? parsedData.years[0]
+          : 2026,
+      cardNumber:
+        Array.isArray(parsedData.cardNumbers) &&
+        parsedData.cardNumbers.length > 0
+          ? parsedData.cardNumbers[0]
+          : "Base",
+      isAutographed: parsedData.premium ? parsedData.premium.auto : false,
+      attributes: parsedData.premium
+        ? Object.keys(parsedData.premium).filter(
+            (key) => parsedData.premium[key] === true,
+          )
+        : [],
     };
 
     inventory.unshift(item);
+    runtimeDb.inventory = inventory;
+    saveDataVault(runtimeDb);
 
-    // ── Persist to JSON store (best-effort — never fail the response) ─────
+    // Persist to JSON DB (best-effort)
     try {
       await storage.saveCard(item);
-    } catch (storeErr) {
-      console.error('[grade] JSON store write failed:', storeErr.message);
+    } catch (err) {
+      console.error("Failed to save card to JSON DB", err);
     }
 
-    return res.json({ ok: true, item });
-  } catch (err) {
-    console.error('[grade] error:', err.message);
-    return res.status(500).json({ ok: false, error: err.message || 'grading failed' });
+    res.json({ ok: true, item });
+  } catch (globalErr) {
+    console.error("Global route error:", globalErr);
+    res.status(500).json({ ok: false, error: "Internal server error" });
   }
 });
-
-/* Upload & grade endpoint (disk-backed, legacy Phase 1 route kept for compatibility) */
-app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'image file is required' });
-
-  // Run mock grading (replace with real pipeline in Phase 2)
-  const report = mockGradeImage(req.file.path);
-
-  // Create inventory entry
-  const item = {
-    id: String(Date.now()),
-    name: req.body.name || 'Untitled Card',
-    imagePath: `/uploads/${path.basename(req.file.path)}`, // note: publicly accessible only if served
-    gradingReport: report,
-    createdAt: new Date().toISOString()
-  };
-
-  inventory.unshift(item); // add to inventory head
-
-  // Persist to JSON DB (best-effort)
-  try {
-    await storage.saveCard(item);
-  } catch (err) {
-    console.error('Failed to save card to JSON DB', err);
-  }
-
-  // For Phase 1 we do not persist to DB; in Phase 2 persist to DB and cloud storage.
-
-  res.json({ ok: true, item });
-});
-
 /* ── Stats endpoint ──────────────────────────────────────────────────────────
    Returns a unified snapshot used by the dashboard: inventory size, wallet
    total value (grade-based modifier × $100 PSA-10 placeholder), and category
    breakdown by centering grade.  Replace the $100 placeholder with a live
    pricing API in Phase 3.
    ─────────────────────────────────────────────────────────────────────────── */
-const wallet = require('./services/wallet_engine');
+const wallet = require("./services/wallet_engine");
 
 function buildStatsPayload() {
   const PSA10_PLACEHOLDER = 100; // $100 mock PSA-10 reference; replace with live data in Phase 3
   let totalValue = 0;
   const categoryCounts = {};
 
-  inventory.forEach(item => {
+  inventory.forEach((item) => {
     const report = item.gradingReport || {};
-    const grade  = report.numericGrade || 0;
+    const grade = report.numericGrade || 0;
     if (grade > 0) {
       totalValue += wallet.getModifierForGrade(grade) * PSA10_PLACEHOLDER;
     }
-    const label = report.centeringGrade || report.label || 'Ungraded';
+    const label = report.centeringGrade || report.label || "Ungraded";
     categoryCounts[label] = (categoryCounts[label] || 0) + 1;
   });
 
   return {
     ok: true,
     stats: {
-      inventorySize:   inventory.length,
+      inventorySize: inventory.length,
       categoryCounts,
       wallet: { totalValue: Math.round(totalValue * 100) / 100 },
     },
   };
 }
 
-app.get('/api/stats', (req, res) => {
+app.get("/api/stats", (req, res) => {
   res.json(buildStatsPayload());
 });
 
@@ -268,11 +318,11 @@ app.get('/api/stats', (req, res) => {
    Falls back gracefully: if the client can't use EventSource the dashboard
    already has a polling fallback in app.js.
    ─────────────────────────────────────────────────────────────────────────── */
-app.get('/api/events', (req, res) => {
-  res.setHeader('Content-Type',  'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection',    'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // disable Nginx buffering if present
+app.get("/api/events", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // disable Nginx buffering if present
   res.flushHeaders();
 
   // Send initial payload immediately so the dashboard doesn't wait 10 s
@@ -284,22 +334,24 @@ app.get('/api/events', (req, res) => {
     res.write(`event: stats\ndata: ${JSON.stringify(payload)}\n\n`);
   }, 10000);
 
-  req.on('close', () => clearInterval(interval));
+  req.on("close", () => clearInterval(interval));
 });
 
 /* Serve uploaded images statically (Phase 1). In production, serve from secure storage/CDN. */
-app.use('/uploads', express.static(uploadsDir));
+app.use("/uploads", express.static(uploadsDir));
 
 /* Fallback: serve index.html for client-side routing */
-app.get('*', (req, res) => {
+app.get("*", (req, res) => {
   // If request is for an API route, respond 404 JSON instead
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'API route not found' });
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ error: "API route not found" });
   }
-  res.sendFile(path.join(publicDir, 'index.html'));
+  res.sendFile(path.join(publicDir, "index.html"));
 });
 
 /* Start server */
 app.listen(PORT, () => {
-  console.log(`Phase 1 server running on http://localhost:${PORT} (env: ${process.env.NODE_ENV || 'dev'})`);
+  console.log(
+    `Phase 1 server running on http://localhost:${PORT} (env: ${process.env.NODE_ENV || "dev"})`,
+  );
 });

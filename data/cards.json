@@ -1,1 +1,282 @@
-[]
+[
+  {
+    "id": "1785639307090",
+    "name": "CC Auto.jpeg",
+    "imagePath": "/uploads/1785639307090_CC_Auto.jpeg.jpg",
+    "gradingReport": {
+      "centering": {
+        "leftLabel": "0% Left",
+        "rightLabel": "100% Right",
+        "topLabel": "0% Top",
+        "bottomLabel": "100% Bottom",
+        "hRatio": "0/100",
+        "vRatio": "0/100",
+        "leftPct": 0,
+        "rightPct": 100,
+        "topPct": 0,
+        "bottomPct": 100
+      },
+      "numericGrade": 5,
+      "centeringGrade": "Off-Center",
+      "label": "Off-Center",
+      "weighted": "Grade 5 — Off-Center",
+      "rawMeasurements": {
+        "leftPx": 0,
+        "rightPx": 0,
+        "topPx": 0,
+        "bottomPx": 0,
+        "hDeviation": 50,
+        "vDeviation": 50,
+        "maxDeviation": 50,
+        "borderBrightness": 57,
+        "imageDimensions": {
+          "width": 366,
+          "height": 546
+        }
+      },
+      "notes": "Phase 2 centering engine — contrast-based midline scan with corner-sampled border reference.",
+      "engineVersion": "2.1.0"
+    },
+    "createdAt": "2026-08-02T02:55:07.092Z"
+  },
+  {
+    "id": "1785639260064",
+    "name": "CC Rookie.jpeg",
+    "imagePath": "/uploads/1785639260064_CC_Rookie.jpeg.jpg",
+    "gradingReport": {
+      "centering": {
+        "leftLabel": "0% Left",
+        "rightLabel": "100% Right",
+        "topLabel": "100% Top",
+        "bottomLabel": "0% Bottom",
+        "hRatio": "0/100",
+        "vRatio": "100/0",
+        "leftPct": 0,
+        "rightPct": 100,
+        "topPct": 100,
+        "bottomPct": 0
+      },
+      "numericGrade": 5,
+      "centeringGrade": "Off-Center",
+      "label": "Off-Center",
+      "weighted": "Grade 5 — Off-Center",
+      "rawMeasurements": {
+        "leftPx": 0,
+        "rightPx": 0,
+        "topPx": 3,
+        "bottomPx": 0,
+        "hDeviation": 50,
+        "vDeviation": 50,
+        "maxDeviation": 50,
+        "borderBrightness": 36,
+        "imageDimensions": {
+          "width": 386,
+          "height": 518
+        }
+      },
+      "notes": "Phase 2 centering engine — contrast-based midline scan with corner-sampled border reference.",
+      "engineVersion": "2.1.0"
+    },
+    "createdAt": "2026-08-02T02:54:20.068Z"
+  },
+  {
+    "id": "1785632611171",
+    "name": "CC Auto.jpeg",
+    "imagePath": "/uploads/1785632611171_CC_Auto.jpeg.jpg",
+    "gradingReport": {
+      "centering": {
+        "leftLabel": "0% Left",
+        "rightLabel": "100% Right",
+        "topLabel": "0% Top",
+        "bottomLabel": "100% Bottom",
+        "hRatio": "0/100",
+        "vRatio": "0/100",
+        "leftPct": 0,
+        "rightPct": 100,
+        "topPct": 0,
+        "bottomPct": 100
+      },
+      "numericGrade": 5,
+      "centeringGrade": "Off-Center",
+      "label": "Off-Center",
+      "weighted": "Grade 5 — Off-Center",
+      "rawMeasurements": {
+        "leftPx": 0,
+        "rightPx": 0,
+        "topPx": 0,
+        "bottomPx": 0,
+        "hDeviation": 50,
+        "vDeviation": 50,
+        "maxDeviation": 50,
+        "borderBrightness": 57,
+        "imageDimensions": {
+          "width": 366,
+          "height": 546
+        }
+      },
+      "notes": "Phase 2 centering engine — contrast-based midline scan with corner-sampled border reference.",
+      "engineVersion": "2.1.0"
+    },
+    "createdAt": "2026-08-02T01:03:31.179Z"
+  },
+  {
+    "id": "1785632574479",
+    "name": "CC Rookie.jpeg",
+    "imagePath": "/uploads/1785632574479_CC_Rookie.jpeg.jpg",
+    "gradingReport": {
+      "centering": {
+        "leftLabel": "0% Left",
+        "rightLabel": "100% Right",
+        "topLabel": "100% Top",
+        "bottomLabel": "0% Bottom",
+        "hRatio": "0/100",
+        "vRatio": "100/0",
+        "leftPct": 0,
+        "rightPct": 100,
+        "topPct": 100,
+        "bottomPct": 0
+      },
+      "numericGrade": 5,
+      "centeringGrade": "Off-Center",
+      "label": "Off-Center",
+      "weighted": "Grade 5 — Off-Center",
+      "rawMeasurements": {
+        "leftPx": 0,
+        "rightPx": 0,
+        "topPx": 3,
+        "bottomPx": 0,
+        "hDeviation": 50,
+        "vDeviation": 50,
+        "maxDeviation": 50,
+        "borderBrightness": 36,
+        "imageDimensions": {
+          "width": 386,
+          "height": 518
+        }
+      },
+      "notes": "Phase 2 centering engine — contrast-based midline scan with corner-sampled border reference.",
+      "engineVersion": "2.1.0"
+    },
+    "createdAt": "2026-08-02T01:02:54.482Z"
+  },
+  {
+    "id": "1785619861896",
+    "name": "CC Auto.jpeg",
+    "imagePath": "/uploads/1785619861896_CC_Auto.jpeg.jpg",
+    "gradingReport": {
+      "centering": {
+        "leftLabel": "0% Left",
+        "rightLabel": "100% Right",
+        "topLabel": "0% Top",
+        "bottomLabel": "100% Bottom",
+        "hRatio": "0/100",
+        "vRatio": "0/100",
+        "leftPct": 0,
+        "rightPct": 100,
+        "topPct": 0,
+        "bottomPct": 100
+      },
+      "numericGrade": 5,
+      "centeringGrade": "Off-Center",
+      "label": "Off-Center",
+      "weighted": "Grade 5 — Off-Center",
+      "rawMeasurements": {
+        "leftPx": 0,
+        "rightPx": 0,
+        "topPx": 0,
+        "bottomPx": 0,
+        "hDeviation": 50,
+        "vDeviation": 50,
+        "maxDeviation": 50,
+        "borderBrightness": 57,
+        "imageDimensions": {
+          "width": 366,
+          "height": 546
+        }
+      },
+      "notes": "Phase 2 centering engine — contrast-based midline scan with corner-sampled border reference.",
+      "engineVersion": "2.1.0"
+    },
+    "createdAt": "2026-08-01T21:31:01.897Z"
+  },
+  {
+    "id": "1785615613804",
+    "name": "CC Rookie.jpeg",
+    "imagePath": "/uploads/1785615613804_CC_Rookie.jpeg.jpg",
+    "gradingReport": {
+      "centering": {
+        "leftLabel": "0% Left",
+        "rightLabel": "100% Right",
+        "topLabel": "100% Top",
+        "bottomLabel": "0% Bottom",
+        "hRatio": "0/100",
+        "vRatio": "100/0",
+        "leftPct": 0,
+        "rightPct": 100,
+        "topPct": 100,
+        "bottomPct": 0
+      },
+      "numericGrade": 5,
+      "centeringGrade": "Off-Center",
+      "label": "Off-Center",
+      "weighted": "Grade 5 — Off-Center",
+      "rawMeasurements": {
+        "leftPx": 0,
+        "rightPx": 0,
+        "topPx": 3,
+        "bottomPx": 0,
+        "hDeviation": 50,
+        "vDeviation": 50,
+        "maxDeviation": 50,
+        "borderBrightness": 36,
+        "imageDimensions": {
+          "width": 386,
+          "height": 518
+        }
+      },
+      "notes": "Phase 2 centering engine — contrast-based midline scan with corner-sampled border reference.",
+      "engineVersion": "2.1.0"
+    },
+    "createdAt": "2026-08-01T20:20:13.946Z"
+  },
+  {
+    "id": "1785614040437",
+    "name": "CC Rookie.jpeg",
+    "imagePath": "/uploads/1785614040437_CC_Rookie.jpeg.jpg",
+    "gradingReport": {
+      "centering": {
+        "leftLabel": "0% Left",
+        "rightLabel": "100% Right",
+        "topLabel": "100% Top",
+        "bottomLabel": "0% Bottom",
+        "hRatio": "0/100",
+        "vRatio": "100/0",
+        "leftPct": 0,
+        "rightPct": 100,
+        "topPct": 100,
+        "bottomPct": 0
+      },
+      "numericGrade": 5,
+      "centeringGrade": "Off-Center",
+      "label": "Off-Center",
+      "weighted": "Grade 5 — Off-Center",
+      "rawMeasurements": {
+        "leftPx": 0,
+        "rightPx": 0,
+        "topPx": 3,
+        "bottomPx": 0,
+        "hDeviation": 50,
+        "vDeviation": 50,
+        "maxDeviation": 50,
+        "borderBrightness": 36,
+        "imageDimensions": {
+          "width": 386,
+          "height": 518
+        }
+      },
+      "notes": "Phase 2 centering engine — contrast-based midline scan with corner-sampled border reference.",
+      "engineVersion": "2.1.0"
+    },
+    "createdAt": "2026-08-01T19:54:00.586Z"
+  }
+]
