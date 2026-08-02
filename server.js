@@ -16,8 +16,9 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const multer = require("multer");
 const attributeParser = require("./services/attribute_parser");
-const grading = require("./services/grading_engine");
-const storage = require("./services/storage_engine");
+const grading        = require("./services/grading_engine");
+const storage        = require("./services/storage_engine");
+const walletEngine   = require("./services/wallet_engine");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -229,7 +230,7 @@ app.post("/api/grade", async (req, res) => {
     // 2. Compute dynamic market pricing matching your existing calculator setup
     const priceReport = walletEngine.pricingReport({
       cardName: req.body.name || safeName || "",
-      numericGrade: report.grade || 5,
+      numericGrade: report.numericGrade || 5,
     });
 
     // 3. Assemble the updated inventory item object with Copilot's extracted properties
@@ -282,8 +283,6 @@ app.post("/api/grade", async (req, res) => {
    breakdown by centering grade.  Replace the $100 placeholder with a live
    pricing API in Phase 3.
    ─────────────────────────────────────────────────────────────────────────── */
-const wallet = require("./services/wallet_engine");
-
 function buildStatsPayload() {
   const PSA10_PLACEHOLDER = 100; // $100 mock PSA-10 reference; replace with live data in Phase 3
   let totalValue = 0;
@@ -293,7 +292,7 @@ function buildStatsPayload() {
     const report = item.gradingReport || {};
     const grade = report.numericGrade || 0;
     if (grade > 0) {
-      totalValue += wallet.getModifierForGrade(grade) * PSA10_PLACEHOLDER;
+      totalValue += walletEngine.getModifierForGrade(grade) * PSA10_PLACEHOLDER;
     }
     const label = report.centeringGrade || report.label || "Ungraded";
     categoryCounts[label] = (categoryCounts[label] || 0) + 1;
