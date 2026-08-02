@@ -1,4 +1,51 @@
 {
   "users": {},
-  "inventories": {}
+  "inventories": {},
+  "inventory": [
+    {
+      "id": "1785661383330",
+      "name": "CC Rookie.jpeg",
+      "imagePath": "/uploads/1785661383330_CC_Rookiejpeg.jpg",
+      "gradingReport": {
+        "centering": {
+          "leftLabel": "0% Left",
+          "rightLabel": "100% Right",
+          "topLabel": "100% Top",
+          "bottomLabel": "0% Bottom",
+          "hRatio": "0/100",
+          "vRatio": "100/0",
+          "leftPct": 0,
+          "rightPct": 100,
+          "topPct": 100,
+          "bottomPct": 0
+        },
+        "numericGrade": 5,
+        "centeringGrade": "Off-Center",
+        "label": "Off-Center",
+        "weighted": "Grade 5 — Off-Center",
+        "rawMeasurements": {
+          "leftPx": 0,
+          "rightPx": 0,
+          "topPx": 3,
+          "bottomPx": 0,
+          "hDeviation": 50,
+          "vDeviation": 50,
+          "maxDeviation": 50,
+          "borderBrightness": 36,
+          "imageDimensions": {
+            "width": 386,
+            "height": 518
+          }
+        },
+        "notes": "Phase 2 centering engine — contrast-based midline scan with corner-sampled border reference.",
+        "engineVersion": "2.1.0"
+      },
+      "createdAt": "2026-08-02T09:03:03.332Z",
+      "valuation": 4,
+      "year": 2026,
+      "cardNumber": "Base",
+      "isAutographed": false,
+      "attributes": []
+    }
+  ]
 }
