@@ -1,3 +1,1 @@
-git add business_plan.md
-git commit -m "docs: merge anti-distortion smartphone cartooning rules into master business plan manifest"
-git push origin phase1/scaffold --force
+git remote set-url origin https://github.com
