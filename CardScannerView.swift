@@ -516,7 +516,7 @@ struct CardScannerView: View {
                 guard let cardRect = recognizedObservation else {
                     Task { @MainActor in if self.isCardDetected { self.isCardDetected = false } }; return
                 }
-                let computedCentering = centeringAnalyzer.analyzeCentering(from: cardRect)
+                let computedCentering = centeringAnalyzer.analyzeCenteringReal(from: cardRect, in: imageFrame)
                 let automatedDefects = defectAnalyzer.analyzeCardSurface(from: imageFrame)
                 self.centeringAnalyzer.extractCardIdentifierText(from: imageFrame, cardBoundingBox: cardRect) { foundTextString in
                     Task { @MainActor in
