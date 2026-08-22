@@ -10,7 +10,7 @@ public struct SavedCard: Identifiable, Codable {
     public let predictedGradePSA: Int
     public let calculatedValue: Double
     public var targetBatchId: UUID? 
-    
+
     public init(id: UUID = UUID(), name: String, set: String, lrCentering: String, tbCentering: String, predictedGrade: Int, marketValue: Double, batchId: UUID? = nil) {
         self.id = id
         self.name = name
@@ -27,7 +27,7 @@ public struct ValueSnapshot: Identifiable, Codable {
     public let id: UUID
     public let date: Date
     public let value: Double
-    
+
     public init(id: UUID = UUID(), date: Date, value: Double) {
         self.id = id
         self.date = date
@@ -40,7 +40,7 @@ public struct SubmissionBatch: Identifiable, Codable {
     public var batchName: String
     public var gradingServiceTarget: String 
     public var creationDate: Date
-    
+
     public init(id: UUID = UUID(), name: String, service: String = "PSA", date: Date = Date()) {
         self.id = id
         self.batchName = name
@@ -62,22 +62,22 @@ public struct ArbitrageOpportunity: Identifiable {
 }
 
 public class PortfolioState: ObservableObject {
-    
+
     @Published public var savedCards: [SavedCard] = []
     @Published public var historicalTrendSnapshots: [ValueSnapshot] = []
     @Published public var activeSubmissionBatches: [SubmissionBatch] = [] 
-    
+
     private let storageKeyCards = "com.cardgrader.portfolio.savedcards"
     private let storageKeyTrend = "com.cardgrader.portfolio.trendsnapshots"
     private let storageKeyBatches = "com.cardgrader.portfolio.activebatches"
-    
+
     public var totalPortfolioValue: Double {
         savedCards.reduce(0.0) { $0 + $1.calculatedValue }
     }
-    
+
     public init() {
         loadDataFromPersistentDisk()
-        
+
         if activeSubmissionBatches.isEmpty {
             createNewSubmissionBatch(name: "PSA Quarter Bulk Tier", service: "PSA")
             createNewSubmissionBatch(name: "BGS Express Autographs", service: "BGS")
@@ -86,10 +86,10 @@ public class PortfolioState: ObservableObject {
             seedInitialTrendCurveMetrics()
         }
     }
-    
+
     public func simulateCrossCompanyScore(for card: SavedCard, targetCompany: String) -> (grade: Double, estimatedValue: Double) {
         let baseGrade = Double(card.predictedGradePSA)
-        
+
         switch targetCompany {
         case "BGS":
             let adjustedGrade = card.lrCenteringResult.contains("50%") ? baseGrade : max(1.0, baseGrade - 0.5)
@@ -106,12 +106,12 @@ public class PortfolioState: ObservableObject {
             return (baseGrade, card.calculatedValue)
         }
     }
-    
+
     public func calculateArbitrageMatrix(for card: SavedCard) -> [ArbitrageOpportunity] {
         let companies = ["PSA", "BGS", "CGC", "SGC", "TAG"]
         let fees = ["PSA": 25.0, "BGS": 35.0, "CGC": 15.0, "SGC": 18.0, "TAG": 20.0]
         let turnarounds = ["PSA": 45, "BGS": 20, "CGC": 10, "SGC": 5, "TAG": 14]
-        
+
         return companies.map { company in
             let sim = simulateCrossCompanyScore(for: card, targetCompany: company)
             return ArbitrageOpportunity(
@@ -123,23 +123,23 @@ public class PortfolioState: ObservableObject {
             )
         }.sorted { $0.netProfitROI > $1.netProfitROI }
     }
-    
+
     // NEW: Serializes the highlighted shipment array metadata cleanly into a universal safe text transmission block
     public func generateCompressedBatchPayload(for batchId: UUID?) -> String {
         guard let targetId = batchId else { return "NoActiveBatchStaged" }
         let segmentedList = savedCards.filter { $0.targetBatchId == targetId }
         guard !segmentedList.isEmpty else { return "BatchEmpty" }
-        
+
         var summaryString = "MANIFEST_ID:\(targetId.uuidString.prefix(6))|"
         for item in segmentedList {
             summaryString.append("\(item.name.prefix(8))-\(item.predictedGradePSA);")
         }
         return summaryString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "SerializationError"
     }
-    
+
     public func appendCard(name: String, set: String, lrCentering: String, tbCentering: String, predictedGrade: Int, marketValue: Double) {
         let fallbackBatchId = activeSubmissionBatches.first?.id
-        
+
         let targetNewCard = SavedCard(
             name: name,
             set: set,
@@ -149,24 +149,24 @@ public class PortfolioState: ObservableObject {
             marketValue: marketValue,
             batchId: fallbackBatchId
         )
-        
+
         savedCards.append(targetNewCard)
         appendLiveTrendSnapshotRecord(with: totalPortfolioValue)
         saveDataToPersistentDisk()
     }
-    
+
     public func deleteCard(at offsets: IndexSet) {
         savedCards.remove(atOffsets: offsets)
         appendLiveTrendSnapshotRecord(with: totalPortfolioValue)
         saveDataToPersistentDisk()
     }
-    
+
     public func createNewSubmissionBatch(name: String, service: String) {
         let newBatch = SubmissionBatch(name: name, service: service)
         activeSubmissionBatches.append(newBatch)
         saveDataToPersistentDisk()
     }
-    
+
     public func assignCardToBatch(cardId: UUID, batchId: UUID) {
         if let cardIndex = savedCards.firstIndex(where: { $0.id == cardId }) {
             let oldCard = savedCards[cardIndex]
@@ -183,25 +183,25 @@ public class PortfolioState: ObservableObject {
             saveDataToPersistentDisk()
         }
     }
-    
+
     public func removeBatch(at offsets: IndexSet) {
         activeSubmissionBatches.remove(atOffsets: offsets)
         saveDataToPersistentDisk()
     }
-    
+
     public func generatePrintableSubmissionManifest() -> URL? {
         let manifestDocumentFileName = "Bulk_Grading_Manifest_Invoice.csv"
         guard let deviceCacheDirectoryPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
-        
+
         let outputTargetURL = deviceCacheDirectoryPath.appendingPathComponent(manifestDocumentFileName)
         var csvStringDocumentPayload = "Card Name,Expansion Set,L/R Centering,T/B Centering,Predicted PSA Grade,Market Valuation Projections,Assigned Batch Folder\n"
-        
+
         for asset in savedCards {
             let assignedFolderName = activeSubmissionBatches.first(where: { $0.id == asset.targetBatchId })?.batchName ?? "Unassigned Vault"
             let layoutRowString = "\"\(asset.name)\",\"\(asset.setName)\",\"\(asset.lrCenteringResult)\",\"\(asset.tbCenteringResult)\",\(asset.predictedGradePSA),\(asset.calculatedValue),\"\(assignedFolderName)\"\n"
             csvStringDocumentPayload.append(layoutRowString)
         }
-        
+
         do {
             try csvStringDocumentPayload.write(to: outputTargetURL, atomically: true, encoding: .utf8)
             return outputTargetURL
@@ -209,7 +209,7 @@ public class PortfolioState: ObservableObject {
             return nil
         }
     }
-    
+
     private func saveDataToPersistentDisk() {
         let jsonEncoder = JSONEncoder()
         if let cardsData = try? jsonEncoder.encode(savedCards) {
@@ -222,7 +222,7 @@ public class PortfolioState: ObservableObject {
             UserDefaults.standard.set(batchesData, forKey: storageKeyBatches)
         }
     }
-    
+
     private func loadDataFromPersistentDisk() {
         let jsonDecoder = JSONDecoder()
         if let cardsData = UserDefaults.standard.data(forKey: storageKeyCards),
