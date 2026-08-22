@@ -8,7 +8,7 @@ public struct CardValuation: Identifiable, Codable {
     public let marketValuePSA10: Double
     public let marketValueBGS95: Double
     public let cacheTimestamp: Date?
-    
+
     public init(id: UUID = UUID(), cardName: String, setName: String, marketValueRaw: Double, marketValuePSA10: Double, marketValueBGS95: Double, cacheTimestamp: Date = Date()) {
         self.id = id
         self.cardName = cardName
@@ -25,7 +25,7 @@ public enum CardCategory: String, CaseIterable, Identifiable, Sendable {
     case sports = "Sports Card"
     case mtg = "Magic / MTG"
     case entertainment = "Entertainment"
-    
+
     public var id: String { self.rawValue }
 }
 
@@ -38,9 +38,9 @@ public struct HistoricalTickerPoint: Identifiable, Sendable {
 @MainActor
 public class PricingEngine: ObservableObject {
     @Published public var historicalTrendData: [Double] = []
-    
+
     public init() {}
-    
+
     public func fetchMarketTickerHistory(for cardName: String) -> [HistoricalTickerPoint] {
         let baseValue = determineBasePrice(for: cardName)
         return [
@@ -53,10 +53,10 @@ public class PricingEngine: ObservableObject {
             HistoricalTickerPoint(dateLabel: "Sun", closingPrice: baseValue)
         ]
     }
-    
+
     public func fetchLiveValuations(cardId: String, category: CardCategory, completion: @escaping @MainActor (Result<CardValuation, Error>) -> Void) {
         let registryMatch: CardValuation
-        
+
         switch category {
         case .tcg:
             let elements = [
@@ -65,7 +65,7 @@ public class PricingEngine: ObservableObject {
                 CardValuation(cardName: "Umbreon VMAX Alternate Art #215", setName: "Evolving Skies", marketValueRaw: 120, marketValuePSA10: 950, marketValueBGS95: 720)
             ]
             registryMatch = elements.randomElement()!
-            
+
         case .sports:
             let elements = [
                 CardValuation(cardName: "Michael Jordan Rookie Fleer #119", setName: "1986 Fleer Basketball", marketValueRaw: 150, marketValuePSA10: 3500, marketValueBGS95: 2400),
@@ -73,21 +73,21 @@ public class PricingEngine: ObservableObject {
                 CardValuation(cardName: "Paige Bueckers Chrome Prospect Autograph", setName: "2025 Bowman University", marketValueRaw: 45, marketValuePSA10: 420, marketValueBGS95: 310)
             ]
             registryMatch = elements.randomElement()!
-            
+
         case .mtg:
             let elements = [
                 CardValuation(cardName: "Black Lotus Power Nine", setName: "1993 Alpha Edition", marketValueRaw: 12000, marketValuePSA10: 165000, marketValueBGS95: 110000),
                 CardValuation(cardName: "Mox Diamond Holo", setName: "Stronghold", marketValueRaw: 90, marketValuePSA10: 750, marketValueBGS95: 500)
             ]
             registryMatch = elements.randomElement()!
-            
+
         case .entertainment:
             registryMatch = CardValuation(cardName: "Luke Skywalker Rookie #1", setName: "1977 Topps Star Wars", marketValueRaw: 20, marketValuePSA10: 600, marketValueBGS95: 400)
         }
-        
+
         completion(.success(registryMatch))
     }
-    
+
     private func determineBasePrice(for name: String) -> Double {
         if name.contains("Lotus") { return 165000 }
         if name.contains("Illustrator") { return 450000 }
