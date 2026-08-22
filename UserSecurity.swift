@@ -3,43 +3,47 @@ import LocalAuthentication
 import SwiftUI
 
 public class UserSecurity: ObservableObject {
-    
-    // Publishes lock status to update your visual presentation layers instantly
+
     @Published public var isVaultUnlocked: Bool = false
     @Published public var securityErrorMessage: String?
-    
+
     public init() {}
-    
-    /// Requests native device biometric authorization (FaceID/TouchID) to unlock files
+
+    /// Requests device authentication (biometrics if available, falling back to device passcode) to unlock the vault
     public func authenticateCollectorVault() {
         let context = LAContext()
         var structuralError: NSError?
-        
-        // Step 1: Check if the device hardware supports biometric verification
-        if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &structuralError) {
-            let unlockReasonText = "Authorize FaceID biometric verification to unlock your high-value portfolio collection vault."
-            
-            context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: unlockReasonText) { success, authenticationError in
-                // Hop back onto the Main Thread to safely perform user interface view changes
+
+        // FIXED: try biometrics first, but fall back to device passcode instead of
+        // unlocking automatically when biometrics aren't available. Using
+        // .deviceOwnerAuthentication (not ...WithBiometrics) lets the system
+        // offer the passcode as a fallback on its own.
+        if context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &structuralError) {
+            let unlockReasonText = "Authorize access to unlock your high-value portfolio collection vault."
+
+            context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: unlockReasonText) { success, authenticationError in
                 Task { @MainActor in
                     if success {
                         self.isVaultUnlocked = true
                         self.securityErrorMessage = nil
                     } else {
-                        self.securityErrorMessage = authenticationError?.localizedDescription ?? "Biometric evaluation rejected by user."
+                        // FIXED: no longer unlocks on failure — stays locked and shows the real error
+                        self.isVaultUnlocked = false
+                        self.securityErrorMessage = authenticationError?.localizedDescription ?? "Authentication was not completed."
                     }
                 }
             }
         } else {
-            // Fallback safety catch if FaceID hardware is restricted or disabled entirely
+            // FIXED: if the device genuinely has no authentication method set up at all
+            // (no biometrics AND no passcode configured), stay locked and explain why,
+            // rather than unlocking automatically.
             Task { @MainActor in
-                self.securityErrorMessage = "Biometric hardware setup unavailable. Please check system privacy configurations."
-                // In production, you can trigger a password field fallback script here
-                self.isVaultUnlocked = true 
+                self.isVaultUnlocked = false
+                self.securityErrorMessage = "No device passcode or biometrics are set up. Please set a passcode in Settings to use the vault."
             }
         }
     }
-    
+
     /// Instantly locks down access controls upon backgrounding transitions
     public func enforceVaultLockdown() {
         self.isVaultUnlocked = false
