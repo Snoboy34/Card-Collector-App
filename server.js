@@ -4,7 +4,8 @@
  *
  * Notes:
  * - Phase 1 uses in-memory placeholders. Persistence (DB) should be added in Phase 2.
- * - The grading endpoint uses services/grading_engine.js and memory-buffer uploads via multer.
+ * - The grading endpoint uses services/grading_engine.js and memory-buffer uploads via multer 2.x.
+ * - Multer 2.x breaking changes: Default export, middleware behavior unchanged for storage config.
  */
 
 require('dotenv').config();
@@ -256,7 +257,7 @@ app.get('/api/stats', (req, res) => {
   }
 });
 
-/* New grading endpoint (memory-buffer via multer)
+/* New grading endpoint (memory-buffer via multer 2.x)
    This route now saves the uploaded buffer to the local uploads directory,
    runs classification then the grading engine on the buffer, and returns a full `item` object
    (matching the legacy /api/grade/upload response) so the frontend can
