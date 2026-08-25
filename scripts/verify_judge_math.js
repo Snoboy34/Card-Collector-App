@@ -73,8 +73,73 @@ const oneEdge = g.evaluateMultiPhaseCondition(pristineCentering, cleanSurface, 1
 assertEq('1-edge finalScore (ceiling 9.5)', oneEdge.finalScore, 9.5);
 assertEq('1-edge edges sub', oneEdge.subGrades.edges, 9.0);
 
-if (process.exitCode) {
-  console.error('Judge math regression failed.');
-} else {
-  console.log('All Judge math checks passed.');
+function assert(label, cond) {
+  if (!cond) {
+    console.error('FAIL', label);
+    process.exitCode = 1;
+  } else {
+    console.log('PASS', label);
+  }
 }
+
+// Failed inward scans (flat field = no sustained border) must not look like 50/50.
+const flatPixel = function () { return 128; };
+const undetected = g.measurePrintCentering(flatPixel, 200, 280);
+assert('flat-field detected is false', undetected.detected === false);
+assert('flat-field leftRightRatio is null', undetected.leftRightRatio === null);
+assert('flat-field topBottomRatio is null', undetected.topBottomRatio === null);
+
+async function makeTinyUniformPng() {
+  let sharpLib = null;
+  try { sharpLib = require('sharp'); } catch (e) { return null; }
+  // 20×24 so each inward scanLength is ≤ 12 and scanLineForBorder returns null
+  // on every edge — a synthetic "no printed border" still.
+  return sharpLib({
+    create: {
+      width: 20,
+      height: 24,
+      channels: 3,
+      background: { r: 140, g: 140, b: 140 }
+    }
+  }).png().toBuffer();
+}
+
+async function runGradeBufferUndetectedCheck() {
+  const buf = await makeTinyUniformPng();
+  if (!buf) {
+    console.log('SKIP gradeBuffer undetected check (sharp not installed)');
+    return;
+  }
+  const report = await g.gradeBuffer(buf, { maxDim: 24 });
+  if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
+    console.log('SKIP gradeBuffer undetected check (sharp not installed)');
+    return;
+  }
+  if (report.notes && String(report.notes).indexOf('grading engine error') !== -1) {
+    console.error('FAIL gradeBuffer threw before metrology:', report.notes);
+    process.exitCode = 1;
+    return;
+  }
+  assert('gradeBuffer centeringUndetected', report.centeringUndetected === true);
+  assert('gradeBuffer incomplete', report.incomplete === true);
+  assert('gradeBuffer centering is null', report.centering === null);
+  assert('gradeBuffer subGrades.centering is null', report.subGrades && report.subGrades.centering === null);
+  assert('gradeBuffer finalScore is not 10', report.finalScore !== 10 && report.finalScore !== 10.0);
+  assert('gradeBuffer finalScore is not a number', typeof report.finalScore !== 'number');
+  assert('gradeBuffer weighted is not a number', typeof report.weighted !== 'number');
+  assert('gradeBuffer still reports surface', typeof report.subGrades.surface === 'number');
+  assert('gradeBuffer still reports edges', typeof report.subGrades.edges === 'number');
+  assert('gradeBuffer still reports corners', typeof report.subGrades.corners === 'number');
+}
+
+runGradeBufferUndetectedCheck().then(function () {
+  if (process.exitCode) {
+    console.error('Judge math regression failed.');
+  } else {
+    console.log('All Judge math checks passed.');
+  }
+}).catch(function (err) {
+  console.error('FAIL gradeBuffer undetected check threw', err && err.message);
+  process.exitCode = 1;
+});
+

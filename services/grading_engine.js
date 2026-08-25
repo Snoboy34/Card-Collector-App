@@ -48,9 +48,14 @@
  * ----------
  *   evaluateMultiPhaseCondition(centering, surface, edgesWhiteningCount, corners)
  *       Pure scoring. No I/O. Direct port of TheJudge.swift. Safe to unit-test.
+ *       Callers MUST pass a real CenteringResult (numeric L/R and T/B ratios).
+ *       A failed print-border scan is handled in `gradeBuffer` — never pass
+ *       null/undetected centering into this function (it cannot represent
+ *       "unknown" and would look like a 50/50 Gem if given empty ratios).
  *   gradeBuffer(buffer, options)
- *       Full still-image pipeline: metrology → evaluateMultiPhaseCondition.
- *       Always resolves (never throws); returns a defensive report on failure.
+ *       Full still-image pipeline: metrology → evaluateMultiPhaseCondition
+ *       when all four print borders resolve; otherwise a partial report with
+ *       centeringUndetected / incomplete flags and no overall finalScore.
  *
  * @module services/grading_engine
  */
@@ -323,6 +328,13 @@ function labelForFinalScore(finalScore) {
  * file's still-image metrology, or from a unit test) and returns the strict
  * dual-scale grade. This function is intentionally free of I/O and of `sharp`
  * so the math can be regression-tested in isolation.
+ *
+ * CALLER CONTRACT: `centering.leftRightRatio` and `centering.topBottomRatio`
+ * must be real numeric percentages that sum to 100 per axis. Do NOT pass a
+ * null/undetected result from `measurePrintCentering` (detected === false).
+ * That null-check belongs in `gradeBuffer`, upstream of this function. This
+ * scorer has no "unknown" state — empty ratios would collapse to a fake 50/50
+ * and be indistinguishable from a genuine perfect-centering measurement.
  *
  * @param {{ leftRightRatio: {left:number, right:number}, topBottomRatio: {top:number, bottom:number} }} centering
  * @param {{ scratchCount: number, dimpleOrDentCount: number, surfaceCreaseDetected: boolean, wrinkleOrCreaseSeverity: number }} surface
@@ -677,7 +689,12 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight) {
  * L/R and T/B percentages that sum to 100 per axis — the exact input shape
  * `evaluateMultiPhaseCondition` inherited from CenteringResult.
  *
- * @returns {{ leftRightRatio: object, topBottomRatio: object, detected: boolean, widths: object }}
+ * When ANY edge fails to find a sustained border (borderless/full-bleed stock,
+ * low-contrast lighting, foil glare), `detected` is false and the ratios are
+ * null. Callers must NOT treat that as 50/50 — a failed scan is unknown, not
+ * Gem-centered. `gradeBuffer` is the place that branches on `detected`.
+ *
+ * @returns {{ leftRightRatio: {left:number, right:number}|null, topBottomRatio: {top:number, bottom:number}|null, detected: boolean, widths: object }}
  */
 function measurePrintCentering(getPixel, cardWidth, cardHeight) {
   const leftW = findBorderWidth(getPixel, 'left', cardWidth, cardHeight);
@@ -687,24 +704,26 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight) {
 
   const detected = leftW != null && rightW != null && topW != null && bottomW != null;
 
-  let leftPct = 50;
-  let rightPct = 50;
-  let topPct = 50;
-  let bottomPct = 50;
-
-  if (detected) {
-    const totalH = leftW + rightW;
-    const totalV = topW + bottomW;
-    leftPct = totalH > 0 ? (leftW / totalH) * 100 : 50;
-    rightPct = 100 - leftPct;
-    topPct = totalV > 0 ? (topW / totalV) * 100 : 50;
-    bottomPct = 100 - topPct;
+  if (!detected) {
+    return {
+      leftRightRatio: null,
+      topBottomRatio: null,
+      detected: false,
+      widths: { left: leftW, right: rightW, top: topW, bottom: bottomW }
+    };
   }
+
+  const totalH = leftW + rightW;
+  const totalV = topW + bottomW;
+  const leftPct = totalH > 0 ? (leftW / totalH) * 100 : 50;
+  const rightPct = 100 - leftPct;
+  const topPct = totalV > 0 ? (topW / totalV) * 100 : 50;
+  const bottomPct = 100 - topPct;
 
   return {
     leftRightRatio: { left: leftPct, right: rightPct },
     topBottomRatio: { top: topPct, bottom: bottomPct },
-    detected,
+    detected: true,
     widths: { left: leftW, right: rightW, top: topW, bottom: bottomW }
   };
 }
@@ -1010,6 +1029,10 @@ function fallbackReport(reason) {
  *   Judge 10-point fields (The Judge.swift):
  *     finalScore, isGemMint, primaryFlawDescription, subGradesLabel,
  *     subGrades, conditionCeilingApplied, centeringMetrics, ...
+ *   When print borders cannot be resolved (full-bleed / glare / low contrast):
+ *     centering and subGrades.centering are null (not 0, not 50),
+ *     centeringUndetected and incomplete are true, finalScore / weighted
+ *     are omitted as null so they cannot be read as a Gem Mint 10.
  *
  * @param {Buffer} buffer
  * @param {object} [options]
@@ -1082,6 +1105,65 @@ async function gradeBuffer(buffer, options) {
     const edgesWhiteningCount = measureEdgeWhitening(pixels, width, box);
     const corners = measureCornerFraying(pixels, width, box);
 
+    // Failed print-border detection is UNKNOWN, not 50/50. Do not feed
+    // fabricated ratios into evaluateMultiPhaseCondition — that scorer has
+    // no "undetected" state and would emit a fake Gem centering sub-grade.
+    if (!centeringMeasurement.detected) {
+      const surfacePhase = scoreSurfacePhase(surface);
+      const edgeScore = scoreEdgesPhase(edgesWhiteningCount);
+      const cornerPhase = scoreCornersPhase(corners);
+      const incompleteReason = 'centering undetectable — no printed border found';
+      const report = {
+        centering: null,
+        corners: clamp01to100(Math.round(cornerPhase.score * 10)),
+        edges: clamp01to100(Math.round(edgeScore * 10)),
+        surface: clamp01to100(Math.round(surfacePhase.score * 10)),
+        weighted: null,
+        label: 'Incomplete',
+        notes: incompleteReason,
+        finalScore: null,
+        isGemMint: false,
+        primaryFlawDescription: incompleteReason,
+        subGradesLabel:
+          'CEN: — | SUR: ' + surfacePhase.score.toFixed(1) +
+          ' | EDG: ' + edgeScore.toFixed(1) +
+          ' | CRN: ' + cornerPhase.score.toFixed(1),
+        subGrades: {
+          centering: null,
+          surface: surfacePhase.score,
+          edges: edgeScore,
+          corners: cornerPhase.score
+        },
+        centeringUndetected: true,
+        incomplete: true,
+        incompleteReason: incompleteReason,
+        printCenteringDetected: false,
+        centeringMetrics: {
+          leftRightRatio: null,
+          topBottomRatio: null,
+          detected: false
+        },
+        surfacePenalties: {
+          scratchCount: Number(surface.scratchCount) || 0,
+          dimpleOrDentCount: Number(surface.dimpleOrDentCount) || 0,
+          surfaceCreaseDetected: Boolean(surface.surfaceCreaseDetected),
+          wrinkleOrCreaseSeverity: Number(surface.wrinkleOrCreaseSeverity) || 0,
+          creasePenaltyApplied: surfacePhase.creasePenaltyApplied,
+          creasePenalty: surfacePhase.creasePenalty
+        },
+        edgesWhiteningCount: Number(edgesWhiteningCount) || 0,
+        absoluteMaxCornerFray: cornerPhase.absoluteMaxCornerFray
+      };
+      if (options.debug) {
+        report.debug = {
+          width, height, box, shouldRotate,
+          printBorderWidths: centeringMeasurement.widths,
+          corners, surface, edgesWhiteningCount
+        };
+      }
+      return report;
+    }
+
     const judged = evaluateMultiPhaseCondition(
       centeringMeasurement,
       surface,
@@ -1121,7 +1203,9 @@ async function gradeBuffer(buffer, options) {
       surfacePenalties: judged.surfacePenalties,
       edgesWhiteningCount: judged.edgesWhiteningCount,
       absoluteMaxCornerFray: judged.absoluteMaxCornerFray,
-      printCenteringDetected: centeringMeasurement.detected
+      printCenteringDetected: centeringMeasurement.detected,
+      centeringUndetected: false,
+      incomplete: false
     };
 
     if (options.debug) {
@@ -1147,5 +1231,6 @@ module.exports = {
   scoreEdgesPhase,
   scoreCornersPhase,
   roundToLabHalfStep,
-  labelForFinalScore
+  labelForFinalScore,
+  measurePrintCentering
 };
