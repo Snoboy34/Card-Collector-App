@@ -1041,11 +1041,17 @@ function fallbackReport(reason) {
 async function gradeBuffer(buffer, options) {
   options = Object.assign({ maxDim: 900, debug: false, cardType: 'generic' }, options || {});
 
+  // TEMP: dump every gradeBuffer payload to the server log (remove after LAN testing).
+  function returnGrade(gradeResult) {
+    console.log(JSON.stringify(gradeResult, null, 2));
+    return gradeResult;
+  }
+
   if (!sharp) {
-    return fallbackReport('grading skipped: optional dependency `sharp` not installed');
+    return returnGrade(fallbackReport('grading skipped: optional dependency `sharp` not installed'));
   }
   if (!buffer || !buffer.length) {
-    return fallbackReport('grading skipped: empty image buffer');
+    return returnGrade(fallbackReport('grading skipped: empty image buffer'));
   }
 
   try {
@@ -1161,7 +1167,7 @@ async function gradeBuffer(buffer, options) {
           corners, surface, edgesWhiteningCount
         };
       }
-      return report;
+      return returnGrade(report);
     }
 
     const judged = evaluateMultiPhaseCondition(
@@ -1216,9 +1222,9 @@ async function gradeBuffer(buffer, options) {
       };
     }
 
-    return report;
+    return returnGrade(report);
   } catch (err) {
-    return fallbackReport('grading engine error: ' + (err && err.message ? err.message : String(err)));
+    return returnGrade(fallbackReport('grading engine error: ' + (err && err.message ? err.message : String(err))));
   }
 }
 
