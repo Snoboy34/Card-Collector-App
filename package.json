@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:lan": "node server.js --lan",
     "dev": "nodemon server.js",
     "test:judge": "node scripts/verify_judge_math.js",
     "lint": "echo \"No linter configured\""

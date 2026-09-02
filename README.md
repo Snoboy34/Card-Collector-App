@@ -30,8 +30,16 @@ the server or the UI (BusinessPlan.md §4 Module D).
 ```bash
 npm install
 npm start          # http://localhost:5000
+npm run start:lan  # https://<en0-ip>:5000  (self-signed; required for phone camera)
 npm run test:judge # formula regression (no image I/O)
 ```
+
+`start:lan` reads the Mac's current Wi-Fi address with `ipconfig getifaddr en0`
+(never a hardcoded IP), mints a self-signed cert whose SAN covers that address,
+and serves HTTPS so Safari will grant `getUserMedia`. Open the printed
+`https://…` URL on the phone; tap through the certificate warning (or install
+`/lan-ca.cer`). Cert files live in `./certs` and are regenerated when the LAN
+IP changes.
 
 Uploads land in `./uploads`. Swap that for object storage before production.
 

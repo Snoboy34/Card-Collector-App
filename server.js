@@ -18,12 +18,19 @@
  * ceiling live only in the isolated grading engine (BusinessPlan.md §4
  * Module D / §8). Mock scoring has been removed so /api/grade and
  * /api/grade/upload cannot diverge.
+ *
+ * LAN HTTPS (`npm run start:lan` / `node server.js --lan`)
+ * --------------------------------------------------------
+ * Phone Safari blocks getUserMedia on http://. --lan mints a self-signed
+ * cert covering the Mac's current `ipconfig getifaddr en0` address and
+ * listens with https on 0.0.0.0 so a phone can open https://<lan-ip>:PORT.
  */
 
 try { require('dotenv').config(); } catch (e) { /* .env / dotenv optional in local Phase 1 */ }
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -32,9 +39,12 @@ const multer = require('multer');
 const grading = require('./services/grading_engine');
 const classifier = require('./services/classifier_engine');
 const wallet = require('./services/wallet_engine');
+const lanHttps = require('./scripts/lan_https');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const LAN_HTTPS = process.argv.indexOf('--lan') !== -1 || process.env.LAN_HTTPS === '1';
+const lanAddress = lanHttps.getLanIPv4();
 
 /* =========================
    Middlewares
@@ -43,7 +53,10 @@ app.use(helmet({
   // Allow the HTML5 camera viewport (getUserMedia) and the canvas overlay
   // to load from this origin. Default Helmet CSP would block the inline
   // scan-viewport styles in index.html on some browsers.
-  contentSecurityPolicy: false
+  contentSecurityPolicy: false,
+  // Self-signed LAN certs must not pin HSTS; Safari would then refuse HTTP
+  // on the same IP after `npm start` (no TLS).
+  hsts: false
 }));
 app.use(cors());
 app.use(express.json());
@@ -346,6 +359,19 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
 /* Serve uploaded images statically. In production, serve from secure storage/CDN. */
 app.use('/uploads', express.static(uploadsDir));
 
+/**
+ * iOS/Safari: download the self-signed LAN cert so the phone can trust
+ * https://<en0-ip> and grant camera permission. Only present in --lan mode.
+ */
+app.get('/lan-ca.cer', (req, res) => {
+  if (!LAN_HTTPS || !fs.existsSync(lanHttps.CERT_PATH)) {
+    return res.status(404).type('text/plain').send('LAN certificate is only available during npm run start:lan');
+  }
+  res.setHeader('Content-Type', 'application/x-x509-ca-cert');
+  res.setHeader('Content-Disposition', 'attachment; filename="the-judge-lan.cer"');
+  return res.sendFile(lanHttps.CERT_PATH);
+});
+
 /* Fallback: serve index.html for client-side routing */
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
@@ -354,7 +380,35 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(publicDir, 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+function logHttpReady() {
   console.log(`Server is running locally at http://localhost:${PORT}`);
-  console.log(`Server is accessible on your network at http://192.168.68.77:${PORT}`);
-});
+  console.log(`Server is accessible on your network at http://${lanAddress.ip}:${PORT}`);
+  console.log(`LAN address source: ${lanAddress.source}`);
+  console.log('Phone camera (Safari) needs HTTPS — use npm run start:lan');
+}
+
+function logHttpsReady() {
+  const phoneUrl = `https://${lanAddress.ip}:${PORT}`;
+  console.log('The Judge LAN HTTPS is running (self-signed).');
+  console.log(`  Local:  https://localhost:${PORT}`);
+  console.log(`  Phone:  ${phoneUrl}`);
+  console.log(`  Cert:   ${lanAddress.source}` + (lanAddress.usedEn0 ? '' : '  (en0 had no IPv4; cert still covers this address)'));
+  console.log('Safari will warn about the certificate — tap Advanced → Proceed so getUserMedia can run.');
+  console.log(`Optional iOS install: ${phoneUrl}/lan-ca.cer  then Settings → Profile Downloaded → Install,`);
+  console.log('then Settings → General → About → Certificate Trust Settings → enable The Judge LAN.');
+}
+
+if (LAN_HTTPS) {
+  let tls;
+  try {
+    tls = lanHttps.ensureLanCertificate(lanAddress.ip);
+  } catch (err) {
+    console.error('Failed to mint the LAN HTTPS certificate:', err && err.message ? err.message : err);
+    process.exit(1);
+  }
+  https.createServer({ key: tls.key, cert: tls.cert }, app).listen(PORT, '0.0.0.0', () => {
+    logHttpsReady();
+  });
+} else {
+  app.listen(PORT, '0.0.0.0', logHttpReady);
+}
