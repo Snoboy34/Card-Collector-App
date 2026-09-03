@@ -132,7 +132,125 @@ async function runGradeBufferUndetectedCheck() {
   assert('gradeBuffer still reports corners', typeof report.subGrades.corners === 'number');
 }
 
+function assertHint(label, actual, expected) {
+  assertEq(label, actual, expected);
+}
+
+const printedFrameHint = g.describeBorderSource({
+  imageWidth: 800,
+  imageHeight: 1100,
+  box: { left: 80, right: 719, top: 90, bottom: 1009, width: 640, height: 920 },
+  widths: { left: 22.4, right: 18.1, top: 24.0, bottom: 31.2 },
+  samples: {
+    left: [21, 22, 22.4, 23, 22, 22.5, 22],
+    right: [18, 18.2, 18.1, 17.8, 18.4, 18, 18.1],
+    top: [23.5, 24, 24.2, 24, 23.8, 24.1, 24],
+    bottom: [30.5, 31, 31.4, 31.2, 31, 31.3, 31.1]
+  },
+  detected: true
+});
+assertHint('printed-frame hint', printedFrameHint.hint, 'likely-printed-frame');
+assert('printed-frame box is inset', printedFrameHint.boxFillRatio < 0.9);
+
+const thinMatHint = g.describeBorderSource({
+  imageWidth: 800,
+  imageHeight: 1100,
+  box: { left: 4, right: 795, top: 4, bottom: 1095, width: 792, height: 1092 },
+  widths: { left: 3.1, right: 2.8, top: 3.0, bottom: 3.4 },
+  samples: {
+    left: [3, 3.1, 3.2],
+    right: [2.7, 2.8, 2.9],
+    top: [2.9, 3.0, 3.1],
+    bottom: [3.3, 3.4, 3.5]
+  },
+  detected: true
+});
+assertHint('thin full-frame hint', thinMatHint.hint, 'likely-backdrop');
+
+const wideMatHint = g.describeBorderSource({
+  imageWidth: 400,
+  imageHeight: 560,
+  box: { left: 2, right: 397, top: 2, bottom: 557, width: 396, height: 556 },
+  widths: { left: 28, right: 30, top: 26, bottom: 32 },
+  detected: true
+});
+assertHint('wide full-frame hint', wideMatHint.hint, 'likely-backdrop');
+
+const undetectedHint = g.describeBorderSource({
+  imageWidth: 200,
+  imageHeight: 280,
+  box: { left: 0, right: 199, top: 0, bottom: 279, width: 200, height: 280 },
+  widths: { left: null, right: null, top: null, bottom: null },
+  detected: false
+});
+assertHint('undetected hint', undetectedHint.hint, 'undetected');
+
+async function makeBorderedCardPng() {
+  let sharpLib = null;
+  try { sharpLib = require('sharp'); } catch (e) { return null; }
+  // Pink mat + inset card with a real ~20px white printed frame.
+  const width = 400;
+  const height = 560;
+  const channels = 3;
+  const buf = Buffer.alloc(width * height * channels);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * channels;
+      buf[i] = 236; buf[i + 1] = 72; buf[i + 2] = 153; // pink mat
+    }
+  }
+  const card = { left: 70, right: 329, top: 80, bottom: 479 };
+  const border = 20;
+  for (let y = card.top; y <= card.bottom; y++) {
+    for (let x = card.left; x <= card.right; x++) {
+      const i = (y * width + x) * channels;
+      const inFrame =
+        x < card.left + border || x > card.right - border ||
+        y < card.top + border || y > card.bottom - border;
+      if (inFrame) {
+        buf[i] = 245; buf[i + 1] = 245; buf[i + 2] = 245;
+      } else {
+        buf[i] = 20; buf[i + 1] = 46; buf[i + 2] = 110;
+      }
+    }
+  }
+  return sharpLib(buf, {
+    raw: { width: width, height: height, channels: channels }
+  }).png().toBuffer();
+}
+
+async function runBorderedCardDiagnosticsCheck() {
+  const buf = await makeBorderedCardPng();
+  if (!buf) {
+    console.log('SKIP bordered-card diagnostics check (sharp not installed)');
+    return;
+  }
+  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true });
+  if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
+    console.log('SKIP bordered-card diagnostics check (sharp not installed)');
+    return;
+  }
+  if (report.notes && String(report.notes).indexOf('grading engine error') !== -1) {
+    console.error('FAIL bordered-card diagnostics threw:', report.notes);
+    process.exitCode = 1;
+    return;
+  }
+  assert('bordered-card has centeringDiagnostics', report.centeringDiagnostics != null);
+  assert('bordered-card debug has box', report.debug && report.debug.box != null);
+  assert('bordered-card debug has printBorderWidths', report.debug && report.debug.printBorderWidths != null);
+  if (report.printCenteringDetected) {
+    assert('bordered-card hint is printed-frame', report.centeringDiagnostics.hint === 'likely-printed-frame');
+    assert('bordered-card avgWidthPx is tens of pixels', report.centeringDiagnostics.avgWidthPx >= 12);
+    assert('bordered-card box is inset', report.centeringDiagnostics.boxFillRatio < 0.85);
+  } else {
+    console.error('FAIL bordered-card should detect a printed frame', report.centeringDiagnostics);
+    process.exitCode = 1;
+  }
+}
+
 runGradeBufferUndetectedCheck().then(function () {
+  return runBorderedCardDiagnosticsCheck();
+}).then(function () {
   if (process.exitCode) {
     console.error('Judge math regression failed.');
   } else {

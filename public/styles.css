@@ -203,3 +203,14 @@ button:focus, a:focus{ outline:2px solid rgba(0,212,255,0.12); outline-offset:3p
   font-size: 0.8rem; font-weight: 700; color: #00f6ff;
 }
 .ceiling-flag { color: #ffb020; font-weight: 700; }
+.centering-diag {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 246, 255, 0.25);
+}
+.centering-diag .diag-hint {
+  margin: 0 0 6px 0;
+  font-weight: 700;
+  color: #00f6ff;
+  letter-spacing: 0.03em;
+}

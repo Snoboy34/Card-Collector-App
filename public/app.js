@@ -216,7 +216,7 @@ function renderScanView() {
   appRoot.innerHTML = `
     <section class="panel">
       <h2>Scan New Card</h2>
-      <p class="muted">Fill the neon 2.5×3.5 frame edge-to-edge. Keep the card flat, fully inside the L-brackets, and on the 50/50 crosshair. Lighting should be even — glare fools the surface pass.</p>
+      <p class="muted">Fill the neon 2.5×3.5 frame edge-to-edge. Keep the card flat, fully inside the L-brackets, and on the 50/50 crosshair. Lighting should be even — glare fools the surface pass. After grade, the report lists box size vs photo size and print-border widths so we can tell a real frame from the backdrop mat.</p>
       <div style="margin-top:12px;">
         <input id="scanName" placeholder="Card name (optional)" style="padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inherit; min-width:200px;" />
       </div>
@@ -476,6 +476,33 @@ function openReportModal(item) {
   const ceiling = report && report.conditionCeilingApplied
     ? '<p class="ceiling-flag">0.5-point condition ceiling applied (final cannot exceed worst sub-grade + 0.5).</p>'
     : '';
+  const diag = report && report.centeringDiagnostics ? report.centeringDiagnostics : null;
+  const diagBox = diag && diag.box
+    ? diag.box.width + '×' + diag.box.height +
+      ' at (' + diag.box.left + ',' + diag.box.top + ')'
+    : '—';
+  const diagFill = diag && typeof diag.boxFillRatio === 'number'
+    ? Math.round(diag.boxFillRatio * 100) + '%'
+    : '—';
+  const w = diag && diag.printBorderWidths ? diag.printBorderWidths : {};
+  const diagWidths = diag
+    ? 'L ' + fmtPx(w.left) + ' · R ' + fmtPx(w.right) +
+      ' · T ' + fmtPx(w.top) + ' · B ' + fmtPx(w.bottom)
+    : '—';
+  const diagHtml = diag ? `
+    <div class="centering-diag">
+      <h4 style="margin:14px 0 6px 0;">Scan diagnostics</h4>
+      <p class="diag-hint">${escapeHtml(diag.hint || '')}</p>
+      <p class="muted">${escapeHtml(diag.summary || '')}</p>
+      <ul>
+        <li>Photo: ${diag.imageWidth || '—'}×${diag.imageHeight || '—'}</li>
+        <li>Card box: ${escapeHtml(diagBox)} — ${escapeHtml(diagFill)} of photo</li>
+        <li>Print borders (px): ${escapeHtml(diagWidths)}</li>
+        <li>L/R sample spread: ${fmtPx(diag.leftRightSampleSpreadPx)} · T/B sample spread: ${fmtPx(diag.topBottomSampleSpreadPx)}</li>
+      </ul>
+      ${diag.axisSpreadNote ? '<p class="muted">' + escapeHtml(diag.axisSpreadNote) + '</p>' : ''}
+    </div>
+  ` : '';
   const subLine = report && report.subGradesLabel
     ? '<p><span class="subgrade-pill">' + escapeHtml(report.subGradesLabel) + '</span></p>'
     : (sub
@@ -505,6 +532,7 @@ function openReportModal(item) {
               <li><strong>Weighted projection: ${report.weighted}</strong></li>
             </ul>
             <p class="muted">${escapeHtml(report.primaryFlawDescription || report.notes || '')}</p>
+            ${diagHtml}
           ` : `<p class="muted">No grading report available.</p>`}
         </div>
       </div>
@@ -565,6 +593,10 @@ function previewAndOfferUpload(file) {
     const fd = new FormData();
     fd.append('image', file, file.name);
     fd.append('name', fname);
+    // Always request metrology dumps while we settle printed-frame vs backdrop
+    // and L/R vs T/B drift. The report modal reads centeringDiagnostics even
+    // if this flag is later turned off.
+    fd.append('debug', 'true');
 
     const status = document.getElementById('uploadStatus');
     status.innerHTML = 'Uploading to The Judge…';
@@ -653,6 +685,13 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>\"']/g, function (c) {
     return ({ '&': '&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'": '&#39;' })[c];
   });
+}
+
+function fmtPx(value) {
+  if (value == null || value === '') return '—';
+  const n = Number(value);
+  if (!isFinite(n)) return '—';
+  return (Math.round(n * 10) / 10) + 'px';
 }
 
 function updateStatsUI() {

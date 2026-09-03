@@ -661,10 +661,14 @@ function scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight) {
 
 /**
  * Seven-line median border width for one edge. Port of
- * `CenteringAnalyzer.findBorderWidth`. Returns null if every sample line
- * failed — callers must NOT invent a fake 50/50 from a failed detection.
+ * `CenteringAnalyzer.findBorderWidth`. Returns null width if every sample
+ * line failed — callers must NOT invent a fake 50/50 from a failed detection.
  *
- * @returns {number|null}
+ * `samples` is the raw hit list (already sorted) so a single still can show
+ * whether T/B scan-lines disagree more than L/R (algorithm / keystone) vs.
+ * only drifting across separate shots (camera pitch).
+ *
+ * @returns {{ width: number|null, samples: number[], attempted: number }}
  */
 function findBorderWidth(getPixel, edge, cardWidth, cardHeight) {
   const sampleCount = 7;
@@ -679,9 +683,11 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight) {
     if (pos != null) positions.push(pos);
   }
 
-  if (!positions.length) return null;
+  if (!positions.length) {
+    return { width: null, samples: [], attempted: sampleCount };
+  }
   positions.sort(function (a, b) { return a - b; });
-  return median(positions);
+  return { width: median(positions), samples: positions, attempted: sampleCount };
 }
 
 /**
@@ -694,13 +700,24 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight) {
  * null. Callers must NOT treat that as 50/50 — a failed scan is unknown, not
  * Gem-centered. `gradeBuffer` is the place that branches on `detected`.
  *
- * @returns {{ leftRightRatio: {left:number, right:number}|null, topBottomRatio: {top:number, bottom:number}|null, detected: boolean, widths: object }}
+ * @returns {{ leftRightRatio: {left:number, right:number}|null, topBottomRatio: {top:number, bottom:number}|null, detected: boolean, widths: object, samples: object }}
  */
 function measurePrintCentering(getPixel, cardWidth, cardHeight) {
-  const leftW = findBorderWidth(getPixel, 'left', cardWidth, cardHeight);
-  const rightW = findBorderWidth(getPixel, 'right', cardWidth, cardHeight);
-  const topW = findBorderWidth(getPixel, 'top', cardWidth, cardHeight);
-  const bottomW = findBorderWidth(getPixel, 'bottom', cardWidth, cardHeight);
+  const leftScan = findBorderWidth(getPixel, 'left', cardWidth, cardHeight);
+  const rightScan = findBorderWidth(getPixel, 'right', cardWidth, cardHeight);
+  const topScan = findBorderWidth(getPixel, 'top', cardWidth, cardHeight);
+  const bottomScan = findBorderWidth(getPixel, 'bottom', cardWidth, cardHeight);
+
+  const leftW = leftScan.width;
+  const rightW = rightScan.width;
+  const topW = topScan.width;
+  const bottomW = bottomScan.width;
+  const samples = {
+    left: leftScan.samples,
+    right: rightScan.samples,
+    top: topScan.samples,
+    bottom: bottomScan.samples
+  };
 
   const detected = leftW != null && rightW != null && topW != null && bottomW != null;
 
@@ -709,7 +726,8 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight) {
       leftRightRatio: null,
       topBottomRatio: null,
       detected: false,
-      widths: { left: leftW, right: rightW, top: topW, bottom: bottomW }
+      widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
+      samples: samples
     };
   }
 
@@ -724,8 +742,151 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight) {
     leftRightRatio: { left: leftPct, right: rightPct },
     topBottomRatio: { top: topPct, bottom: bottomPct },
     detected: true,
-    widths: { left: leftW, right: rightW, top: topW, bottom: bottomW }
+    widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
+    samples: samples
   };
+}
+
+function round2(value) {
+  if (value == null || typeof value !== 'number' || !isFinite(value)) return value;
+  return Math.round(value * 100) / 100;
+}
+
+function stddev(arr) {
+  if (!arr || arr.length < 2) return null;
+  const m = mean(arr);
+  let sumSq = 0;
+  for (let i = 0; i < arr.length; i++) sumSq += (arr[i] - m) * (arr[i] - m);
+  return Math.sqrt(sumSq / arr.length);
+}
+
+function meanOf(arr) {
+  const vals = [];
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i] != null && typeof arr[i] === 'number' && isFinite(arr[i])) vals.push(arr[i]);
+  }
+  return vals.length ? mean(vals) : null;
+}
+
+/**
+ * Operator-facing hint for "is this a real printed frame, or the backdrop?"
+ *
+ * Rules match the Star Rookie / Chipper Jones investigation:
+ *   - a few pixels, uniform on all sides → likely mat / cut-edge bleed
+ *   - tens of pixels, especially uneven L vs R, with the card box inset
+ *     from the photo edge → likely a real printed frame
+ *   - tens of pixels but the box fills the photo → inward scan is probably
+ *     measuring backdrop that was included inside the bounding box
+ *
+ * Also reports L/R vs T/B sample-line spread on THIS still. If T/B samples
+ * already disagree on one photo, residual top/bottom drift is not only
+ * phone pitch between shots.
+ *
+ * @returns {object}
+ */
+function describeBorderSource(args) {
+  args = args || {};
+  const imageWidth = Number(args.imageWidth) || 0;
+  const imageHeight = Number(args.imageHeight) || 0;
+  const box = args.box || { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 };
+  const widths = args.widths || { left: null, right: null, top: null, bottom: null };
+  const samples = args.samples || {};
+  const detected = Boolean(args.detected);
+
+  const imageArea = Math.max(1, imageWidth * imageHeight);
+  const boxArea = Math.max(0, (Number(box.width) || 0) * (Number(box.height) || 0));
+  const boxFillRatio = boxArea / imageArea;
+
+  const px = [widths.left, widths.right, widths.top, widths.bottom].filter(function (v) {
+    return v != null && typeof v === 'number' && isFinite(v);
+  });
+  const avgWidthPx = px.length ? mean(px) : null;
+  const minWidthPx = px.length ? Math.min.apply(null, px) : null;
+  const maxWidthPx = px.length ? Math.max.apply(null, px) : null;
+  const widthRangePx = (minWidthPx != null && maxWidthPx != null) ? maxWidthPx - minWidthPx : null;
+  const uniform = widthRangePx != null && widthRangePx <= 4;
+  const thin = avgWidthPx != null && avgWidthPx <= 6;
+  const substantial = avgWidthPx != null && avgWidthPx >= 12;
+
+  const leftRightSampleSpreadPx = meanOf([stddev(samples.left), stddev(samples.right)]);
+  const topBottomSampleSpreadPx = meanOf([stddev(samples.top), stddev(samples.bottom)]);
+
+  let hint;
+  let summary;
+  if (!detected) {
+    hint = 'undetected';
+    summary = 'No sustained print border on at least one edge. Treat as unknown, not 50/50.';
+  } else if (thin && uniform && boxFillRatio >= 0.88) {
+    hint = 'likely-backdrop';
+    summary = 'Border of only a few pixels, nearly uniform, and the card box fills the photo. Likely measuring backdrop/mat (or cut-edge anti-alias), not a printed frame.';
+  } else if (thin && uniform) {
+    hint = 'thin-ambiguous';
+    summary = 'Border of only a few pixels on all sides. Could be cut-edge anti-alias or a very thin printed line — not a typical sports-card frame.';
+  } else if (substantial && boxFillRatio >= 0.90) {
+    hint = 'likely-backdrop';
+    summary = 'Tens of pixels of "border" but the detected card box fills the photo. The inward scan is probably picking up the backdrop mat, not a printed frame.';
+  } else if (substantial) {
+    hint = 'likely-printed-frame';
+    summary = 'Tens of pixels of border with the card box inset from the photo edge. This pattern matches a real printed frame. Uneven left vs right strengthens that reading.';
+  } else {
+    hint = 'needs-review';
+    summary = 'Border widths sit between "thin mat-bleed" and "clear printed frame." Compare L/R vs T/B sample spreads and reshoot with the card filling the neon frame.';
+  }
+
+  let axisSpreadNote = null;
+  if (leftRightSampleSpreadPx != null && topBottomSampleSpreadPx != null) {
+    if (topBottomSampleSpreadPx > leftRightSampleSpreadPx * 1.8 + 0.4) {
+      axisSpreadNote = 'T/B sample lines disagree more than L/R on this single still — vertical scan-pass or keystone, not just shot-to-shot pitch.';
+    } else {
+      axisSpreadNote = 'On this still, T/B sample spread is similar to L/R. Cross-scan T/B drift is more likely camera pitch than a one-sided algorithm bug.';
+    }
+  }
+
+  return {
+    hint: hint,
+    summary: summary,
+    imageWidth: imageWidth,
+    imageHeight: imageHeight,
+    box: {
+      left: box.left,
+      right: box.right,
+      top: box.top,
+      bottom: box.bottom,
+      width: box.width,
+      height: box.height
+    },
+    boxFillRatio: round2(boxFillRatio),
+    printBorderWidths: {
+      left: round2(widths.left),
+      right: round2(widths.right),
+      top: round2(widths.top),
+      bottom: round2(widths.bottom)
+    },
+    avgWidthPx: round2(avgWidthPx),
+    minWidthPx: round2(minWidthPx),
+    maxWidthPx: round2(maxWidthPx),
+    widthRangePx: round2(widthRangePx),
+    leftRightSampleSpreadPx: round2(leftRightSampleSpreadPx),
+    topBottomSampleSpreadPx: round2(topBottomSampleSpreadPx),
+    axisSpreadNote: axisSpreadNote,
+    samples: {
+      left: (samples.left || []).map(round2),
+      right: (samples.right || []).map(round2),
+      top: (samples.top || []).map(round2),
+      bottom: (samples.bottom || []).map(round2)
+    }
+  };
+}
+
+function buildCenteringDiagnostics(width, height, box, centeringMeasurement) {
+  return describeBorderSource({
+    imageWidth: width,
+    imageHeight: height,
+    box: box,
+    widths: centeringMeasurement.widths,
+    samples: centeringMeasurement.samples,
+    detected: centeringMeasurement.detected
+  });
 }
 
 /**
@@ -1158,12 +1319,14 @@ async function gradeBuffer(buffer, options) {
           creasePenalty: surfacePhase.creasePenalty
         },
         edgesWhiteningCount: Number(edgesWhiteningCount) || 0,
-        absoluteMaxCornerFray: cornerPhase.absoluteMaxCornerFray
+        absoluteMaxCornerFray: cornerPhase.absoluteMaxCornerFray,
+        centeringDiagnostics: buildCenteringDiagnostics(width, height, box, centeringMeasurement)
       };
       if (options.debug) {
         report.debug = {
           width, height, box, shouldRotate,
           printBorderWidths: centeringMeasurement.widths,
+          printBorderSamples: centeringMeasurement.samples,
           corners, surface, edgesWhiteningCount
         };
       }
@@ -1211,13 +1374,15 @@ async function gradeBuffer(buffer, options) {
       absoluteMaxCornerFray: judged.absoluteMaxCornerFray,
       printCenteringDetected: centeringMeasurement.detected,
       centeringUndetected: false,
-      incomplete: false
+      incomplete: false,
+      centeringDiagnostics: buildCenteringDiagnostics(width, height, box, centeringMeasurement)
     };
 
     if (options.debug) {
       report.debug = {
         width, height, box, shouldRotate,
         printBorderWidths: centeringMeasurement.widths,
+        printBorderSamples: centeringMeasurement.samples,
         corners, surface, edgesWhiteningCount
       };
     }
@@ -1238,5 +1403,7 @@ module.exports = {
   scoreCornersPhase,
   roundToLabHalfStep,
   labelForFinalScore,
-  measurePrintCentering
+  measurePrintCentering,
+  describeBorderSource,
+  buildCenteringDiagnostics
 };

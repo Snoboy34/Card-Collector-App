@@ -52,7 +52,7 @@ Uploads land in `./uploads`. Swap that for object storage before production.
 | `image`  | yes      | still of the card |
 | `name`   | no       | display name |
 | `cardType` | no     | reserved for sports vs TCG corner templates |
-| `debug`  | no       | `"true"` attaches metrology dumps |
+| `debug`  | no       | `"true"` attaches metrology dumps. The scan UI always sends this while we settle printed-frame vs backdrop. |
 
 Response: `{ ok: true, item }` where `item.gradingReport` includes:
 
@@ -63,6 +63,7 @@ subGradesLabel          "CEN: 9.5 | SUR: 9.0 | EDG: 10.0 | CRN: 9.5"
 conditionCeilingApplied true when average was capped by lowest+0.5
 primaryFlawDescription  same sentence order as The Judge.swift
 centering, corners, edges, surface, weighted   0–100 projections (×10)
+centeringDiagnostics    always-on box vs photo size, print-border px, printed-frame vs backdrop hint
 ```
 
 `POST /api/grade/upload` is the disk-backed twin of the same pipeline.
@@ -79,7 +80,10 @@ draws the overlay every animation frame:
 - Inner dashed ~60/40 PSA window (10% inset)
 
 The overlay is **not** burned into the captured JPEG. Only the video
-frame is posted to `/api/grade`.
+frame is posted to `/api/grade`. The neon frame, L-brackets, and 50/50
+crosshair are drawn in `drawCardAlignmentGuides` and painted as soon as
+the Scan view mounts — if they are missing on a phone, that is a render
+regression, not a missing feature.
 
 ## Formula quick-reference (The Judge.swift)
 
