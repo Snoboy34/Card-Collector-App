@@ -197,6 +197,68 @@ button:focus, a:focus{ outline:2px solid rgba(0,212,255,0.12); outline-offset:3p
   background: #05080e; border-top: 1px solid rgba(0, 246, 255, 0.35);
 }
 .scan-status { margin: 0; padding: 6px 10px 10px; color: #00f6ff; font-size: 0.85rem; }
+.scan-viewport-actions .small.is-disabled,
+.scan-viewport-actions .small:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: #334;
+  color: #9aa4b2;
+}
+.level-hud {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.level-target {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2px solid #ffb020;
+  background: rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.35);
+}
+.level-hud.is-level .level-target {
+  border-color: #00ff88;
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.45);
+}
+.level-deadzone {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.7);
+  transform: translate(-50%, -50%);
+}
+.level-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffb020;
+  transform: translate(-50%, -50%);
+  transition: transform 80ms linear, background 80ms linear;
+}
+.level-hud.is-level .level-dot { background: #00ff88; }
+.level-readout {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 1px 0 #000, 0 0 8px #000;
+  white-space: nowrap;
+}
 .subgrade-pill {
   display: inline-block; margin: 2px 4px 2px 0; padding: 4px 8px;
   border-radius: 999px; border: 1px solid #00f6ff;

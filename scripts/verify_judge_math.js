@@ -5,6 +5,7 @@
  */
 'use strict';
 const g = require('../services/grading_engine');
+const scanLevel = require('../public/scan_level');
 
 function assertEq(label, actual, expected) {
   if (actual !== expected) {
@@ -185,6 +186,40 @@ const undetectedHint = g.describeBorderSource({
 });
 assertHint('undetected hint', undetectedHint.hint, 'undetected');
 
+assert('level: 0/0 is level', scanLevel.isDeviceLevel(0, 0) === true);
+assert('level: 1.4/1.4 is level', scanLevel.isDeviceLevel(1.4, 1.4) === true);
+assert('level: 1.6 pitch is not level', scanLevel.isDeviceLevel(1.6, 0) === false);
+assert('level: 1.6 roll is not level', scanLevel.isDeviceLevel(0, 1.6) === false);
+assert('level: null is not level', scanLevel.isDeviceLevel(null, 0) === false);
+
+const mapped = scanLevel.orientationFromDeviceEvent({ beta: 4.2, gamma: -1.1 });
+assert('orientation maps beta to pitch', mapped && mapped.pitch === 4.2);
+assert('orientation maps gamma to roll', mapped && mapped.roll === -1.1);
+
+const sm = scanLevel.pushSmoothedSample([], 10, 0, 5);
+const sm2 = scanLevel.pushSmoothedSample(sm.samples, 0, 0, 5);
+assert('smooth averages two samples', Math.abs(sm2.pitch - 5) < 0.001);
+
+assert('auto-capture rejects 100ms pass-through', scanLevel.shouldAutoCapture(true, 100, false) === false);
+assert('auto-capture fires at 400ms hold', scanLevel.shouldAutoCapture(true, 400, false) === true);
+assert('auto-capture does not re-fire', scanLevel.shouldAutoCapture(true, 800, true) === false);
+
+const parsedTilt = scanLevel.parseCaptureTilt({
+  capturePitch: '0.42',
+  captureRoll: '-1.08',
+  captureLevel: 'true',
+  captureMode: 'auto'
+});
+assert('parseCaptureTilt pitch', parsedTilt && parsedTilt.pitchDeg === 0.42);
+assert('parseCaptureTilt roll', parsedTilt && parsedTilt.rollDeg === -1.08);
+assert('parseCaptureTilt mode', parsedTilt && parsedTilt.mode === 'auto');
+assert('parseCaptureTilt empty is null', scanLevel.parseCaptureTilt({}) == null);
+
+const bubble = scanLevel.bubbleOffset(0, 12, 28, 12);
+assert('bubble roll moves X', bubble.x === 28 && bubble.y === 0);
+const bubblePitch = scanLevel.bubbleOffset(12, 0, 28, 12);
+assert('bubble pitch moves Y', bubblePitch.x === 0 && bubblePitch.y === 28);
+
 async function makeBorderedCardPng() {
   let sharpLib = null;
   try { sharpLib = require('sharp'); } catch (e) { return null; }
@@ -225,7 +260,11 @@ async function runBorderedCardDiagnosticsCheck() {
     console.log('SKIP bordered-card diagnostics check (sharp not installed)');
     return;
   }
-  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true });
+  const report = await g.gradeBuffer(buf, {
+    maxDim: 560,
+    debug: true,
+    captureTilt: { pitchDeg: 0.4, rollDeg: -0.2, isLevel: true, mode: 'auto' }
+  });
   if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
     console.log('SKIP bordered-card diagnostics check (sharp not installed)');
     return;
@@ -238,6 +277,8 @@ async function runBorderedCardDiagnosticsCheck() {
   assert('bordered-card has centeringDiagnostics', report.centeringDiagnostics != null);
   assert('bordered-card debug has box', report.debug && report.debug.box != null);
   assert('bordered-card debug has printBorderWidths', report.debug && report.debug.printBorderWidths != null);
+  assert('bordered-card captureTilt mode', report.captureTilt && report.captureTilt.mode === 'auto');
+  assert('bordered-card debug captureTilt pitch', report.debug.captureTilt && report.debug.captureTilt.pitchDeg === 0.4);
   if (report.printCenteringDetected) {
     assert('bordered-card hint is printed-frame', report.centeringDiagnostics.hint === 'likely-printed-frame');
     assert('bordered-card avgWidthPx is tens of pixels', report.centeringDiagnostics.avgWidthPx >= 12);
