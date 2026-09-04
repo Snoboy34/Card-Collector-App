@@ -85,6 +85,25 @@ crosshair are drawn in `drawCardAlignmentGuides` and painted as soon as
 the Scan view mounts — if they are missing on a phone, that is a render
 regression, not a missing feature.
 
+## Level sensor + auto-capture
+
+Scan view listens to `DeviceOrientationEvent` (iOS: `requestPermission` on
+Start Camera / Scan tap). Pitch = `beta` (forward/back), roll = `gamma`
+(left/right). A two-axis bubble turns green only when both axes are within
+`LEVEL_TOLERANCE_DEG` (1.5°). Capture is disabled while the sensor is live
+and the phone is off-level. Auto-capture fires the same snapshot function
+after a **400ms** continuous hold (not a brief pass through the window).
+
+Pitch/roll at the shutter instant are sent as `capturePitch` / `captureRoll`
+and stored on `gradingReport.captureTilt`.
+
+Frame-fill / distance gating is **not** in this pass — running
+`findCardBoundingBox` on the live preview is a separate lift.
+
+On iPhone, motion and camera both need HTTPS (`npm run start:lan`). If the
+sensor never reports (desktop, permission denied), Capture stays manual so
+the UI is not bricked.
+
 ## Formula quick-reference (The Judge.swift)
 
 ```

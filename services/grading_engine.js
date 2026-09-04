@@ -1204,6 +1204,10 @@ async function gradeBuffer(buffer, options) {
 
   // TEMP: dump every gradeBuffer payload to the server log (remove after LAN testing).
   function returnGrade(gradeResult) {
+    if (options.captureTilt) {
+      gradeResult.captureTilt = options.captureTilt;
+      if (gradeResult.debug) gradeResult.debug.captureTilt = options.captureTilt;
+    }
     console.log(JSON.stringify(gradeResult, null, 2));
     return gradeResult;
   }

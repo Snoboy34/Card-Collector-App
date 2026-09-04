@@ -40,6 +40,7 @@ const grading = require('./services/grading_engine');
 const classifier = require('./services/classifier_engine');
 const wallet = require('./services/wallet_engine');
 const lanHttps = require('./scripts/lan_https');
+const scanLevel = require('./public/scan_level');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -102,13 +103,15 @@ let inventory = []; // Each item: { id, name, imagePath, gradingReport, createdA
  * Judge formula's penalties are hardcoded to The Judge.swift.
  *
  * @param {object} body
- * @returns {{ cardType?: string, debug?: boolean }}
+ * @returns {{ cardType?: string, debug?: boolean, captureTilt?: object }}
  */
 function parseGradingOptions(body) {
   const opts = {};
   if (!body) return opts;
   if (body.cardType) opts.cardType = body.cardType;
   if (body.debug) opts.debug = body.debug === 'true' || body.debug === '1';
+  const tilt = scanLevel.parseCaptureTilt(body);
+  if (tilt) opts.captureTilt = tilt;
   return opts;
 }
 
