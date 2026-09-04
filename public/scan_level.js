@@ -136,7 +136,7 @@ function parseCaptureTilt(body) {
   };
 }
 
-var api = {
+var scanLevelAPI = {
   LEVEL_TOLERANCE_DEG: LEVEL_TOLERANCE_DEG,
   AUTO_CAPTURE_HOLD_MS: AUTO_CAPTURE_HOLD_MS,
   SMOOTH_SAMPLE_COUNT: SMOOTH_SAMPLE_COUNT,
@@ -151,8 +151,8 @@ var api = {
 };
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = api;
+  module.exports = scanLevelAPI;
 }
 if (typeof window !== 'undefined') {
-  window.ScanLevel = api;
+  window.ScanLevel = scanLevelAPI;
 }

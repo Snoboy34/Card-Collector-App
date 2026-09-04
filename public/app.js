@@ -345,7 +345,7 @@ function updateLevelHud() {
     if (!has) readout.textContent = 'P —°  R —°';
     else {
       readout.textContent =
-        'P ' + scanLevelState.pitch.toFixed(1) + '°  R ' +
+        'P ' + scanLevelState.pitch.toFixed(1) + '°   R ' +
         scanLevelState.roll.toFixed(1) + '°';
     }
   }
@@ -378,7 +378,15 @@ function onDeviceOrientation(event) {
   if (!SL) return;
   const raw = SL.orientationFromDeviceEvent(event);
   if (!raw) return;
+  const firstReading = !scanLevelState.sensorActive;
   scanLevelState.sensorActive = true;
+  if (firstReading) {
+    if (scanLevelState.watchdog) {
+      clearTimeout(scanLevelState.watchdog);
+      scanLevelState.watchdog = 0;
+    }
+    setScanStatus('Level sensor live. Hold green to auto-capture.');
+  }
   scanLevelState.rawPitch = raw.pitch;
   scanLevelState.rawRoll = raw.roll;
   const smoothed = SL.pushSmoothedSample(
