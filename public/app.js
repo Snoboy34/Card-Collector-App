@@ -12,9 +12,9 @@
  *   - POST /api/grade → services/grading_engine.js (4-phase Judge + 0.5 ceiling)
  *   - Render 10-point sub-grades, ceiling flag, and primary-flaw text
  *
- * The canvas overlay is presentation only. It does not grade. All scoring
- * happens server-side in grading_engine.js so the formula cannot drift
- * between the viewport and The Judge.swift.
+ * The canvas overlay does not grade, but live capture crops to the neon
+ * 2.5×3.5 window so the JPEG cut matches what the operator lined up.
+ * Scoring stays server-side in grading_engine.js.
  */
 
 /* -------------------------
@@ -30,7 +30,7 @@ const api = {
 };
 
 /** Standard sports-card / TCG slab window: 2.5" × 3.5" (width / height). */
-const CARD_ASPECT = 2.5 / 3.5;
+const CARD_ASPECT = (window.ScanLevel && window.ScanLevel.CARD_ASPECT) || (2.5 / 3.5);
 
 /** Live camera bookkeeping. Stopped whenever the user leaves the Scan view. */
 let scanCameraStream = null;
@@ -648,6 +648,9 @@ function drawL(ctx, ox, oy, arm, dirX, dirY) {
 }
 
 function cardFrameRect(canvasW, canvasH) {
+  if (window.ScanLevel && typeof window.ScanLevel.cardFrameRect === 'function') {
+    return window.ScanLevel.cardFrameRect(canvasW, canvasH);
+  }
   const pad = Math.min(canvasW, canvasH) * 0.08;
   let h = canvasH - pad * 2;
   let w = h * CARD_ASPECT;
@@ -659,8 +662,10 @@ function cardFrameRect(canvasW, canvasH) {
 }
 
 /**
- * Snapshot the live video (guides are overlay-only and are NOT burned in),
- * JPEG-encode, and send through the same grading pipeline as a file upload.
+ * Snapshot the live video cropped to the neon 2.5×3.5 frame (mapped through
+ * object-fit: cover). Guides are not burned in. JPEG goes through the same
+ * grading pipeline as a file upload, with alignmentCrop=true so the crop
+ * edges are treated as the cut.
  */
 function captureFromCamera(mode) {
   if (captureInFlight) return;
@@ -675,11 +680,26 @@ function captureFromCamera(mode) {
   }
   captureInFlight = true;
   pendingCaptureMeta = snapshotCaptureTilt(mode || 'manual');
+  const videoW = video.videoWidth || 1280;
+  const videoH = video.videoHeight || 1720;
+  const viewW = video.clientWidth || videoW;
+  const viewH = video.clientHeight || videoH;
+  const SL = window.ScanLevel;
+  const crop = SL && typeof SL.alignmentCropInVideo === 'function'
+    ? SL.alignmentCropInVideo(videoW, videoH, viewW, viewH)
+    : null;
   const snap = document.createElement('canvas');
-  snap.width = video.videoWidth || 1280;
-  snap.height = video.videoHeight || 1720;
   const ctx = snap.getContext('2d');
-  ctx.drawImage(video, 0, 0, snap.width, snap.height);
+  if (crop && crop.w > 8 && crop.h > 8) {
+    snap.width = Math.max(1, Math.round(crop.w));
+    snap.height = Math.max(1, Math.round(crop.h));
+    ctx.drawImage(video, crop.x, crop.y, crop.w, crop.h, 0, 0, snap.width, snap.height);
+    pendingCaptureMeta.alignmentCrop = true;
+  } else {
+    snap.width = videoW;
+    snap.height = videoH;
+    ctx.drawImage(video, 0, 0, snap.width, snap.height);
+  }
   setScanStatus(mode === 'auto' ? 'Held level — captured.' : 'Capturing…');
   const onBlob = function (blob) {
     captureInFlight = false;
@@ -853,6 +873,9 @@ function previewAndOfferUpload(file) {
       fd.append('captureRoll', String(captureMeta.roll));
       fd.append('captureLevel', captureMeta.isLevel ? 'true' : 'false');
       fd.append('captureMode', captureMeta.mode || 'manual');
+    }
+    if (captureMeta && captureMeta.alignmentCrop) {
+      fd.append('alignmentCrop', 'true');
     }
 
     const status = document.getElementById('uploadStatus');

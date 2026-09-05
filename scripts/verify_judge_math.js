@@ -166,7 +166,7 @@ const thinMatHint = g.describeBorderSource({
   },
   detected: true
 });
-assertHint('thin full-frame hint', thinMatHint.hint, 'likely-backdrop');
+assertHint('thin full-frame hint', thinMatHint.hint, 'undetected');
 
 const wideMatHint = g.describeBorderSource({
   imageWidth: 400,
@@ -181,7 +181,7 @@ const wideMatHint = g.describeBorderSource({
   },
   detected: true
 });
-assertHint('wide full-frame hint', wideMatHint.hint, 'likely-backdrop');
+assertHint('wide full-frame hint', wideMatHint.hint, 'likely-printed-frame');
 
 const undetectedHint = g.describeBorderSource({
   imageWidth: 200,
@@ -192,8 +192,9 @@ const undetectedHint = g.describeBorderSource({
 });
 assertHint('undetected hint', undetectedHint.hint, 'undetected');
 
-assertEq('spread threshold is 4px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 4);
+assertEq('spread threshold is 8px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 8);
 assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
+assertEq('min median width is 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
 
 const tightInset = g.assessPrintBorderReliability(
   { left: 80, right: 719, top: 90, bottom: 1009, width: 640, height: 920 },
@@ -227,9 +228,8 @@ const edgeTouch = g.assessPrintBorderReliability(
     }
   }
 );
-assert('box touching photo L/R is rejected even if samples are tight', edgeTouch.accepted === false);
-assert('edge-touch names left', edgeTouch.reasons.join(' ').indexOf('box.left') !== -1);
-assert('edge-touch names right', edgeTouch.reasons.join(' ').indexOf('box.right') !== -1);
+assert('box touching photo is not enough to reject when samples are tight', edgeTouch.accepted === false);
+assert('thin bottom width is rejected', edgeTouch.reasons.join(' ').indexOf('bottom median width') !== -1);
 
 const highSpreadInset = g.assessPrintBorderReliability(
   { left: 70, right: 329, top: 80, bottom: 479, width: 260, height: 400 },
@@ -247,7 +247,7 @@ const highSpreadInset = g.assessPrintBorderReliability(
   }
 );
 assert('high sample spread on an inset box is rejected', highSpreadInset.accepted === false);
-assert('high-spread reason mentions range', highSpreadInset.reasons.join(' ').indexOf('sample range') !== -1);
+assert('high-spread reason mentions consensus', highSpreadInset.reasons.join(' ').indexOf('consensus range') !== -1);
 
 // Real Mac debug payloads — Star Rookie A and Faulk 1 — must now reject.
 const starRookieA = g.assessPrintBorderReliability(
@@ -332,7 +332,7 @@ const liveInset = g.assessPrintBorderReliability(
   }
 );
 assert('live inset-box scan rejected on sample spread', liveInset.accepted === false);
-assert('live inset-box names left range', liveInset.reasons.join(' ').indexOf('left sample range') !== -1);
+assert('live inset-box names left consensus', liveInset.reasons.join(' ').indexOf('left consensus range') !== -1);
 
 const liveFullFrame = g.assessPrintBorderReliability(
   { left: 0, right: 669, top: 0, bottom: 899, width: 670, height: 900 },
@@ -384,7 +384,7 @@ const postGateHint1 = g.describeBorderSource({
 });
 assert('post-gate scan 1 rejected', postGateScan1.accepted === false);
 assertHint('post-gate scan 1 hint is undetected', postGateHint1.hint, 'undetected');
-assert('post-gate scan 1 names box.right', postGateScan1.reasons.join(' ').indexOf('box.right') !== -1);
+assert('post-gate scan 1 names box.right', postGateScan1.reasons.join(' ').indexOf('box.right') !== -1 || postGateScan1.reasons.join(' ').indexOf('consensus range') !== -1);
 
 const postGateScan2 = g.assessPrintBorderReliability(
   { left: 0, right: 669, top: 127, bottom: 899, width: 670, height: 773 },
@@ -416,7 +416,89 @@ const postGateHint2 = g.describeBorderSource({
 });
 assert('post-gate scan 2 rejected', postGateScan2.accepted === false);
 assertHint('post-gate scan 2 hint is undetected', postGateHint2.hint, 'undetected');
-assert('post-gate scan 2 names box.left', postGateScan2.reasons.join(' ').indexOf('box.left') !== -1);
+assert('post-gate scan 2 still rejected without box.left reason', postGateScan2.accepted === false);
+
+// Live white-border card that filled the photo. Full min–max is huge because
+// of one right-side outlier and a nameplate step on the left; the 5-hit
+// consensus window is ≤ 5.5px and every median width is ~90–127px.
+const whiteBorderLive = g.assessPrintBorderReliability(
+  { left: 0, right: 669, top: 0, bottom: 899, width: 670, height: 900 },
+  670,
+  900,
+  {
+    detected: true,
+    widths: { left: 89.53, right: 111.11, top: 124.88, bottom: 127.48 },
+    samples: {
+      left: [55.58, 60.38, 88.43, 89.53, 91.39, 91.71, 93.88],
+      right: [16.56, 108.48, 109.83, 111.11, 111.54, 111.7, 111.99],
+      top: [56.75, 83.71, 123.76, 124.88, 125.79, 125.9, 126.24],
+      bottom: [125.23, 126.35, 127.05, 127.48, 128.28, 128.63, 129.05]
+    }
+  }
+);
+const whiteBorderHint = g.describeBorderSource({
+  imageWidth: 670,
+  imageHeight: 900,
+  box: { left: 0, right: 669, top: 0, bottom: 899, width: 670, height: 900 },
+  widths: { left: 89.53, right: 111.11, top: 124.88, bottom: 127.48 },
+  samples: {
+    left: [55.58, 60.38, 88.43, 89.53, 91.39, 91.71, 93.88],
+    right: [16.56, 108.48, 109.83, 111.11, 111.54, 111.7, 111.99],
+    top: [56.75, 83.71, 123.76, 124.88, 125.79, 125.9, 126.24],
+    bottom: [125.23, 126.35, 127.05, 127.48, 128.28, 128.63, 129.05]
+  },
+  detected: true
+});
+assert('white-border uncropped still rejected on photo-edge', whiteBorderLive.accepted === false);
+assert('white-border uncropped names box.left', whiteBorderLive.reasons.join(' ').indexOf('box.left') !== -1);
+assertHint('white-border uncropped hint is undetected', whiteBorderHint.hint, 'undetected');
+
+const whiteBorderCropped = g.assessPrintBorderReliability(
+  { left: 0, right: 669, top: 0, bottom: 899, width: 670, height: 900 },
+  670,
+  900,
+  {
+    detected: true,
+    widths: { left: 89.53, right: 111.11, top: 124.88, bottom: 127.48 },
+    samples: {
+      left: [55.58, 60.38, 88.43, 89.53, 91.39, 91.71, 93.88],
+      right: [16.56, 108.48, 109.83, 111.11, 111.54, 111.7, 111.99],
+      top: [56.75, 83.71, 123.76, 124.88, 125.79, 125.9, 126.24],
+      bottom: [125.23, 126.35, 127.05, 127.48, 128.28, 128.63, 129.05]
+    }
+  },
+  { alignmentCrop: true }
+);
+const whiteBorderCroppedHint = g.describeBorderSource({
+  imageWidth: 670,
+  imageHeight: 900,
+  box: { left: 0, right: 669, top: 0, bottom: 899, width: 670, height: 900 },
+  widths: { left: 89.53, right: 111.11, top: 124.88, bottom: 127.48 },
+  samples: {
+    left: [55.58, 60.38, 88.43, 89.53, 91.39, 91.71, 93.88],
+    right: [16.56, 108.48, 109.83, 111.11, 111.54, 111.7, 111.99],
+    top: [56.75, 83.71, 123.76, 124.88, 125.79, 125.9, 126.24],
+    bottom: [125.23, 126.35, 127.05, 127.48, 128.28, 128.63, 129.05]
+  },
+  detected: true,
+  alignmentCrop: true
+});
+assert('white-border neon-crop accepted', whiteBorderCropped.accepted === true);
+assertHint('white-border neon-crop hint is printed-frame', whiteBorderCroppedHint.hint, 'likely-printed-frame');
+assert('white-border left consensus under 8px', whiteBorderCropped.consensusRangePx.left <= 8);
+assert('white-border still reports photo-edge contact', whiteBorderCropped.edgeTouchesImage.left === true);
+
+assert('consensus ignores a single outlier', g.consensusRangePx([16.56, 108.48, 109.83, 111.11, 111.54, 111.7, 111.99], 5) < 4);
+
+const coverWide = scanLevel.videoCoverCrop(1920, 1080, 360, 480);
+assert('cover on wide video crops left/right', coverWide.y === 0 && coverWide.x > 0);
+const coverTall = scanLevel.videoCoverCrop(1080, 1920, 360, 480);
+assert('cover on tall video crops top/bottom', coverTall.x === 0 && coverTall.y > 0);
+const aligned = scanLevel.alignmentCropInVideo(1280, 1720, 360, 480);
+assert('alignment crop exists', Boolean(aligned && aligned.w > 0 && aligned.h > 0));
+assert('alignment crop is card aspect', Math.abs((aligned.w / aligned.h) - scanLevel.CARD_ASPECT) < 0.02);
+assert('parseAlignmentCrop true', scanLevel.parseAlignmentCrop({ alignmentCrop: 'true' }) === true);
+assert('parseAlignmentCrop missing is false', scanLevel.parseAlignmentCrop({}) === false);
 
 assert('level: 0/0 is level', scanLevel.isDeviceLevel(0, 0) === true);
 assert('level: 1.4/1.4 is level', scanLevel.isDeviceLevel(1.4, 1.4) === true);

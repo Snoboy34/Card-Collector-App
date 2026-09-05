@@ -101,16 +101,20 @@ const PSA10_CENTERING_MIN = 40.0;
 const PSA10_CENTERING_MAX = 60.0;
 
 /**
- * A printed border is a straight ink edge. The seven scan-lines on one side
- * must land within this many pixels of each other (max − min).
+ * A printed border is a straight ink edge. Reliability uses the tightest
+ * window of BORDER_SAMPLE_MIN_HITS hits (not max−min of all 7), so one
+ * nameplate / photo step does not fail a real white frame.
  *
- * 4px at maxDim 900 is ~0.4–0.6% of the card. Real frames stay inside 1–3px
- * after blur/JPEG; artwork "borders" on the Faulk / Star Rookie scans swung
- * 50–300px. 4px rejects those without failing a genuine ~20px inset frame.
+ * 8px at maxDim 900 is ~0.9% of the card. Live white-border inner edges
+ * wobbled ~5.5px on the left; Faulk / Star Rookie artwork "borders" still
+ * had 25–300px consensus windows. Thin cut-edge anti-alias (2–4px) is
+ * rejected separately by BORDER_MIN_MEDIAN_WIDTH_PX.
  */
-const BORDER_SAMPLE_SPREAD_MAX_PX = 4;
-/** Of the 7 attempted lines, at least this many must hit or the median is junk. */
+const BORDER_SAMPLE_SPREAD_MAX_PX = 8;
+/** Of the 7 attempted lines, at least this many must form the consensus window. */
 const BORDER_SAMPLE_MIN_HITS = 5;
+/** Median width below this is cut-edge AA / mat bleed, not a printed frame. */
+const BORDER_MIN_MEDIAN_WIDTH_PX = 12;
 /** BGS 10 centering window (48/52 — near 50/50). */
 const BGS10_CENTERING_MIN = 48.0;
 const BGS10_CENTERING_MAX = 52.0;
@@ -771,24 +775,50 @@ function sampleRangePx(samples) {
 }
 
 /**
+ * Tightest (max − min) among every contiguous window of `windowSize`
+ * sorted hits. Ignores outliers that a nameplate or glare spike produces.
+ *
+ * @returns {number|null}
+ */
+function consensusRangePx(samples, windowSize) {
+  const need = windowSize || BORDER_SAMPLE_MIN_HITS;
+  if (!samples || samples.length < need) return null;
+  const sorted = samples.slice().sort(function (a, b) { return a - b; });
+  let best = Infinity;
+  for (let i = 0; i <= sorted.length - need; i++) {
+    const range = sorted[i + need - 1] - sorted[i];
+    if (range < best) best = range;
+  }
+  return best;
+}
+
+/**
  * Gate for "this is a real printed frame" vs "artwork / photo-edge guess".
  *
  * Rejects (caller must use the aa32c76 undetected fallback, not fake ratios) when:
- *   - the card box touches that side of the photo (scan started at the image
- *     edge, not a cut edge), on any of the four sides
- *   - any edge's sample range exceeds BORDER_SAMPLE_SPREAD_MAX_PX
  *   - any edge has fewer than BORDER_SAMPLE_MIN_HITS successful lines
+ *   - the tightest BORDER_SAMPLE_MIN_HITS-hit window on any edge exceeds
+ *     BORDER_SAMPLE_SPREAD_MAX_PX (outliers are ignored)
+ *   - any edge's median width is below BORDER_MIN_MEDIAN_WIDTH_PX
  *   - measurePrintCentering already failed (detected === false)
  *
- * @returns {{ accepted: boolean, thresholdPx: number, minHits: number, sampleRangePx: object, edgeTouchesImage: object, reasons: string[] }}
+ * A box that touches the photo edge is a hard reject unless this still was
+ * cropped to the neon alignment frame (`alignmentCrop`). After that crop the
+ * image edges ARE the cut. Borderless cards still fail the consensus window.
+ *
+ * @returns {{ accepted: boolean, thresholdPx: number, minHits: number, minMedianWidthPx: number, sampleRangePx: object, consensusRangePx: object, edgeTouchesImage: object, reasons: string[] }}
  */
-function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMeasurement) {
+function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMeasurement, options) {
   const measurement = centeringMeasurement || {};
   const samples = measurement.samples || {};
+  const widths = measurement.widths || {};
   const boxSafe = box || { left: 0, right: 0, top: 0, bottom: 0 };
   const reasons = [];
   const imgW = Number(imageWidth) || 0;
   const imgH = Number(imageHeight) || 0;
+
+  const opts = options || {};
+  const alignmentCrop = Boolean(opts.alignmentCrop);
 
   const edgeTouchesImage = {
     left: Number(boxSafe.left) <= 0,
@@ -796,10 +826,12 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
     top: Number(boxSafe.top) <= 0,
     bottom: Number(boxSafe.bottom) >= imgH - 1
   };
-  if (edgeTouchesImage.left) reasons.push('box.left touches the photo edge');
-  if (edgeTouchesImage.right) reasons.push('box.right touches the photo edge');
-  if (edgeTouchesImage.top) reasons.push('box.top touches the photo edge');
-  if (edgeTouchesImage.bottom) reasons.push('box.bottom touches the photo edge');
+  if (!alignmentCrop) {
+    if (edgeTouchesImage.left) reasons.push('box.left touches the photo edge');
+    if (edgeTouchesImage.right) reasons.push('box.right touches the photo edge');
+    if (edgeTouchesImage.top) reasons.push('box.top touches the photo edge');
+    if (edgeTouchesImage.bottom) reasons.push('box.bottom touches the photo edge');
+  }
 
   const sampleRange = {
     left: sampleRangePx(samples.left),
@@ -807,16 +839,30 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
     top: sampleRangePx(samples.top),
     bottom: sampleRangePx(samples.bottom)
   };
+  const consensusRange = {
+    left: consensusRangePx(samples.left, BORDER_SAMPLE_MIN_HITS),
+    right: consensusRangePx(samples.right, BORDER_SAMPLE_MIN_HITS),
+    top: consensusRangePx(samples.top, BORDER_SAMPLE_MIN_HITS),
+    bottom: consensusRangePx(samples.bottom, BORDER_SAMPLE_MIN_HITS)
+  };
   const edges = ['left', 'right', 'top', 'bottom'];
   for (let i = 0; i < edges.length; i++) {
     const edge = edges[i];
     const hits = (samples[edge] && samples[edge].length) || 0;
+    const medianWidth = widths[edge];
     if (hits < BORDER_SAMPLE_MIN_HITS) {
       reasons.push(edge + ' has ' + hits + ' sample hits (need ' + BORDER_SAMPLE_MIN_HITS + ')');
-    } else if (sampleRange[edge] != null && sampleRange[edge] > BORDER_SAMPLE_SPREAD_MAX_PX) {
+    } else if (consensusRange[edge] != null && consensusRange[edge] > BORDER_SAMPLE_SPREAD_MAX_PX) {
       reasons.push(
-        edge + ' sample range ' + round2(sampleRange[edge]) +
+        edge + ' consensus range ' + round2(consensusRange[edge]) +
         'px exceeds ' + BORDER_SAMPLE_SPREAD_MAX_PX + 'px'
+      );
+    }
+    if (medianWidth != null && typeof medianWidth === 'number' && isFinite(medianWidth) &&
+        medianWidth < BORDER_MIN_MEDIAN_WIDTH_PX) {
+      reasons.push(
+        edge + ' median width ' + round2(medianWidth) +
+        'px is below ' + BORDER_MIN_MEDIAN_WIDTH_PX + 'px'
       );
     }
   }
@@ -829,13 +875,21 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
     accepted: reasons.length === 0,
     thresholdPx: BORDER_SAMPLE_SPREAD_MAX_PX,
     minHits: BORDER_SAMPLE_MIN_HITS,
+    minMedianWidthPx: BORDER_MIN_MEDIAN_WIDTH_PX,
     sampleRangePx: {
       left: round2(sampleRange.left),
       right: round2(sampleRange.right),
       top: round2(sampleRange.top),
       bottom: round2(sampleRange.bottom)
     },
+    consensusRangePx: {
+      left: round2(consensusRange.left),
+      right: round2(consensusRange.right),
+      top: round2(consensusRange.top),
+      bottom: round2(consensusRange.bottom)
+    },
     edgeTouchesImage: edgeTouchesImage,
+    alignmentCrop: alignmentCrop,
     reasons: reasons
   };
 }
@@ -866,10 +920,9 @@ function meanOf(arr) {
  *
  * Rules match the Star Rookie / Chipper Jones investigation:
  *   - a few pixels, uniform on all sides → likely mat / cut-edge bleed
- *   - tens of pixels, especially uneven L vs R, with the card box inset
- *     from the photo edge → likely a real printed frame
- *   - tens of pixels but the box fills the photo → inward scan is probably
- *     measuring backdrop that was included inside the bounding box
+ *   - tens of pixels with agreeing sample lines → likely a real printed
+ *     frame, even when the card fills the photo (neon-aligned capture)
+ *   - tens of pixels but sample lines do not agree → undetected (artwork)
  *
  * Also reports L/R vs T/B sample-line spread on THIS still. If T/B samples
  * already disagree on one photo, residual top/bottom drift is not only
@@ -908,7 +961,7 @@ function describeBorderSource(args) {
     detected: detected,
     widths: widths,
     samples: samples
-  });
+  }, { alignmentCrop: Boolean(args.alignmentCrop) });
 
   let hint;
   let summary;
@@ -923,12 +976,11 @@ function describeBorderSource(args) {
   } else if (thin && uniform) {
     hint = 'thin-ambiguous';
     summary = 'Border of only a few pixels on all sides. Could be cut-edge anti-alias or a very thin printed line — not a typical sports-card frame.';
-  } else if (substantial && boxFillRatio >= 0.90) {
-    hint = 'likely-backdrop';
-    summary = 'Tens of pixels of "border" but the detected card box fills the photo. The inward scan is probably picking up the backdrop mat, not a printed frame.';
   } else if (substantial) {
     hint = 'likely-printed-frame';
-    summary = 'Tens of pixels of border with the card box inset from the photo edge. This pattern matches a real printed frame. Uneven left vs right strengthens that reading.';
+    summary = boxFillRatio >= 0.90
+      ? 'Tens of pixels of border and the sample lines agree, with the card filling the frame. This matches a printed white/colored frame on a neon-aligned capture — not a backdrop guess.'
+      : 'Tens of pixels of border with the card box inset from the photo edge. This pattern matches a real printed frame. Uneven left vs right strengthens that reading.';
   } else {
     hint = 'needs-review';
     summary = 'Border widths sit between "thin mat-bleed" and "clear printed frame." Compare L/R vs T/B sample spreads and reshoot with the card filling the neon frame.';
@@ -980,13 +1032,15 @@ function describeBorderSource(args) {
   };
 }
 
-function buildCenteringDiagnostics(width, height, box, centeringMeasurement) {
+function buildCenteringDiagnostics(width, height, box, centeringMeasurement, extra) {
+  extra = extra || {};
   return describeBorderSource({
     imageWidth: width,
     imageHeight: height,
     box: box,
     widths: centeringMeasurement.widths,
     samples: centeringMeasurement.samples,
+    alignmentCrop: Boolean(extra.alignmentCrop),
     detected: centeringMeasurement.detected
   });
 }
@@ -1363,28 +1417,48 @@ async function gradeBuffer(buffer, options) {
     const blurred = new Uint8Array(blurredData);
 
     const box = findCardBoundingBox(pixels, width, height);
+    const boxFill = (box.width * box.height) / Math.max(1, width * height);
+    // Live capture is cropped to the neon 2.5×3.5 frame. When that crop
+    // is already the card (box fills the image), the image edges are the
+    // cut — do not let findCardBoundingBox walk inward to the artwork
+    // and strip a white printed border.
+    let centeringBox = box;
+    if (options.alignmentCrop && boxFill >= 0.85) {
+      centeringBox = {
+        left: 0,
+        right: width - 1,
+        top: 0,
+        bottom: height - 1,
+        width: width,
+        height: height,
+        bgApprox: box.bgApprox
+      };
+    }
 
     // Pixel accessor in CARD-LOCAL coordinates so inward scans start at the
     // cut edge rather than at the photo's frame edge.
     const getPixel = function (cx, cy) {
-      const x = box.left + cx;
-      const y = box.top + cy;
+      const x = centeringBox.left + cx;
+      const y = centeringBox.top + cy;
       if (x < 0 || y < 0 || x >= width || y >= height) return 0;
       return pixels[y * width + x];
     };
 
-    const centeringMeasurement = measurePrintCentering(getPixel, box.width, box.height);
-    const surface = measureSurfaceDefects(pixels, blurred, width, box);
-    const edgesWhiteningCount = measureEdgeWhitening(pixels, width, box);
-    const corners = measureCornerFraying(pixels, width, box);
+    const centeringMeasurement = measurePrintCentering(
+      getPixel, centeringBox.width, centeringBox.height
+    );
+    const surface = measureSurfaceDefects(pixels, blurred, width, centeringBox);
+    const edgesWhiteningCount = measureEdgeWhitening(pixels, width, centeringBox);
+    const corners = measureCornerFraying(pixels, width, centeringBox);
     const borderReliability = assessPrintBorderReliability(
-      box, width, height, centeringMeasurement
+      centeringBox, width, height, centeringMeasurement,
+      { alignmentCrop: Boolean(options.alignmentCrop) }
     );
     // eslint-disable-next-line no-console
     console.log(
       '[The Judge border] threshold=' + BORDER_SAMPLE_SPREAD_MAX_PX +
       'px minHits=' + BORDER_SAMPLE_MIN_HITS +
-      ' ranges=' + JSON.stringify(borderReliability.sampleRangePx) +
+      ' consensus=' + JSON.stringify(borderReliability.consensusRangePx) +
       ' accepted=' + borderReliability.accepted +
       (borderReliability.reasons.length
         ? ' reasons=' + borderReliability.reasons.join(' | ')
@@ -1394,15 +1468,15 @@ async function gradeBuffer(buffer, options) {
     // Failed print-border detection is UNKNOWN, not 50/50. Do not feed
     // fabricated ratios into evaluateMultiPhaseCondition — that scorer has
     // no "undetected" state and would emit a fake Gem centering sub-grade.
-    // The same fallback is used when the box touches the photo edge or the
-    // seven sample lines on any side disagree (borderless artwork, not a frame).
+    // Sample-line consensus (not photo-edge contact) is the discriminator
+    // for borderless artwork vs a printed frame that fills the neon crop.
     if (!centeringMeasurement.detected || !borderReliability.accepted) {
       const surfacePhase = scoreSurfacePhase(surface);
       const edgeScore = scoreEdgesPhase(edgesWhiteningCount);
       const cornerPhase = scoreCornersPhase(corners);
       const incompleteReason = !centeringMeasurement.detected
         ? 'centering undetectable — no printed border found'
-        : 'centering undetectable — print-border samples do not agree or card box touches the photo edge';
+        : 'centering undetectable — print-border samples do not agree on a printed frame';
       const report = {
         centering: null,
         corners: clamp01to100(Math.round(cornerPhase.score * 10)),
@@ -1443,11 +1517,13 @@ async function gradeBuffer(buffer, options) {
         },
         edgesWhiteningCount: Number(edgesWhiteningCount) || 0,
         absoluteMaxCornerFray: cornerPhase.absoluteMaxCornerFray,
-        centeringDiagnostics: buildCenteringDiagnostics(width, height, box, centeringMeasurement)
+        centeringDiagnostics: buildCenteringDiagnostics(width, height, centeringBox, centeringMeasurement, {
+          alignmentCrop: Boolean(options.alignmentCrop)
+        })
       };
       if (options.debug) {
         report.debug = {
-          width, height, box, shouldRotate,
+          width, height, box: centeringBox, shouldRotate, alignmentCrop: Boolean(options.alignmentCrop),
           printBorderWidths: centeringMeasurement.widths,
           printBorderSamples: centeringMeasurement.samples,
           borderReliability: borderReliability,
@@ -1499,12 +1575,14 @@ async function gradeBuffer(buffer, options) {
       printCenteringDetected: centeringMeasurement.detected,
       centeringUndetected: false,
       incomplete: false,
-      centeringDiagnostics: buildCenteringDiagnostics(width, height, box, centeringMeasurement)
+      centeringDiagnostics: buildCenteringDiagnostics(width, height, centeringBox, centeringMeasurement, {
+        alignmentCrop: Boolean(options.alignmentCrop)
+      })
     };
 
     if (options.debug) {
       report.debug = {
-        width, height, box, shouldRotate,
+        width, height, box: centeringBox, shouldRotate, alignmentCrop: Boolean(options.alignmentCrop),
         printBorderWidths: centeringMeasurement.widths,
         printBorderSamples: centeringMeasurement.samples,
         borderReliability: borderReliability,
@@ -1532,6 +1610,8 @@ module.exports = {
   describeBorderSource,
   buildCenteringDiagnostics,
   assessPrintBorderReliability,
+  consensusRangePx,
   BORDER_SAMPLE_SPREAD_MAX_PX,
-  BORDER_SAMPLE_MIN_HITS
+  BORDER_SAMPLE_MIN_HITS,
+  BORDER_MIN_MEDIAN_WIDTH_PX
 };

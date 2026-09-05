@@ -8,11 +8,12 @@
  *   beta  → pitch  (front/back; 0 = phone parallel to the table, camera down)
  *   gamma → roll   (left/right)
  *
- * Frame-fill / distance gating is intentionally NOT here — live
- * findCardBoundingBox on the preview is a separate, larger lift.
+ * Alignment-frame math lives here too so capture can crop the JPEG to the
+ * same 2.5×3.5 neon rectangle the operator lined up (object-fit: cover).
  */
 'use strict';
 
+var CARD_ASPECT = 2.5 / 3.5;
 var LEVEL_TOLERANCE_DEG = 1.5;
 var AUTO_CAPTURE_HOLD_MS = 400;
 var SMOOTH_SAMPLE_COUNT = 5;
@@ -120,6 +121,66 @@ function shouldAutoCapture(isLevel, heldMs, alreadyFired, holdMs) {
  * @param {object} body
  * @returns {{ pitchDeg: number|null, rollDeg: number|null, isLevel: boolean, mode: string|null }|null}
  */
+/**
+ * Neon card window in the same CSS pixels as the overlay canvas.
+ *
+ * @param {number} canvasW
+ * @param {number} canvasH
+ * @returns {{ x: number, y: number, w: number, h: number }}
+ */
+function cardFrameRect(canvasW, canvasH) {
+  var pad = Math.min(canvasW, canvasH) * 0.08;
+  var h = canvasH - pad * 2;
+  var w = h * CARD_ASPECT;
+  if (w > canvasW - pad * 2) {
+    w = canvasW - pad * 2;
+    h = w / CARD_ASPECT;
+  }
+  return { x: (canvasW - w) / 2, y: (canvasH - h) / 2, w: w, h: h };
+}
+
+/**
+ * Source rectangle of an object-fit:cover video inside a view.
+ *
+ * @param {number} videoW
+ * @param {number} videoH
+ * @param {number} viewW
+ * @param {number} viewH
+ * @returns {{ x: number, y: number, w: number, h: number }}
+ */
+function videoCoverCrop(videoW, videoH, viewW, viewH) {
+  var srcAspect = videoW / videoH;
+  var viewAspect = viewW / viewH;
+  if (srcAspect > viewAspect) {
+    var cropW = videoH * viewAspect;
+    return { x: (videoW - cropW) / 2, y: 0, w: cropW, h: videoH };
+  }
+  var cropH = videoW / viewAspect;
+  return { x: 0, y: (videoH - cropH) / 2, w: videoW, h: cropH };
+}
+
+/**
+ * Neon frame mapped into video-pixel coordinates through object-fit: cover.
+ *
+ * @returns {{ x: number, y: number, w: number, h: number }|null}
+ */
+function alignmentCropInVideo(videoW, videoH, viewW, viewH) {
+  if (!(videoW > 0 && videoH > 0 && viewW > 0 && viewH > 0)) return null;
+  var cover = videoCoverCrop(videoW, videoH, viewW, viewH);
+  var frame = cardFrameRect(viewW, viewH);
+  return {
+    x: cover.x + (frame.x / viewW) * cover.w,
+    y: cover.y + (frame.y / viewH) * cover.h,
+    w: (frame.w / viewW) * cover.w,
+    h: (frame.h / viewH) * cover.h
+  };
+}
+
+function parseAlignmentCrop(body) {
+  if (!body) return false;
+  return body.alignmentCrop === 'true' || body.alignmentCrop === true || body.alignmentCrop === '1';
+}
+
 function parseCaptureTilt(body) {
   if (!body) return null;
   var pitch = parseFloat(body.capturePitch);
@@ -142,11 +203,16 @@ var scanLevelAPI = {
   SMOOTH_SAMPLE_COUNT: SMOOTH_SAMPLE_COUNT,
   DISPLAY_CLAMP_DEG: DISPLAY_CLAMP_DEG,
   LOG_INTERVAL_MS: LOG_INTERVAL_MS,
+  CARD_ASPECT: CARD_ASPECT,
   isDeviceLevel: isDeviceLevel,
   pushSmoothedSample: pushSmoothedSample,
   orientationFromDeviceEvent: orientationFromDeviceEvent,
   bubbleOffset: bubbleOffset,
   shouldAutoCapture: shouldAutoCapture,
+  cardFrameRect: cardFrameRect,
+  videoCoverCrop: videoCoverCrop,
+  alignmentCropInVideo: alignmentCropInVideo,
+  parseAlignmentCrop: parseAlignmentCrop,
   parseCaptureTilt: parseCaptureTilt
 };
 
