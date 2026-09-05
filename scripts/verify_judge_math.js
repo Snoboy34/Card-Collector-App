@@ -159,10 +159,10 @@ const thinMatHint = g.describeBorderSource({
   box: { left: 4, right: 795, top: 4, bottom: 1095, width: 792, height: 1092 },
   widths: { left: 3.1, right: 2.8, top: 3.0, bottom: 3.4 },
   samples: {
-    left: [3, 3.1, 3.2],
-    right: [2.7, 2.8, 2.9],
-    top: [2.9, 3.0, 3.1],
-    bottom: [3.3, 3.4, 3.5]
+    left: [3.0, 3.05, 3.1, 3.1, 3.15, 3.2, 3.2],
+    right: [2.7, 2.75, 2.8, 2.8, 2.85, 2.9, 2.9],
+    top: [2.9, 2.95, 3.0, 3.0, 3.05, 3.1, 3.1],
+    bottom: [3.3, 3.35, 3.4, 3.4, 3.45, 3.5, 3.5]
   },
   detected: true
 });
@@ -173,6 +173,12 @@ const wideMatHint = g.describeBorderSource({
   imageHeight: 560,
   box: { left: 2, right: 397, top: 2, bottom: 557, width: 396, height: 556 },
   widths: { left: 28, right: 30, top: 26, bottom: 32 },
+  samples: {
+    left: [27.5, 27.8, 28, 28, 28.2, 28.4, 28.5],
+    right: [29.5, 29.8, 30, 30, 30.2, 30.3, 30.4],
+    top: [25.6, 25.8, 26, 26, 26.1, 26.2, 26.3],
+    bottom: [31.5, 31.8, 32, 32, 32.1, 32.2, 32.3]
+  },
   detected: true
 });
 assertHint('wide full-frame hint', wideMatHint.hint, 'likely-backdrop');
@@ -185,6 +191,128 @@ const undetectedHint = g.describeBorderSource({
   detected: false
 });
 assertHint('undetected hint', undetectedHint.hint, 'undetected');
+
+assertEq('spread threshold is 4px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 4);
+assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
+
+const tightInset = g.assessPrintBorderReliability(
+  { left: 80, right: 719, top: 90, bottom: 1009, width: 640, height: 920 },
+  800,
+  1100,
+  {
+    detected: true,
+    widths: { left: 22.4, right: 18.1, top: 24.0, bottom: 31.2 },
+    samples: {
+      left: [21, 22, 22.4, 23, 22, 22.5, 22],
+      right: [18, 18.2, 18.1, 17.8, 18.4, 18, 18.1],
+      top: [23.5, 24, 24.2, 24, 23.8, 24.1, 24],
+      bottom: [30.5, 31, 31.4, 31.2, 31, 31.3, 31.1]
+    }
+  }
+);
+assert('tight inset frame is accepted', tightInset.accepted === true);
+
+const edgeTouch = g.assessPrintBorderReliability(
+  { left: 0, right: 669, top: 128, bottom: 763, width: 670, height: 636 },
+  670,
+  900,
+  {
+    detected: true,
+    widths: { left: 106.36, right: 110.36, top: 40.42, bottom: 8.83 },
+    samples: {
+      left: [106, 106.2, 106.3, 106.36, 106.4, 106.5, 106.6],
+      right: [110, 110.1, 110.2, 110.36, 110.4, 110.5, 110.6],
+      top: [40, 40.2, 40.3, 40.42, 40.5, 40.6, 40.7],
+      bottom: [8.5, 8.6, 8.7, 8.83, 8.9, 9.0, 9.1]
+    }
+  }
+);
+assert('box touching photo L/R is rejected even if samples are tight', edgeTouch.accepted === false);
+assert('edge-touch names left', edgeTouch.reasons.join(' ').indexOf('box.left') !== -1);
+assert('edge-touch names right', edgeTouch.reasons.join(' ').indexOf('box.right') !== -1);
+
+const highSpreadInset = g.assessPrintBorderReliability(
+  { left: 70, right: 329, top: 80, bottom: 479, width: 260, height: 400 },
+  400,
+  560,
+  {
+    detected: true,
+    widths: { left: 105, right: 78, top: 12, bottom: 23 },
+    samples: {
+      left: [22.75, 75.25, 83, 104.33, 104.97, 104.98, 105.11],
+      right: [7.67, 61.19, 73.5, 78, 110.13, 112.03, 158.5],
+      top: [3.68, 4.45, 4.6, 6.86, 7, 26.04, 28.23],
+      bottom: [3, 4, 5.63, 23.43, 28.99, 67.25, 69.5]
+    }
+  }
+);
+assert('high sample spread on an inset box is rejected', highSpreadInset.accepted === false);
+assert('high-spread reason mentions range', highSpreadInset.reasons.join(' ').indexOf('sample range') !== -1);
+
+// Real Mac debug payloads — Star Rookie A and Faulk 1 — must now reject.
+const starRookieA = g.assessPrintBorderReliability(
+  { left: 0, right: 669, top: 128, bottom: 763, width: 670, height: 636 },
+  670,
+  900,
+  {
+    detected: true,
+    widths: { left: 106.36, right: 110.36, top: 40.42, bottom: 8.83 },
+    samples: {
+      left: [53.75, 90.33, 104.78, 106.36, 135, 163.13, 308.3],
+      right: [8.88, 24, 109.4, 110.36, 130.32, 137.64, 140.42],
+      top: [12.35, 19.58, 38.96, 40.42, 43.71, 136.63, 192.88],
+      bottom: [3, 3, 4, 8.83, 22.7, 46.71, 80.93]
+    }
+  }
+);
+const starRookieHint = g.describeBorderSource({
+  imageWidth: 670,
+  imageHeight: 900,
+  box: { left: 0, right: 669, top: 128, bottom: 763, width: 670, height: 636 },
+  widths: { left: 106.36, right: 110.36, top: 40.42, bottom: 8.83 },
+  samples: {
+    left: [53.75, 90.33, 104.78, 106.36, 135, 163.13, 308.3],
+    right: [8.88, 24, 109.4, 110.36, 130.32, 137.64, 140.42],
+    top: [12.35, 19.58, 38.96, 40.42, 43.71, 136.63, 192.88],
+    bottom: [3, 3, 4, 8.83, 22.7, 46.71, 80.93]
+  },
+  detected: true
+});
+assert('Star Rookie A reliability rejected', starRookieA.accepted === false);
+assertHint('Star Rookie A hint is undetected', starRookieHint.hint, 'undetected');
+assert('Star Rookie A hint is not printed-frame', starRookieHint.hint !== 'likely-printed-frame');
+
+const faulk1 = g.assessPrintBorderReliability(
+  { left: 0, right: 669, top: 174, bottom: 757, width: 670, height: 584 },
+  670,
+  900,
+  {
+    detected: true,
+    widths: { left: 105.28, right: 112.31, top: 12.79, bottom: 23.34 },
+    samples: {
+      left: [33.5, 98, 104.94, 105.28, 105.34, 105.38, 108.22],
+      right: [107.95, 111.06, 111.1, 112.31, 112.43, 173, 383.81],
+      top: [11.31, 11.38, 12.74, 12.79, 14.73, 15.11, 16.77],
+      bottom: [3, 3, 23.2, 23.34, 28.66, 67.18, 84.75]
+    }
+  }
+);
+const faulkHint = g.describeBorderSource({
+  imageWidth: 670,
+  imageHeight: 900,
+  box: { left: 0, right: 669, top: 174, bottom: 757, width: 670, height: 584 },
+  widths: { left: 105.28, right: 112.31, top: 12.79, bottom: 23.34 },
+  samples: {
+    left: [33.5, 98, 104.94, 105.28, 105.34, 105.38, 108.22],
+    right: [107.95, 111.06, 111.1, 112.31, 112.43, 173, 383.81],
+    top: [11.31, 11.38, 12.74, 12.79, 14.73, 15.11, 16.77],
+    bottom: [3, 3, 23.2, 23.34, 28.66, 67.18, 84.75]
+  },
+  detected: true
+});
+assert('Faulk 1 reliability rejected', faulk1.accepted === false);
+assertHint('Faulk 1 hint is undetected', faulkHint.hint, 'undetected');
+assert('Faulk 1 hint is not printed-frame', faulkHint.hint !== 'likely-printed-frame');
 
 assert('level: 0/0 is level', scanLevel.isDeviceLevel(0, 0) === true);
 assert('level: 1.4/1.4 is level', scanLevel.isDeviceLevel(1.4, 1.4) === true);
@@ -254,6 +382,82 @@ async function makeBorderedCardPng() {
   }).png().toBuffer();
 }
 
+/** Full-width "card" with letterboxed gray top/bottom and interior art panels.
+ *  Box should touch left/right of the photo — without the reliability gate
+ *  the inward scan would invent ~100px "borders" from the art. */
+async function makeFullBleedArtPng() {
+  let sharpLib = null;
+  try { sharpLib = require('sharp'); } catch (e) { return null; }
+  const width = 400;
+  const height = 560;
+  const channels = 3;
+  const buf = Buffer.alloc(width * height * channels);
+  const letter = 80;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * channels;
+      if (y < letter || y >= height - letter) {
+        buf[i] = 140; buf[i + 1] = 140; buf[i + 2] = 140;
+      } else if (x < 110) {
+        buf[i] = 20; buf[i + 1] = 20; buf[i + 2] = 20;
+      } else if (x > width - 110) {
+        buf[i] = 20; buf[i + 1] = 20; buf[i + 2] = 20;
+      } else {
+        buf[i] = 200; buf[i + 1] = 210; buf[i + 2] = 230;
+      }
+    }
+  }
+  return sharpLib(buf, {
+    raw: { width: width, height: height, channels: channels }
+  }).png().toBuffer();
+}
+
+/** Pink mat + inset full-bleed art whose contrast edge slopes, so the 7
+ *  sample lines disagree by tens of pixels on an otherwise inset box. */
+async function makeHighSpreadInsetPng() {
+  let sharpLib = null;
+  try { sharpLib = require('sharp'); } catch (e) { return null; }
+  const width = 400;
+  const height = 560;
+  const channels = 3;
+  const buf = Buffer.alloc(width * height * channels);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * channels;
+      buf[i] = 236; buf[i + 1] = 72; buf[i + 2] = 153;
+    }
+  }
+  const card = { left: 70, right: 329, top: 80, bottom: 479 };
+  const cardH = card.bottom - card.top;
+  for (let y = card.top; y <= card.bottom; y++) {
+    const relY = (y - card.top) / cardH;
+    const split = card.left + 10 + Math.round(relY * 140);
+    for (let x = card.left; x <= card.right; x++) {
+      const i = (y * width + x) * channels;
+      if (x < split) {
+        buf[i] = 20; buf[i + 1] = 24; buf[i + 2] = 40;
+      } else {
+        buf[i] = 220; buf[i + 1] = 220; buf[i + 2] = 230;
+      }
+    }
+  }
+  return sharpLib(buf, {
+    raw: { width: width, height: height, channels: channels }
+  }).png().toBuffer();
+}
+
+function assertUndetectedNoFrameHint(label, report) {
+  assert(label + ' centeringUndetected', report.centeringUndetected === true);
+  assert(label + ' printCenteringDetected false', report.printCenteringDetected === false);
+  assert(label + ' incomplete', report.incomplete === true);
+  assert(label + ' centering is null', report.centering === null);
+  assert(label + ' finalScore is not a number', typeof report.finalScore !== 'number');
+  assert(label + ' ratios are null', report.centeringMetrics && report.centeringMetrics.leftRightRatio === null);
+  const hint = report.centeringDiagnostics && report.centeringDiagnostics.hint;
+  assert(label + ' hint is not printed-frame', hint !== 'likely-printed-frame');
+  assert(label + ' hint is undetected', hint === 'undetected');
+}
+
 async function runBorderedCardDiagnosticsCheck() {
   const buf = await makeBorderedCardPng();
   if (!buf) {
@@ -283,14 +487,63 @@ async function runBorderedCardDiagnosticsCheck() {
     assert('bordered-card hint is printed-frame', report.centeringDiagnostics.hint === 'likely-printed-frame');
     assert('bordered-card avgWidthPx is tens of pixels', report.centeringDiagnostics.avgWidthPx >= 12);
     assert('bordered-card box is inset', report.centeringDiagnostics.boxFillRatio < 0.85);
+    assert('bordered-card reliability accepted',
+      report.centeringDiagnostics.borderReliability &&
+      report.centeringDiagnostics.borderReliability.accepted === true);
   } else {
     console.error('FAIL bordered-card should detect a printed frame', report.centeringDiagnostics);
     process.exitCode = 1;
   }
 }
 
+async function runEdgeTouchBleedCheck() {
+  const buf = await makeFullBleedArtPng();
+  if (!buf) {
+    console.log('SKIP full-bleed edge-touch check (sharp not installed)');
+    return;
+  }
+  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true });
+  if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
+    console.log('SKIP full-bleed edge-touch check (sharp not installed)');
+    return;
+  }
+  if (report.notes && String(report.notes).indexOf('grading engine error') !== -1) {
+    console.error('FAIL full-bleed threw:', report.notes);
+    process.exitCode = 1;
+    return;
+  }
+  assertUndetectedNoFrameHint('full-bleed', report);
+  const box = report.debug && report.debug.box;
+  assert('full-bleed box touches a photo edge',
+    box && (box.left <= 0 || box.right >= (report.debug.width - 1) ||
+      box.top <= 0 || box.bottom >= (report.debug.height - 1)));
+}
+
+async function runHighSpreadInsetCheck() {
+  const buf = await makeHighSpreadInsetPng();
+  if (!buf) {
+    console.log('SKIP high-spread inset check (sharp not installed)');
+    return;
+  }
+  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true });
+  if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
+    console.log('SKIP high-spread inset check (sharp not installed)');
+    return;
+  }
+  if (report.notes && String(report.notes).indexOf('grading engine error') !== -1) {
+    console.error('FAIL high-spread inset threw:', report.notes);
+    process.exitCode = 1;
+    return;
+  }
+  assertUndetectedNoFrameHint('high-spread inset', report);
+}
+
 runGradeBufferUndetectedCheck().then(function () {
   return runBorderedCardDiagnosticsCheck();
+}).then(function () {
+  return runEdgeTouchBleedCheck();
+}).then(function () {
+  return runHighSpreadInsetCheck();
 }).then(function () {
   if (process.exitCode) {
     console.error('Judge math regression failed.');

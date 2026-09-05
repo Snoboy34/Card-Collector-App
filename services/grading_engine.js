@@ -99,6 +99,18 @@ const PORTRAIT_LOCK_WIDTH_RATIO = 1.15;
 /** PSA 10 centering window (40/60 on each axis) from CenteringAnalyzer.swift. */
 const PSA10_CENTERING_MIN = 40.0;
 const PSA10_CENTERING_MAX = 60.0;
+
+/**
+ * A printed border is a straight ink edge. The seven scan-lines on one side
+ * must land within this many pixels of each other (max − min).
+ *
+ * 4px at maxDim 900 is ~0.4–0.6% of the card. Real frames stay inside 1–3px
+ * after blur/JPEG; artwork "borders" on the Faulk / Star Rookie scans swung
+ * 50–300px. 4px rejects those without failing a genuine ~20px inset frame.
+ */
+const BORDER_SAMPLE_SPREAD_MAX_PX = 4;
+/** Of the 7 attempted lines, at least this many must hit or the median is junk. */
+const BORDER_SAMPLE_MIN_HITS = 5;
 /** BGS 10 centering window (48/52 — near 50/50). */
 const BGS10_CENTERING_MIN = 48.0;
 const BGS10_CENTERING_MAX = 52.0;
@@ -747,6 +759,87 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight) {
   };
 }
 
+function sampleRangePx(samples) {
+  if (!samples || !samples.length) return null;
+  let min = samples[0];
+  let max = samples[0];
+  for (let i = 1; i < samples.length; i++) {
+    if (samples[i] < min) min = samples[i];
+    if (samples[i] > max) max = samples[i];
+  }
+  return max - min;
+}
+
+/**
+ * Gate for "this is a real printed frame" vs "artwork / photo-edge guess".
+ *
+ * Rejects (caller must use the aa32c76 undetected fallback, not fake ratios) when:
+ *   - the card box touches that side of the photo (scan started at the image
+ *     edge, not a cut edge), on any of the four sides
+ *   - any edge's sample range exceeds BORDER_SAMPLE_SPREAD_MAX_PX
+ *   - any edge has fewer than BORDER_SAMPLE_MIN_HITS successful lines
+ *   - measurePrintCentering already failed (detected === false)
+ *
+ * @returns {{ accepted: boolean, thresholdPx: number, minHits: number, sampleRangePx: object, edgeTouchesImage: object, reasons: string[] }}
+ */
+function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMeasurement) {
+  const measurement = centeringMeasurement || {};
+  const samples = measurement.samples || {};
+  const boxSafe = box || { left: 0, right: 0, top: 0, bottom: 0 };
+  const reasons = [];
+  const imgW = Number(imageWidth) || 0;
+  const imgH = Number(imageHeight) || 0;
+
+  const edgeTouchesImage = {
+    left: Number(boxSafe.left) <= 0,
+    right: Number(boxSafe.right) >= imgW - 1,
+    top: Number(boxSafe.top) <= 0,
+    bottom: Number(boxSafe.bottom) >= imgH - 1
+  };
+  if (edgeTouchesImage.left) reasons.push('box.left touches the photo edge');
+  if (edgeTouchesImage.right) reasons.push('box.right touches the photo edge');
+  if (edgeTouchesImage.top) reasons.push('box.top touches the photo edge');
+  if (edgeTouchesImage.bottom) reasons.push('box.bottom touches the photo edge');
+
+  const sampleRange = {
+    left: sampleRangePx(samples.left),
+    right: sampleRangePx(samples.right),
+    top: sampleRangePx(samples.top),
+    bottom: sampleRangePx(samples.bottom)
+  };
+  const edges = ['left', 'right', 'top', 'bottom'];
+  for (let i = 0; i < edges.length; i++) {
+    const edge = edges[i];
+    const hits = (samples[edge] && samples[edge].length) || 0;
+    if (hits < BORDER_SAMPLE_MIN_HITS) {
+      reasons.push(edge + ' has ' + hits + ' sample hits (need ' + BORDER_SAMPLE_MIN_HITS + ')');
+    } else if (sampleRange[edge] != null && sampleRange[edge] > BORDER_SAMPLE_SPREAD_MAX_PX) {
+      reasons.push(
+        edge + ' sample range ' + round2(sampleRange[edge]) +
+        'px exceeds ' + BORDER_SAMPLE_SPREAD_MAX_PX + 'px'
+      );
+    }
+  }
+
+  if (!measurement.detected) {
+    reasons.push('measurePrintCentering did not resolve all four edges');
+  }
+
+  return {
+    accepted: reasons.length === 0,
+    thresholdPx: BORDER_SAMPLE_SPREAD_MAX_PX,
+    minHits: BORDER_SAMPLE_MIN_HITS,
+    sampleRangePx: {
+      left: round2(sampleRange.left),
+      right: round2(sampleRange.right),
+      top: round2(sampleRange.top),
+      bottom: round2(sampleRange.bottom)
+    },
+    edgeTouchesImage: edgeTouchesImage,
+    reasons: reasons
+  };
+}
+
 function round2(value) {
   if (value == null || typeof value !== 'number' || !isFinite(value)) return value;
   return Math.round(value * 100) / 100;
@@ -811,11 +904,19 @@ function describeBorderSource(args) {
   const leftRightSampleSpreadPx = meanOf([stddev(samples.left), stddev(samples.right)]);
   const topBottomSampleSpreadPx = meanOf([stddev(samples.top), stddev(samples.bottom)]);
 
+  const reliability = assessPrintBorderReliability(box, imageWidth, imageHeight, {
+    detected: detected,
+    widths: widths,
+    samples: samples
+  });
+
   let hint;
   let summary;
-  if (!detected) {
+  if (!detected || !reliability.accepted) {
     hint = 'undetected';
-    summary = 'No sustained print border on at least one edge. Treat as unknown, not 50/50.';
+    summary = reliability.reasons.length
+      ? ('Print border not usable: ' + reliability.reasons.join('; ') + '. Treat as unknown, not 50/50.')
+      : 'No sustained print border on at least one edge. Treat as unknown, not 50/50.';
   } else if (thin && uniform && boxFillRatio >= 0.88) {
     hint = 'likely-backdrop';
     summary = 'Border of only a few pixels, nearly uniform, and the card box fills the photo. Likely measuring backdrop/mat (or cut-edge anti-alias), not a printed frame.';
@@ -869,6 +970,7 @@ function describeBorderSource(args) {
     leftRightSampleSpreadPx: round2(leftRightSampleSpreadPx),
     topBottomSampleSpreadPx: round2(topBottomSampleSpreadPx),
     axisSpreadNote: axisSpreadNote,
+    borderReliability: reliability,
     samples: {
       left: (samples.left || []).map(round2),
       right: (samples.right || []).map(round2),
@@ -1275,15 +1377,32 @@ async function gradeBuffer(buffer, options) {
     const surface = measureSurfaceDefects(pixels, blurred, width, box);
     const edgesWhiteningCount = measureEdgeWhitening(pixels, width, box);
     const corners = measureCornerFraying(pixels, width, box);
+    const borderReliability = assessPrintBorderReliability(
+      box, width, height, centeringMeasurement
+    );
+    // eslint-disable-next-line no-console
+    console.log(
+      '[The Judge border] threshold=' + BORDER_SAMPLE_SPREAD_MAX_PX +
+      'px minHits=' + BORDER_SAMPLE_MIN_HITS +
+      ' ranges=' + JSON.stringify(borderReliability.sampleRangePx) +
+      ' accepted=' + borderReliability.accepted +
+      (borderReliability.reasons.length
+        ? ' reasons=' + borderReliability.reasons.join(' | ')
+        : '')
+    );
 
     // Failed print-border detection is UNKNOWN, not 50/50. Do not feed
     // fabricated ratios into evaluateMultiPhaseCondition — that scorer has
     // no "undetected" state and would emit a fake Gem centering sub-grade.
-    if (!centeringMeasurement.detected) {
+    // The same fallback is used when the box touches the photo edge or the
+    // seven sample lines on any side disagree (borderless artwork, not a frame).
+    if (!centeringMeasurement.detected || !borderReliability.accepted) {
       const surfacePhase = scoreSurfacePhase(surface);
       const edgeScore = scoreEdgesPhase(edgesWhiteningCount);
       const cornerPhase = scoreCornersPhase(corners);
-      const incompleteReason = 'centering undetectable — no printed border found';
+      const incompleteReason = !centeringMeasurement.detected
+        ? 'centering undetectable — no printed border found'
+        : 'centering undetectable — print-border samples do not agree or card box touches the photo edge';
       const report = {
         centering: null,
         corners: clamp01to100(Math.round(cornerPhase.score * 10)),
@@ -1331,6 +1450,7 @@ async function gradeBuffer(buffer, options) {
           width, height, box, shouldRotate,
           printBorderWidths: centeringMeasurement.widths,
           printBorderSamples: centeringMeasurement.samples,
+          borderReliability: borderReliability,
           corners, surface, edgesWhiteningCount
         };
       }
@@ -1387,6 +1507,7 @@ async function gradeBuffer(buffer, options) {
         width, height, box, shouldRotate,
         printBorderWidths: centeringMeasurement.widths,
         printBorderSamples: centeringMeasurement.samples,
+        borderReliability: borderReliability,
         corners, surface, edgesWhiteningCount
       };
     }
@@ -1409,5 +1530,8 @@ module.exports = {
   labelForFinalScore,
   measurePrintCentering,
   describeBorderSource,
-  buildCenteringDiagnostics
+  buildCenteringDiagnostics,
+  assessPrintBorderReliability,
+  BORDER_SAMPLE_SPREAD_MAX_PX,
+  BORDER_SAMPLE_MIN_HITS
 };
