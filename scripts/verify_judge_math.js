@@ -314,6 +314,44 @@ assert('Faulk 1 reliability rejected', faulk1.accepted === false);
 assertHint('Faulk 1 hint is undetected', faulkHint.hint, 'undetected');
 assert('Faulk 1 hint is not printed-frame', faulkHint.hint !== 'likely-printed-frame');
 
+// Live follow-up scans (inset box + full-frame box) that still scored on the
+// pre-gate LAN process. Both must reject on this branch.
+const liveInset = g.assessPrintBorderReliability(
+  { left: 103, right: 599, top: 80, bottom: 768, width: 497, height: 689 },
+  670,
+  900,
+  {
+    detected: true,
+    widths: { left: 27.08, right: 44.16, top: 47.05, bottom: 3 },
+    samples: {
+      left: [3, 4, 25.5, 27.08, 57.63, 60.25, 200],
+      right: [43.47, 43.88, 43.89, 44.16, 44.61, 85.02, 152.75],
+      top: [41, 43.63, 46.03, 47.05, 47.38, 47.65, 48.33],
+      bottom: [3, 3, 3, 3, 3, 4, 5.17]
+    }
+  }
+);
+assert('live inset-box scan rejected on sample spread', liveInset.accepted === false);
+assert('live inset-box names left range', liveInset.reasons.join(' ').indexOf('left sample range') !== -1);
+
+const liveFullFrame = g.assessPrintBorderReliability(
+  { left: 0, right: 669, top: 0, bottom: 899, width: 670, height: 900 },
+  670,
+  900,
+  {
+    detected: true,
+    widths: { left: 75.75, right: 108.25, top: 135.38, bottom: 113.17 },
+    samples: {
+      left: [40, 54.75, 58, 75.75, 92.63, 112, 155.89],
+      right: [38.25, 42.5, 107.51, 108.25, 110.5, 127.13, 297.15],
+      top: [129.26, 131.34, 132.64, 135.38, 146.58, 150.58, 154],
+      bottom: [37.25, 82.25, 95.75, 113.17, 127.81, 128.03, 128.41]
+    }
+  }
+);
+assert('live full-frame scan rejected', liveFullFrame.accepted === false);
+assert('live full-frame names box.left', liveFullFrame.reasons.join(' ').indexOf('box.left') !== -1);
+
 assert('level: 0/0 is level', scanLevel.isDeviceLevel(0, 0) === true);
 assert('level: 1.4/1.4 is level', scanLevel.isDeviceLevel(1.4, 1.4) === true);
 assert('level: 1.6 pitch is not level', scanLevel.isDeviceLevel(1.6, 0) === false);
