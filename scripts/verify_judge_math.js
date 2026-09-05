@@ -352,6 +352,72 @@ const liveFullFrame = g.assessPrintBorderReliability(
 assert('live full-frame scan rejected', liveFullFrame.accepted === false);
 assert('live full-frame names box.left', liveFullFrame.reasons.join(' ').indexOf('box.left') !== -1);
 
+// Post-gate confirmation scans from the iMac after checkout of this branch.
+// Both must stay undetected (no invented CEN).
+const postGateScan1 = g.assessPrintBorderReliability(
+  { left: 91, right: 669, top: 125, bottom: 899, width: 579, height: 775 },
+  670,
+  900,
+  {
+    detected: true,
+    widths: { left: 3, right: 105.84, top: 20.64, bottom: 115.08 },
+    samples: {
+      left: [3, 3, 3, 3, 8.58, 9.47, 17.85],
+      right: [10, 79.25, 103.88, 105.84, 106.51, 107.64, 107.96],
+      top: [5.94, 9.56, 18.03, 20.64, 48.2, 50, 66.5],
+      bottom: [3.58, 76.25, 95.88, 115.08, 115.24, 115.52, 115.62]
+    }
+  }
+);
+const postGateHint1 = g.describeBorderSource({
+  imageWidth: 670,
+  imageHeight: 900,
+  box: { left: 91, right: 669, top: 125, bottom: 899, width: 579, height: 775 },
+  widths: { left: 3, right: 105.84, top: 20.64, bottom: 115.08 },
+  samples: {
+    left: [3, 3, 3, 3, 8.58, 9.47, 17.85],
+    right: [10, 79.25, 103.88, 105.84, 106.51, 107.64, 107.96],
+    top: [5.94, 9.56, 18.03, 20.64, 48.2, 50, 66.5],
+    bottom: [3.58, 76.25, 95.88, 115.08, 115.24, 115.52, 115.62]
+  },
+  detected: true
+});
+assert('post-gate scan 1 rejected', postGateScan1.accepted === false);
+assertHint('post-gate scan 1 hint is undetected', postGateHint1.hint, 'undetected');
+assert('post-gate scan 1 names box.right', postGateScan1.reasons.join(' ').indexOf('box.right') !== -1);
+
+const postGateScan2 = g.assessPrintBorderReliability(
+  { left: 0, right: 669, top: 127, bottom: 899, width: 670, height: 773 },
+  670,
+  900,
+  {
+    detected: true,
+    widths: { left: 103.8, right: 110.63, top: 15.03, bottom: 136.35 },
+    samples: {
+      left: [102.11, 102.71, 103.39, 103.8, 103.86, 104.1, 157.24],
+      right: [52.45, 52.88, 72.42, 110.63, 112.1, 113.42, 114.82],
+      top: [3, 10.63, 14.75, 15.03, 29.61, 40.73, 51.25],
+      bottom: [3, 5.41, 19.67, 136.35, 137.03, 137.04, 138.01]
+    }
+  }
+);
+const postGateHint2 = g.describeBorderSource({
+  imageWidth: 670,
+  imageHeight: 900,
+  box: { left: 0, right: 669, top: 127, bottom: 899, width: 670, height: 773 },
+  widths: { left: 103.8, right: 110.63, top: 15.03, bottom: 136.35 },
+  samples: {
+    left: [102.11, 102.71, 103.39, 103.8, 103.86, 104.1, 157.24],
+    right: [52.45, 52.88, 72.42, 110.63, 112.1, 113.42, 114.82],
+    top: [3, 10.63, 14.75, 15.03, 29.61, 40.73, 51.25],
+    bottom: [3, 5.41, 19.67, 136.35, 137.03, 137.04, 138.01]
+  },
+  detected: true
+});
+assert('post-gate scan 2 rejected', postGateScan2.accepted === false);
+assertHint('post-gate scan 2 hint is undetected', postGateHint2.hint, 'undetected');
+assert('post-gate scan 2 names box.left', postGateScan2.reasons.join(' ').indexOf('box.left') !== -1);
+
 assert('level: 0/0 is level', scanLevel.isDeviceLevel(0, 0) === true);
 assert('level: 1.4/1.4 is level', scanLevel.isDeviceLevel(1.4, 1.4) === true);
 assert('level: 1.6 pitch is not level', scanLevel.isDeviceLevel(1.6, 0) === false);
