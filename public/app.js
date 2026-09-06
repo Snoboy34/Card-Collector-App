@@ -84,6 +84,9 @@ const cameraInput = document.getElementById('cameraInput');
 const scanBtn = document.getElementById('scanBtn');
 const navBtns = Array.from(document.querySelectorAll('.nav-btn'));
 const loginBtn = document.getElementById('loginBtn');
+/** Last painted hash route. Stops click + hashchange from remounting Scan
+ *  and killing getUserMedia outside a user gesture (iPhone Safari). */
+let activeRoute = null;
 
 /* -------------------------
    Simple client-side state
@@ -105,14 +108,16 @@ function navigateTo(route) {
 }
 
 function renderRoute(route) {
-  // Always release the camera + motion listener when leaving (or re-entering) Scan.
+  const key = String(route || 'dashboard').replace(/^#/, '') || 'dashboard';
+  if (key === activeRoute) return;
+  activeRoute = key;
+  // Always release the camera + motion listener when leaving Scan.
   stopScanCamera();
   stopLevelSensor();
-  if (!route || route === '#dashboard' || route === 'dashboard') {
-    renderDashboard();
-  } else if (route === '#inventory' || route === 'inventory') {
+  window.removeEventListener('resize', sizeGuideCanvas);
+  if (key === 'inventory') {
     renderInventory();
-  } else if (route === '#scan' || route === 'scan') {
+  } else if (key === 'scan') {
     renderScanView();
   } else {
     renderDashboard();
@@ -263,8 +268,8 @@ function renderScanView() {
 
 /**
  * Bind Start / Capture / Upload / Stop controls on the cloned viewport.
- * Capture draws the current video frame (NOT the overlay) to a JPEG blob
- * and posts it through the same /api/grade path as a file upload.
+ * Start Camera is a user-gesture getUserMedia call (required on iPhone).
+ * Capture crops to the neon frame and posts JPEG to /api/grade.
  */
 function wireScanViewport() {
   const startBtn = document.getElementById('startCameraBtn');
@@ -290,12 +295,7 @@ function wireScanViewport() {
   requestAnimationFrame(function () { sizeGuideCanvas(); });
   window.addEventListener('resize', sizeGuideCanvas);
   updateLevelHud();
-  startLevelSensor();
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    startScanCamera();
-  } else {
-    setScanStatus('Live camera is not available in this browser. Use Upload Photo.');
-  }
+  setScanStatus('Tap Start Camera, then fill the neon 2.5×3.5 frame.');
 }
 
 function setScanStatus(msg) {
@@ -548,7 +548,13 @@ function sizeGuideCanvas() {
   const dpr = window.devicePixelRatio || 1;
   const box = stage.getBoundingClientRect();
   const w = Math.max(1, Math.round(box.width) || stage.clientWidth || 320);
-  const h = Math.max(1, Math.round(box.height) || stage.offsetHeight || Math.round(w * 4 / 3));
+  // padding-bottom aspect boxes can report height 0 on older Safari.
+  const h = Math.max(
+    1,
+    Math.round(box.height),
+    stage.offsetHeight,
+    Math.round(w * 4 / 3)
+  );
   canvas.width = Math.max(1, Math.round(w * dpr));
   canvas.height = Math.max(1, Math.round(h * dpr));
   canvas.style.width = w + 'px';
@@ -822,10 +828,11 @@ window.openReportFromId = (id) => {
 navBtns.forEach(btn => btn.addEventListener('click', (e) => navigateTo(btn.dataset.route)));
 window.addEventListener('hashchange', () => renderRoute(location.hash.replace('#','')));
 
-scanBtn.addEventListener('click', () => {
-  // Route into the guided camera viewport (file input is the fallback there).
-  navigateTo('scan');
-});
+if (scanBtn) {
+  scanBtn.addEventListener('click', () => {
+    navigateTo('scan');
+  });
+}
 
 /**
  * Shared preview + POST /api/grade path used by both live capture and file upload.
@@ -901,14 +908,14 @@ function previewAndOfferUpload(file) {
 }
 
 /* Camera / file input handler */
-cameraInput.addEventListener('change', async (ev) => {
+if (cameraInput) cameraInput.addEventListener('change', async (ev) => {
   const file = ev.target.files && ev.target.files[0];
   if (!file) return;
   previewAndOfferUpload(file);
 });
 
 /* Auth mock */
-loginBtn.addEventListener('click', async () => {
+if (loginBtn) loginBtn.addEventListener('click', async () => {
   const username = prompt('Enter a username for Phase 1 (no password required):');
   if (!username) return;
   const res = await api.login({ username });
@@ -953,6 +960,7 @@ async function bootstrap() {
   // initial render based on hash
   const route = location.hash.replace('#','') || 'dashboard';
   renderRoute(route);
+  window.__judgeBooted = true;
 }
 
 bootstrap();
