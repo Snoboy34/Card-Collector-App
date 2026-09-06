@@ -510,6 +510,42 @@ const liveNeonInsetAteBorder = g.assessPrintBorderReliability(
 assert('neon-crop inset-box (ate T/B white) rejected', liveNeonInsetAteBorder.accepted === false);
 assert('neon-crop inset-box names thin top', liveNeonInsetAteBorder.reasons.join(' ').indexOf('top median width') !== -1);
 
+// First live accepted white-border grade after scanning from the neon-crop
+// edges (643×900, box = full JPEG). Must stay accepted.
+const liveAcceptedWhiteBorder = g.assessPrintBorderReliability(
+  { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 },
+  643,
+  900,
+  {
+    detected: true,
+    widths: { left: 60.04, right: 66.55, top: 90.6, bottom: 92.23 },
+    samples: {
+      left: [59.17, 59.46, 59.95, 60.04, 60.3, 64, 64.11],
+      right: [24.15, 43.25, 65.07, 66.55, 67.04, 67.04, 67.57],
+      top: [88.75, 89.3, 90.06, 90.6, 90.68, 90.69, 91.01],
+      bottom: [4.96, 91.48, 92.21, 92.23, 92.38, 92.4, 92.51]
+    }
+  },
+  { alignmentCrop: true }
+);
+const liveAcceptedHint = g.describeBorderSource({
+  imageWidth: 643,
+  imageHeight: 900,
+  box: { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 },
+  widths: { left: 60.04, right: 66.55, top: 90.6, bottom: 92.23 },
+  samples: {
+    left: [59.17, 59.46, 59.95, 60.04, 60.3, 64, 64.11],
+    right: [24.15, 43.25, 65.07, 66.55, 67.04, 67.04, 67.57],
+    top: [88.75, 89.3, 90.06, 90.6, 90.68, 90.69, 91.01],
+    bottom: [4.96, 91.48, 92.21, 92.23, 92.38, 92.4, 92.51]
+  },
+  detected: true,
+  alignmentCrop: true
+});
+assert('live accepted white-border reliability', liveAcceptedWhiteBorder.accepted === true);
+assertHint('live accepted white-border hint', liveAcceptedHint.hint, 'likely-printed-frame');
+assert('live accepted bottom consensus under 8px', liveAcceptedWhiteBorder.consensusRangePx.bottom <= 8);
+
 assert('consensus ignores a single outlier', g.consensusRangePx([16.56, 108.48, 109.83, 111.11, 111.54, 111.7, 111.99], 5) < 4);
 
 const coverWide = scanLevel.videoCoverCrop(1920, 1080, 360, 480);
