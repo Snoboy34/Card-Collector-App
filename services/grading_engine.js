@@ -105,12 +105,12 @@ const PSA10_CENTERING_MAX = 60.0;
  * window of BORDER_SAMPLE_MIN_HITS hits (not max−min of all 7), so one
  * nameplate / photo step does not fail a real white frame.
  *
- * 8px at maxDim 900 is ~0.9% of the card. Live white-border inner edges
- * wobbled ~5.5px on the left; Faulk / Star Rookie artwork "borders" still
- * had 25–300px consensus windows. Thin cut-edge anti-alias (2–4px) is
- * rejected separately by BORDER_MIN_MEDIAN_WIDTH_PX.
+ * 12px at maxDim 900 is ~1.3% of the card — enough for a nameplate or
+ * photo that steps into a white top border (live scan consensus 11.17px)
+ * without accepting Faulk / Star Rookie artwork windows (19–73px).
+ * Thin cut-edge anti-alias (2–4px) is rejected by BORDER_MIN_MEDIAN_WIDTH_PX.
  */
-const BORDER_SAMPLE_SPREAD_MAX_PX = 8;
+const BORDER_SAMPLE_SPREAD_MAX_PX = 12;
 /** Of the 7 attempted lines, at least this many must form the consensus window. */
 const BORDER_SAMPLE_MIN_HITS = 5;
 /** Median width below this is cut-edge AA / mat bleed, not a printed frame. */

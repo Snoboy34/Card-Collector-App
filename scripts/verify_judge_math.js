@@ -192,7 +192,7 @@ const undetectedHint = g.describeBorderSource({
 });
 assertHint('undetected hint', undetectedHint.hint, 'undetected');
 
-assertEq('spread threshold is 8px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 8);
+assertEq('spread threshold is 12px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 12);
 assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
 assertEq('min median width is 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
 
@@ -544,7 +544,46 @@ const liveAcceptedHint = g.describeBorderSource({
 });
 assert('live accepted white-border reliability', liveAcceptedWhiteBorder.accepted === true);
 assertHint('live accepted white-border hint', liveAcceptedHint.hint, 'likely-printed-frame');
-assert('live accepted bottom consensus under 8px', liveAcceptedWhiteBorder.consensusRangePx.bottom <= 8);
+assert('live accepted bottom consensus under 12px', liveAcceptedWhiteBorder.consensusRangePx.bottom <= 12);
+
+// Live white-border that failed only on top nameplate wobble (11.17px vs 8).
+// At 12px this must accept. Widths are ~63–91px — not Star Rookie / Faulk.
+const liveNameplateTop = g.assessPrintBorderReliability(
+  { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 },
+  643,
+  900,
+  {
+    detected: true,
+    widths: { left: 66.91, right: 63.31, top: 88.18, bottom: 90.61 },
+    samples: {
+      left: [59.44, 65.06, 66.01, 66.91, 67.52, 68.35, 72.05],
+      right: [62.92, 62.98, 63.13, 63.31, 63.47, 63.53, 135.25],
+      top: [85.26, 87.29, 87.71, 88.18, 96.43, 106.25, 120.03],
+      bottom: [88.29, 89.47, 89.69, 90.61, 90.63, 90.75, 92.13]
+    }
+  },
+  { alignmentCrop: true }
+);
+assert('nameplate-top white-border accepted at 12px', liveNameplateTop.accepted === true);
+assert('nameplate-top consensus is 11.17', Math.abs(liveNameplateTop.consensusRangePx.top - 11.17) < 0.02);
+
+const liveSecondWhiteBorder = g.assessPrintBorderReliability(
+  { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 },
+  643,
+  900,
+  {
+    detected: true,
+    widths: { left: 68.41, right: 59.74, top: 96.43, bottom: 84.03 },
+    samples: {
+      left: [65.3, 67, 67.24, 68.41, 68.49, 73.52, 129.34],
+      right: [57.5, 58.26, 59.44, 59.74, 61.21, 61.72, 130.75],
+      top: [36.75, 94, 94.71, 96.43, 98, 98.58, 112.54],
+      bottom: [83.39, 83.55, 83.63, 84.03, 84.3, 84.43, 84.7]
+    }
+  },
+  { alignmentCrop: true }
+);
+assert('second live white-border accepted', liveSecondWhiteBorder.accepted === true);
 
 assert('consensus ignores a single outlier', g.consensusRangePx([16.56, 108.48, 109.83, 111.11, 111.54, 111.7, 111.99], 5) < 4);
 
