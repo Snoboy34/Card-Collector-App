@@ -195,6 +195,8 @@ assertHint('undetected hint', undetectedHint.hint, 'undetected');
 assertEq('spread threshold is 12px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 12);
 assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
 assertEq('min median width is 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
+assertEq('border-band stddev cap is 16', g.BORDER_BAND_MAX_STDDEV, 16);
+assertEq('cut-edge baseline range cap is 36', g.BORDER_BASELINE_RANGE_MAX, 36);
 
 const tightInset = g.assessPrintBorderReliability(
   { left: 80, right: 719, top: 90, bottom: 1009, width: 640, height: 920 },
@@ -546,44 +548,105 @@ assert('live accepted white-border reliability', liveAcceptedWhiteBorder.accepte
 assertHint('live accepted white-border hint', liveAcceptedHint.hint, 'likely-printed-frame');
 assert('live accepted bottom consensus under 12px', liveAcceptedWhiteBorder.consensusRangePx.bottom <= 12);
 
-// Live white-border that failed only on top nameplate wobble (11.17px vs 8).
-// At 12px this must accept. Widths are ~63–91px — not Star Rookie / Faulk.
-const liveNameplateTop = g.assessPrintBorderReliability(
-  { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 },
-  643,
-  900,
-  {
-    detected: true,
-    widths: { left: 66.91, right: 63.31, top: 88.18, bottom: 90.61 },
-    samples: {
-      left: [59.44, 65.06, 66.01, 66.91, 67.52, 68.35, 72.05],
-      right: [62.92, 62.98, 63.13, 63.31, 63.47, 63.53, 135.25],
-      top: [85.26, 87.29, 87.71, 88.18, 96.43, 106.25, 120.03],
-      bottom: [88.29, 89.47, 89.69, 90.61, 90.63, 90.75, 92.13]
-    }
-  },
-  { alignmentCrop: true }
+// Live neon-crop #2 — Star Rookie (borderless). Geometry alone looks like a
+// printed frame (top consensus 11.17px, widths ~63–91px). That is a photo
+// inset, not ink. Flat-ink nameplate wobble of the same size must still pass.
+const starRookieGeometry = {
+  detected: true,
+  widths: { left: 66.91, right: 63.31, top: 88.18, bottom: 90.61 },
+  samples: {
+    left: [59.44, 65.06, 66.01, 66.91, 67.52, 68.35, 72.05],
+    right: [62.92, 62.98, 63.13, 63.31, 63.47, 63.53, 135.25],
+    top: [85.26, 87.29, 87.71, 88.18, 96.43, 106.25, 120.03],
+    bottom: [88.29, 89.47, 89.69, 90.61, 90.63, 90.75, 92.13]
+  }
+};
+const starRookieBox = { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 };
+const starRookieGeometryOnly = g.assessPrintBorderReliability(
+  starRookieBox, 643, 900, starRookieGeometry, { alignmentCrop: true }
 );
-assert('nameplate-top white-border accepted at 12px', liveNameplateTop.accepted === true);
-assert('nameplate-top consensus is 11.17', Math.abs(liveNameplateTop.consensusRangePx.top - 11.17) < 0.02);
+assert('Star Rookie geometry alone would accept at 12px', starRookieGeometryOnly.accepted === true);
+assert('Star Rookie top consensus is 11.17', Math.abs(starRookieGeometryOnly.consensusRangePx.top - 11.17) < 0.02);
 
-const liveSecondWhiteBorder = g.assessPrintBorderReliability(
-  { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 },
+const starRookieChrome = g.assessPrintBorderReliability(
+  starRookieBox,
   643,
   900,
-  {
-    detected: true,
-    widths: { left: 68.41, right: 59.74, top: 96.43, bottom: 84.03 },
-    samples: {
-      left: [65.3, 67, 67.24, 68.41, 68.49, 73.52, 129.34],
-      right: [57.5, 58.26, 59.44, 59.74, 61.21, 61.72, 130.75],
-      top: [36.75, 94, 94.71, 96.43, 98, 98.58, 112.54],
-      bottom: [83.39, 83.55, 83.63, 84.03, 84.3, 84.43, 84.7]
-    }
-  },
+  Object.assign({}, starRookieGeometry, {
+    bandStddev: { left: 34.2, right: 29.8, top: 41.5, bottom: 36.1 },
+    baselines: { left: 88, right: 102, top: 74, bottom: 161 }
+  }),
   { alignmentCrop: true }
 );
-assert('second live white-border accepted', liveSecondWhiteBorder.accepted === true);
+const starRookieChromeHint = g.describeBorderSource({
+  imageWidth: 643,
+  imageHeight: 900,
+  box: starRookieBox,
+  widths: starRookieGeometry.widths,
+  samples: starRookieGeometry.samples,
+  bandStddev: { left: 34.2, right: 29.8, top: 41.5, bottom: 36.1 },
+  baselines: { left: 88, right: 102, top: 74, bottom: 161 },
+  detected: true,
+  alignmentCrop: true
+});
+assert('Star Rookie chrome texture rejected', starRookieChrome.accepted === false);
+assert('Star Rookie names textured art', starRookieChrome.reasons.join(' ').indexOf('textured art') !== -1);
+assertHint('Star Rookie chrome hint is undetected', starRookieChromeHint.hint, 'undetected');
+
+const flatInkNameplate = g.assessPrintBorderReliability(
+  starRookieBox,
+  643,
+  900,
+  Object.assign({}, starRookieGeometry, {
+    bandStddev: { left: 4.1, right: 3.6, top: 5.2, bottom: 3.9 },
+    baselines: { left: 242, right: 239, top: 244, bottom: 241 }
+  }),
+  { alignmentCrop: true }
+);
+assert('flat-ink nameplate still accepted at 12px', flatInkNameplate.accepted === true);
+
+// Live neon-crop #3 — Marshall Faulk (borderless). Geometry already agreed
+// inside 8px (top consensus 4.58) and scored CEN 9.0. Texture must reject it.
+const faulkGeometry = {
+  detected: true,
+  widths: { left: 68.41, right: 59.74, top: 96.43, bottom: 84.03 },
+  samples: {
+    left: [65.3, 67, 67.24, 68.41, 68.49, 73.52, 129.34],
+    right: [57.5, 58.26, 59.44, 59.74, 61.21, 61.72, 130.75],
+    top: [36.75, 94, 94.71, 96.43, 98, 98.58, 112.54],
+    bottom: [83.39, 83.55, 83.63, 84.03, 84.3, 84.43, 84.7]
+  }
+};
+const faulkBox = { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 };
+const faulkGeometryOnly = g.assessPrintBorderReliability(
+  faulkBox, 643, 900, faulkGeometry, { alignmentCrop: true }
+);
+assert('Faulk geometry alone would accept', faulkGeometryOnly.accepted === true);
+
+const faulkChrome = g.assessPrintBorderReliability(
+  faulkBox,
+  643,
+  900,
+  Object.assign({}, faulkGeometry, {
+    bandStddev: { left: 31.4, right: 27.9, top: 39.2, bottom: 33.0 },
+    baselines: { left: 94, right: 118, top: 81, bottom: 172 }
+  }),
+  { alignmentCrop: true }
+);
+const faulkChromeHint = g.describeBorderSource({
+  imageWidth: 643,
+  imageHeight: 900,
+  box: faulkBox,
+  widths: faulkGeometry.widths,
+  samples: faulkGeometry.samples,
+  bandStddev: { left: 31.4, right: 27.9, top: 39.2, bottom: 33.0 },
+  baselines: { left: 94, right: 118, top: 81, bottom: 172 },
+  detected: true,
+  alignmentCrop: true
+});
+assert('Faulk chrome texture rejected', faulkChrome.accepted === false);
+assertHint('Faulk chrome hint is undetected', faulkChromeHint.hint, 'undetected');
+assert('Faulk hint is not printed-frame', faulkChromeHint.hint !== 'likely-printed-frame');
 
 assert('consensus ignores a single outlier', g.consensusRangePx([16.56, 108.48, 109.83, 111.11, 111.54, 111.7, 111.99], 5) < 4);
 
@@ -906,6 +969,118 @@ async function makeFullFrameWhiteBorderPng() {
   }).png().toBuffer();
 }
 
+/** Borderless 90s card: busy chrome in the margin, rectangular photo inset.
+ *  Geometry agrees (~10% "frame") the way Star Rookie / Faulk did after a
+ *  neon crop. Texture / ink-color must keep it Incomplete. */
+async function makeBusyInsetBorderlessPng() {
+  let sharpLib = null;
+  try { sharpLib = require('sharp'); } catch (e) { return null; }
+  const width = 400;
+  const height = 560;
+  const channels = 3;
+  const buf = Buffer.alloc(width * height * channels);
+  const inset = { left: 42, right: 357, top: 55, bottom: 503 };
+  const cell = 4;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * channels;
+      const inPhoto = x >= inset.left && x <= inset.right && y >= inset.top && y <= inset.bottom;
+      if (inPhoto) {
+        buf[i] = 22; buf[i + 1] = 38; buf[i + 2] = 92;
+      } else {
+        const on = ((Math.floor(x / cell) + Math.floor(y / cell)) % 2) === 0;
+        if (on) {
+          buf[i] = 210; buf[i + 1] = 186; buf[i + 2] = 72;
+        } else {
+          buf[i] = 48; buf[i + 1] = 62; buf[i + 2] = 140;
+        }
+      }
+    }
+  }
+  return sharpLib(buf, {
+    raw: { width: width, height: height, channels: channels }
+  }).png().toBuffer();
+}
+
+/** White printed frame with a nameplate bite on the top inner edge (~11px).
+ *  Flat ink must still grade after the texture gate. */
+async function makeWhiteBorderNameplatePng() {
+  let sharpLib = null;
+  try { sharpLib = require('sharp'); } catch (e) { return null; }
+  const width = 400;
+  const height = 560;
+  const channels = 3;
+  const buf = Buffer.alloc(width * height * channels);
+  const border = 28;
+  const nameplateInner = 17;
+  const nameplateLeft = 140;
+  const nameplateRight = 260;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * channels;
+      const topInner = (x >= nameplateLeft && x <= nameplateRight) ? nameplateInner : border;
+      const inFrame =
+        x < border || x >= width - border ||
+        y < topInner || y >= height - border;
+      if (inFrame) {
+        buf[i] = 245; buf[i + 1] = 245; buf[i + 2] = 245;
+      } else {
+        buf[i] = 20; buf[i + 1] = 46; buf[i + 2] = 110;
+      }
+    }
+  }
+  return sharpLib(buf, {
+    raw: { width: width, height: height, channels: channels }
+  }).png().toBuffer();
+}
+
+async function runBusyInsetBorderlessCheck() {
+  const buf = await makeBusyInsetBorderlessPng();
+  if (!buf) {
+    console.log('SKIP busy-inset borderless check (sharp not installed)');
+    return;
+  }
+  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
+    console.log('SKIP busy-inset borderless check (sharp not installed)');
+    return;
+  }
+  if (report.notes && String(report.notes).indexOf('grading engine error') !== -1) {
+    console.error('FAIL busy-inset borderless threw:', report.notes);
+    process.exitCode = 1;
+    return;
+  }
+  assertUndetectedNoFrameHint('busy-inset borderless', report);
+  const reliability = report.centeringDiagnostics && report.centeringDiagnostics.borderReliability;
+  const reasons = reliability && reliability.reasons ? reliability.reasons.join(' ') : '';
+  assert('busy-inset names texture or ink',
+    reasons.indexOf('textured art') !== -1 ||
+    reasons.indexOf('cut-edge ink greys') !== -1 ||
+    reasons.indexOf('did not resolve') !== -1);
+}
+
+async function runWhiteBorderNameplateCheck() {
+  const buf = await makeWhiteBorderNameplatePng();
+  if (!buf) {
+    console.log('SKIP white-border nameplate check (sharp not installed)');
+    return;
+  }
+  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
+    console.log('SKIP white-border nameplate check (sharp not installed)');
+    return;
+  }
+  if (report.notes && String(report.notes).indexOf('grading engine error') !== -1) {
+    console.error('FAIL white-border nameplate threw:', report.notes);
+    process.exitCode = 1;
+    return;
+  }
+  assert('nameplate white-border detected', report.printCenteringDetected === true);
+  assert('nameplate white-border complete', report.incomplete === false);
+  assert('nameplate white-border has CEN', typeof report.subGrades.centering === 'number');
+  assertHint('nameplate white-border hint is printed-frame', report.centeringDiagnostics.hint, 'likely-printed-frame');
+}
+
 async function runFullFrameWhiteBorderCropCheck() {
   const buf = await makeFullFrameWhiteBorderPng();
   if (!buf) {
@@ -964,6 +1139,10 @@ runGradeBufferUndetectedCheck().then(function () {
   return runHighSpreadInsetCheck();
 }).then(function () {
   return runFullFrameWhiteBorderCropCheck();
+}).then(function () {
+  return runBusyInsetBorderlessCheck();
+}).then(function () {
+  return runWhiteBorderNameplateCheck();
 }).then(function () {
   if (process.exitCode) {
     console.error('Judge math regression failed.');

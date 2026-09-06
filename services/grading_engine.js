@@ -105,16 +105,29 @@ const PSA10_CENTERING_MAX = 60.0;
  * window of BORDER_SAMPLE_MIN_HITS hits (not max−min of all 7), so one
  * nameplate / photo step does not fail a real white frame.
  *
- * 12px at maxDim 900 is ~1.3% of the card — enough for a nameplate or
- * photo that steps into a white top border (live scan consensus 11.17px)
- * without accepting Faulk / Star Rookie artwork windows (19–73px).
- * Thin cut-edge anti-alias (2–4px) is rejected by BORDER_MIN_MEDIAN_WIDTH_PX.
+ * 12px at maxDim 900 is ~1.3% of the card — a nameplate can step that far
+ * into a real ink frame. Star Rookie / Faulk neon-crop "frames" agreed
+ * geometrically; they are rejected by border-band texture / ink-color
+ * checks, not by this spread number.
  */
 const BORDER_SAMPLE_SPREAD_MAX_PX = 12;
 /** Of the 7 attempted lines, at least this many must form the consensus window. */
 const BORDER_SAMPLE_MIN_HITS = 5;
 /** Median width below this is cut-edge AA / mat bleed, not a printed frame. */
 const BORDER_MIN_MEDIAN_WIDTH_PX = 12;
+/**
+ * Greyscale stddev inside the putative border band (cut → inner edge).
+ * A printed white/black/gold frame is flat ink. Star Rookie / Faulk chrome
+ * in that band is textured. After normalize+blur(1), a flat frame stays
+ * well under 12; busy art sits in the 25–80 range.
+ */
+const BORDER_BAND_MAX_STDDEV = 16;
+/**
+ * The four cut-edge baselines (mean of the first 4px on each side) must
+ * be the same ink. A white frame is bright on all four sides; a borderless
+ * photo inset is a different grey on each edge.
+ */
+const BORDER_BASELINE_RANGE_MAX = 36;
 /** BGS 10 centering window (48/52 — near 50/50). */
 const BGS10_CENTERING_MIN = 48.0;
 const BGS10_CENTERING_MAX = 52.0;
@@ -611,7 +624,7 @@ function findCardBoundingBox(pixels, width, height) {
  *   - require 5 consecutive pixels past the threshold (sustained run)
  *   - linearly interpolate a sub-pixel crossing
  *
- * @returns {number|null} fractional pixel distance from the outer edge
+ * @returns {{ pos: number, bandStddev: number|null, baseline: number }|null}
  */
 function scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight) {
   const scanLength = (edge === 'left' || edge === 'right')
@@ -667,12 +680,28 @@ function scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight) {
         const stepDelta = current - previous;
         const fraction = stepDelta === 0 ? 0 : (target - previous) / stepDelta;
         const clampedFraction = Math.max(0, Math.min(1, fraction));
-        return (i - 1) + clampedFraction;
+        const pos = (i - 1) + clampedFraction;
+        return {
+          pos: pos,
+          bandStddev: bandStddev(profile, pos),
+          baseline: baseline
+        };
       }
     }
     i += 1;
   }
   return null;
+}
+
+function bandStddev(profile, widthPx) {
+  const end = Math.min(profile.length, Math.max(4, Math.floor(widthPx) - 2));
+  if (end < 4) return null;
+  let sum = 0;
+  for (let i = 0; i < end; i++) sum += profile[i];
+  const m = sum / end;
+  let ss = 0;
+  for (let i = 0; i < end; i++) ss += (profile[i] - m) * (profile[i] - m);
+  return Math.sqrt(ss / end);
 }
 
 /**
@@ -684,26 +713,38 @@ function scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight) {
  * whether T/B scan-lines disagree more than L/R (algorithm / keystone) vs.
  * only drifting across separate shots (camera pitch).
  *
- * @returns {{ width: number|null, samples: number[], attempted: number }}
+ * @returns {{ width: number|null, samples: number[], bandStddev: number|null, baseline: number|null, attempted: number }}
  */
 function findBorderWidth(getPixel, edge, cardWidth, cardHeight) {
   const sampleCount = 7;
   const dimension = (edge === 'left' || edge === 'right') ? cardHeight : cardWidth;
   const margin = Math.floor(dimension / 4);
   const positions = [];
+  const stddevs = [];
+  const baselines = [];
 
   for (let sample = 0; sample < sampleCount; sample++) {
     const span = dimension - 2 * margin;
     const lineOffset = margin + Math.round(sample * span / (sampleCount - 1));
-    const pos = scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight);
-    if (pos != null) positions.push(pos);
+    const hit = scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight);
+    if (hit != null) {
+      positions.push(hit.pos);
+      if (hit.bandStddev != null) stddevs.push(hit.bandStddev);
+      if (hit.baseline != null) baselines.push(hit.baseline);
+    }
   }
 
   if (!positions.length) {
-    return { width: null, samples: [], attempted: sampleCount };
+    return { width: null, samples: [], bandStddev: null, baseline: null, attempted: sampleCount };
   }
   positions.sort(function (a, b) { return a - b; });
-  return { width: median(positions), samples: positions, attempted: sampleCount };
+  return {
+    width: median(positions),
+    samples: positions,
+    bandStddev: stddevs.length ? median(stddevs) : null,
+    baseline: baselines.length ? median(baselines) : null,
+    attempted: sampleCount
+  };
 }
 
 /**
@@ -734,6 +775,18 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight) {
     top: topScan.samples,
     bottom: bottomScan.samples
   };
+  const bandStddev = {
+    left: leftScan.bandStddev,
+    right: rightScan.bandStddev,
+    top: topScan.bandStddev,
+    bottom: bottomScan.bandStddev
+  };
+  const baselines = {
+    left: leftScan.baseline,
+    right: rightScan.baseline,
+    top: topScan.baseline,
+    bottom: bottomScan.baseline
+  };
 
   const detected = leftW != null && rightW != null && topW != null && bottomW != null;
 
@@ -743,7 +796,9 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight) {
       topBottomRatio: null,
       detected: false,
       widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
-      samples: samples
+      samples: samples,
+      bandStddev: bandStddev,
+      baselines: baselines
     };
   }
 
@@ -759,7 +814,9 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight) {
     topBottomRatio: { top: topPct, bottom: bottomPct },
     detected: true,
     widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
-    samples: samples
+    samples: samples,
+    bandStddev: bandStddev,
+    baselines: baselines
   };
 }
 
@@ -800,11 +857,16 @@ function consensusRangePx(samples, windowSize) {
  *   - the tightest BORDER_SAMPLE_MIN_HITS-hit window on any edge exceeds
  *     BORDER_SAMPLE_SPREAD_MAX_PX (outliers are ignored)
  *   - any edge's median width is below BORDER_MIN_MEDIAN_WIDTH_PX
+ *   - any edge's border-band greyscale stddev exceeds BORDER_BAND_MAX_STDDEV
+ *     (chrome / art in the margin, not flat ink)
+ *   - the four cut-edge baselines disagree by more than BORDER_BASELINE_RANGE_MAX
  *   - measurePrintCentering already failed (detected === false)
  *
  * A box that touches the photo edge is a hard reject unless this still was
  * cropped to the neon alignment frame (`alignmentCrop`). After that crop the
- * image edges ARE the cut. Borderless cards still fail the consensus window.
+ * image edges ARE the cut. Borderless 90s cards (Star Rookie, Faulk) still
+ * find a rectangular photo inset that agrees geometrically; texture / ink
+ * color is what rejects those, not the 12px consensus window.
  *
  * @returns {{ accepted: boolean, thresholdPx: number, minHits: number, minMedianWidthPx: number, sampleRangePx: object, consensusRangePx: object, edgeTouchesImage: object, reasons: string[] }}
  */
@@ -845,6 +907,8 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
     top: consensusRangePx(samples.top, BORDER_SAMPLE_MIN_HITS),
     bottom: consensusRangePx(samples.bottom, BORDER_SAMPLE_MIN_HITS)
   };
+  const bandStddev = measurement.bandStddev || {};
+  const baselines = measurement.baselines || {};
   const edges = ['left', 'right', 'top', 'bottom'];
   for (let i = 0; i < edges.length; i++) {
     const edge = edges[i];
@@ -865,6 +929,25 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
         'px is below ' + BORDER_MIN_MEDIAN_WIDTH_PX + 'px'
       );
     }
+    if (bandStddev[edge] != null && bandStddev[edge] > BORDER_BAND_MAX_STDDEV) {
+      reasons.push(
+        edge + ' border band stddev ' + round2(bandStddev[edge]) +
+        ' exceeds ' + BORDER_BAND_MAX_STDDEV + ' (textured art, not flat ink)'
+      );
+    }
+  }
+
+  const baselineVals = edges.map(function (edge) { return baselines[edge]; }).filter(function (v) {
+    return v != null && typeof v === 'number' && isFinite(v);
+  });
+  const baselineRange = baselineVals.length >= 2
+    ? Math.max.apply(null, baselineVals) - Math.min.apply(null, baselineVals)
+    : null;
+  if (baselineRange != null && baselineRange > BORDER_BASELINE_RANGE_MAX) {
+    reasons.push(
+      'cut-edge ink greys disagree by ' + round2(baselineRange) +
+      ' (need ≤ ' + BORDER_BASELINE_RANGE_MAX + ') — not one printed frame'
+    );
   }
 
   if (!measurement.detected) {
@@ -890,6 +973,13 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
     },
     edgeTouchesImage: edgeTouchesImage,
     alignmentCrop: alignmentCrop,
+    bandStddev: {
+      left: round2(bandStddev.left),
+      right: round2(bandStddev.right),
+      top: round2(bandStddev.top),
+      bottom: round2(bandStddev.bottom)
+    },
+    baselineRange: round2(baselineRange),
     reasons: reasons
   };
 }
@@ -960,7 +1050,9 @@ function describeBorderSource(args) {
   const reliability = assessPrintBorderReliability(box, imageWidth, imageHeight, {
     detected: detected,
     widths: widths,
-    samples: samples
+    samples: samples,
+    bandStddev: args.bandStddev,
+    baselines: args.baselines
   }, { alignmentCrop: Boolean(args.alignmentCrop) });
 
   let hint;
@@ -1040,6 +1132,8 @@ function buildCenteringDiagnostics(width, height, box, centeringMeasurement, ext
     box: box,
     widths: centeringMeasurement.widths,
     samples: centeringMeasurement.samples,
+    bandStddev: centeringMeasurement.bandStddev,
+    baselines: centeringMeasurement.baselines,
     alignmentCrop: Boolean(extra.alignmentCrop),
     detected: centeringMeasurement.detected
   });
@@ -1459,6 +1553,8 @@ async function gradeBuffer(buffer, options) {
       '[The Judge border] threshold=' + BORDER_SAMPLE_SPREAD_MAX_PX +
       'px minHits=' + BORDER_SAMPLE_MIN_HITS +
       ' consensus=' + JSON.stringify(borderReliability.consensusRangePx) +
+      ' bandStddev=' + JSON.stringify(borderReliability.bandStddev) +
+      ' baselineRange=' + borderReliability.baselineRange +
       ' accepted=' + borderReliability.accepted +
       (borderReliability.reasons.length
         ? ' reasons=' + borderReliability.reasons.join(' | ')
@@ -1526,6 +1622,8 @@ async function gradeBuffer(buffer, options) {
           width, height, box: centeringBox, shouldRotate, alignmentCrop: Boolean(options.alignmentCrop),
           printBorderWidths: centeringMeasurement.widths,
           printBorderSamples: centeringMeasurement.samples,
+          printBorderBandStddev: centeringMeasurement.bandStddev,
+          printBorderBaselines: centeringMeasurement.baselines,
           borderReliability: borderReliability,
           corners, surface, edgesWhiteningCount
         };
@@ -1585,6 +1683,8 @@ async function gradeBuffer(buffer, options) {
         width, height, box: centeringBox, shouldRotate, alignmentCrop: Boolean(options.alignmentCrop),
         printBorderWidths: centeringMeasurement.widths,
         printBorderSamples: centeringMeasurement.samples,
+        printBorderBandStddev: centeringMeasurement.bandStddev,
+        printBorderBaselines: centeringMeasurement.baselines,
         borderReliability: borderReliability,
         corners, surface, edgesWhiteningCount
       };
@@ -1613,5 +1713,7 @@ module.exports = {
   consensusRangePx,
   BORDER_SAMPLE_SPREAD_MAX_PX,
   BORDER_SAMPLE_MIN_HITS,
-  BORDER_MIN_MEDIAN_WIDTH_PX
+  BORDER_MIN_MEDIAN_WIDTH_PX,
+  BORDER_BAND_MAX_STDDEV,
+  BORDER_BASELINE_RANGE_MAX
 };
