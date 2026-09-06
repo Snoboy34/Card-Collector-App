@@ -29,8 +29,9 @@ const api = {
   login: (payload) => fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json())
 };
 
-/** Standard sports-card / TCG slab window: 2.5" × 3.5" (width / height). */
-const CARD_ASPECT = (window.ScanLevel && window.ScanLevel.CARD_ASPECT) || (2.5 / 3.5);
+/** Standard sports-card / TCG slab window: 2.5" × 3.5" (width / height).
+ *  Named JUDGE_CARD_ASPECT so it cannot collide with scan_level.js. */
+const JUDGE_CARD_ASPECT = (window.ScanLevel && window.ScanLevel.CARD_ASPECT) || (2.5 / 3.5);
 
 /** Live camera bookkeeping. Stopped whenever the user leaves the Scan view. */
 let scanCameraStream = null;
@@ -661,10 +662,10 @@ function cardFrameRect(canvasW, canvasH) {
   }
   const pad = Math.min(canvasW, canvasH) * 0.08;
   let h = canvasH - pad * 2;
-  let w = h * CARD_ASPECT;
+  let w = h * JUDGE_CARD_ASPECT;
   if (w > canvasW - pad * 2) {
     w = canvasW - pad * 2;
-    h = w / CARD_ASPECT;
+    h = w / JUDGE_CARD_ASPECT;
   }
   return { x: (canvasW - w) / 2, y: (canvasH - h) / 2, w: w, h: h };
 }

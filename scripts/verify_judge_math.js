@@ -500,6 +500,84 @@ assert('alignment crop is card aspect', Math.abs((aligned.w / aligned.h) - scanL
 assert('parseAlignmentCrop true', scanLevel.parseAlignmentCrop({ alignmentCrop: 'true' }) === true);
 assert('parseAlignmentCrop missing is false', scanLevel.parseAlignmentCrop({}) === false);
 
+(function assertBrowserScriptsDoNotCollide() {
+  const fs = require('fs');
+  const path = require('path');
+  const vm = require('vm');
+  const scanSrc = fs.readFileSync(path.join(__dirname, '../public/scan_level.js'), 'utf8');
+  const appSrc = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  const el = function () {
+    return {
+      addEventListener: function () {},
+      removeEventListener: function () {},
+      setAttribute: function () {},
+      appendChild: function () {},
+      querySelector: function () { return el(); },
+      querySelectorAll: function () { return []; },
+      getContext: function () { return { clearRect: function () {}, save: function () {}, restore: function () {}, fillRect: function () {}, strokeRect: function () {}, beginPath: function () {}, moveTo: function () {}, lineTo: function () {}, stroke: function () {}, setLineDash: function () {}, setTransform: function () {} }; },
+      style: {},
+      classList: { toggle: function () {} },
+      innerHTML: '',
+      textContent: '',
+      content: { cloneNode: function () { return el(); } }
+    };
+  };
+  const document = {
+    getElementById: function () { return el(); },
+    querySelectorAll: function () { return []; },
+    createElement: function () { return el(); },
+    body: el()
+  };
+  const windowObj = {
+    addEventListener: function () {},
+    removeEventListener: function () {},
+    location: { hash: '' },
+    localStorage: { getItem: function () { return null; }, setItem: function () {} },
+    devicePixelRatio: 1,
+    EventSource: undefined
+  };
+  windowObj.window = windowObj;
+  windowObj.document = document;
+  const fetches = [];
+  const ctx = {
+    window: windowObj,
+    document: document,
+    location: windowObj.location,
+    localStorage: windowObj.localStorage,
+    navigator: { mediaDevices: undefined },
+    console: console,
+    setTimeout: function () { return 0; },
+    clearTimeout: function () {},
+    setInterval: function () { return 0; },
+    clearInterval: function () {},
+    requestAnimationFrame: function () { return 0; },
+    cancelAnimationFrame: function () {},
+    fetch: function (url) {
+      fetches.push(String(url));
+      return Promise.resolve({ json: function () { return Promise.resolve({ ok: true, inventory: [], stats: {} }); } });
+    },
+    module: undefined,
+    exports: undefined
+  };
+  try {
+    vm.runInNewContext(scanSrc, ctx, { filename: 'scan_level.js' });
+  } catch (err) {
+    console.error('FAIL scan_level.js in browser context', err && err.message);
+    process.exitCode = 1;
+    return;
+  }
+  assert('scan_level does not leak CARD_ASPECT', ctx.CARD_ASPECT === undefined);
+  try {
+    vm.runInNewContext(appSrc, ctx, { filename: 'app.js' });
+  } catch (err) {
+    console.error('FAIL app.js after scan_level.js (Safari-style global collision)', err && err.message);
+    process.exitCode = 1;
+    return;
+  }
+  assert('app.js sets __judgeBooted after scan_level', ctx.window.__judgeBooted === true);
+  assert('ScanLevel is on window only', Boolean(ctx.window.ScanLevel && ctx.window.ScanLevel.cardFrameRect));
+})();
+
 assert('level: 0/0 is level', scanLevel.isDeviceLevel(0, 0) === true);
 assert('level: 1.4/1.4 is level', scanLevel.isDeviceLevel(1.4, 1.4) === true);
 assert('level: 1.6 pitch is not level', scanLevel.isDeviceLevel(1.6, 0) === false);
