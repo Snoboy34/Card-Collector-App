@@ -648,6 +648,83 @@ assert('Faulk chrome texture rejected', faulkChrome.accepted === false);
 assertHint('Faulk chrome hint is undetected', faulkChromeHint.hint, 'undetected');
 assert('Faulk hint is not printed-frame', faulkChromeHint.hint !== 'likely-printed-frame');
 
+// iMac confirmation trio (Faulk, then Star Rookie, then the real white-border).
+// The live Node log still printed threshold=8px and omitted bandStddev — that
+// process is older than this branch. These payloads must keep the same
+// accept/reject on the 12px + texture gate.
+const liveConfirmBox = { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 };
+const liveConfirmFaulk = g.assessPrintBorderReliability(
+  liveConfirmBox,
+  643,
+  900,
+  {
+    detected: true,
+    widths: { left: 59.1, right: 66.82, top: 83.31, bottom: 91.75 },
+    samples: {
+      left: [56.18, 57.19, 57.87, 59.1, 59.52, 65.73, 121.41],
+      right: [64.01, 66.29, 66.37, 66.82, 67.51, 69, 96.63],
+      top: [35.83, 67.13, 81.6, 83.31, 84.28, 88.55, 99.03],
+      bottom: [83.25, 91.42, 91.72, 91.75, 92.14, 92.5, 93.56]
+    }
+  },
+  { alignmentCrop: true }
+);
+assert('live confirm Faulk rejected', liveConfirmFaulk.accepted === false);
+assert('live confirm Faulk top consensus is 17.44', Math.abs(liveConfirmFaulk.consensusRangePx.top - 17.44) < 0.02);
+
+const liveConfirmStarRookie = g.assessPrintBorderReliability(
+  liveConfirmBox,
+  643,
+  900,
+  {
+    detected: true,
+    widths: { left: 58.21, right: 64.96, top: 87.85, bottom: 86.88 },
+    samples: {
+      left: [55.33, 57.58, 58.09, 58.21, 58.24, 58.43, 115.63],
+      right: [62.19, 62.97, 63.25, 64.96, 65.62, 138, 138.63],
+      top: [78.17, 78.44, 83.05, 87.85, 91.13, 100.03, 111.48],
+      bottom: [86.01, 86.57, 86.88, 86.88, 87.55, 87.98, 88.1]
+    }
+  },
+  { alignmentCrop: true }
+);
+assert('live confirm Star Rookie rejected', liveConfirmStarRookie.accepted === false);
+assert('live confirm Star Rookie top consensus is 12.95', Math.abs(liveConfirmStarRookie.consensusRangePx.top - 12.95) < 0.02);
+
+const liveConfirmWhiteBorder = g.assessPrintBorderReliability(
+  liveConfirmBox,
+  643,
+  900,
+  {
+    detected: true,
+    widths: { left: 57.32, right: 61.12, top: 82.43, bottom: 84.89 },
+    samples: {
+      left: [52.83, 52.94, 54.13, 57.32, 57.62, 58.14, 58.36],
+      right: [12.25, 59.23, 60.21, 61.12, 61.98, 62.49, 62.55],
+      top: [33.58, 81.2, 81.27, 82.43, 83.06, 83.63, 83.95],
+      bottom: [83.95, 84.22, 84.27, 84.89, 85, 85.1, 85.32]
+    }
+  },
+  { alignmentCrop: true }
+);
+const liveConfirmWhiteHint = g.describeBorderSource({
+  imageWidth: 643,
+  imageHeight: 900,
+  box: liveConfirmBox,
+  widths: { left: 57.32, right: 61.12, top: 82.43, bottom: 84.89 },
+  samples: {
+    left: [52.83, 52.94, 54.13, 57.32, 57.62, 58.14, 58.36],
+    right: [12.25, 59.23, 60.21, 61.12, 61.98, 62.49, 62.55],
+    top: [33.58, 81.2, 81.27, 82.43, 83.06, 83.63, 83.95],
+    bottom: [83.95, 84.22, 84.27, 84.89, 85, 85.1, 85.32]
+  },
+  detected: true,
+  alignmentCrop: true
+});
+assert('live confirm white-border accepted', liveConfirmWhiteBorder.accepted === true);
+assertHint('live confirm white-border hint', liveConfirmWhiteHint.hint, 'likely-printed-frame');
+assert('live confirm white-border left consensus under 8px', liveConfirmWhiteBorder.consensusRangePx.left <= 8);
+
 assert('consensus ignores a single outlier', g.consensusRangePx([16.56, 108.48, 109.83, 111.11, 111.54, 111.7, 111.99], 5) < 4);
 
 const coverWide = scanLevel.videoCoverCrop(1920, 1080, 360, 480);
