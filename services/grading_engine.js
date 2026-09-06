@@ -1417,13 +1417,13 @@ async function gradeBuffer(buffer, options) {
     const blurred = new Uint8Array(blurredData);
 
     const box = findCardBoundingBox(pixels, width, height);
-    const boxFill = (box.width * box.height) / Math.max(1, width * height);
-    // Live capture is cropped to the neon 2.5×3.5 frame. When that crop
-    // is already the card (box fills the image), the image edges are the
-    // cut — do not let findCardBoundingBox walk inward to the artwork
-    // and strip a white printed border.
+    // Live capture is cropped to the neon 2.5×3.5 frame. Those JPEG edges
+    // are the cut the operator lined up. findCardBoundingBox treats a
+    // white printed border as "background" and walks inward to the art
+    // (live 643×900 scan: fill 0.81, top width collapsed to 3px). Always
+    // use the crop rectangle when alignmentCrop is set.
     let centeringBox = box;
-    if (options.alignmentCrop && boxFill >= 0.85) {
+    if (options.alignmentCrop) {
       centeringBox = {
         left: 0,
         right: width - 1,

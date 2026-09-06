@@ -488,6 +488,28 @@ assertHint('white-border neon-crop hint is printed-frame', whiteBorderCroppedHin
 assert('white-border left consensus under 8px', whiteBorderCropped.consensusRangePx.left <= 8);
 assert('white-border still reports photo-edge contact', whiteBorderCropped.edgeTouchesImage.left === true);
 
+// Live neon-crop still (643×900) where findCardBoundingBox ate the white
+// T/B borders (top median 3px). That measurement must stay rejected; the
+// engine now re-scans from the crop edges instead of this inset box.
+const liveNeonInsetAteBorder = g.assessPrintBorderReliability(
+  { left: 0, right: 642, top: 86, bottom: 818, width: 643, height: 733 },
+  643,
+  900,
+  {
+    detected: true,
+    widths: { left: 57.19, right: 63.05, top: 3.08, bottom: 24.41 },
+    samples: {
+      left: [53.22, 56.42, 56.79, 57.19, 57.56, 57.66, 57.87],
+      right: [50.7, 61.24, 62.26, 63.05, 63.23, 63.71, 64.21],
+      top: [3, 3, 3, 3.08, 3.38, 4, 26.67],
+      bottom: [3, 4, 15.25, 24.41, 24.83, 25.1, 25.17]
+    }
+  },
+  { alignmentCrop: true }
+);
+assert('neon-crop inset-box (ate T/B white) rejected', liveNeonInsetAteBorder.accepted === false);
+assert('neon-crop inset-box names thin top', liveNeonInsetAteBorder.reasons.join(' ').indexOf('top median width') !== -1);
+
 assert('consensus ignores a single outlier', g.consensusRangePx([16.56, 108.48, 109.83, 111.11, 111.54, 111.7, 111.99], 5) < 4);
 
 const coverWide = scanLevel.videoCoverCrop(1920, 1080, 360, 480);
@@ -783,6 +805,63 @@ async function runEdgeTouchBleedCheck() {
       box.top <= 0 || box.bottom >= (report.debug.height - 1)));
 }
 
+/** Full-frame white-border card (no mat). BBox often eats the white T/B
+ *  as background; alignmentCrop must still measure from the JPEG edges. */
+async function makeFullFrameWhiteBorderPng() {
+  let sharpLib = null;
+  try { sharpLib = require('sharp'); } catch (e) { return null; }
+  const width = 400;
+  const height = 560;
+  const channels = 3;
+  const buf = Buffer.alloc(width * height * channels);
+  const border = 24;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * channels;
+      const inFrame = x < border || x >= width - border || y < border || y >= height - border;
+      if (inFrame) {
+        buf[i] = 245; buf[i + 1] = 245; buf[i + 2] = 245;
+      } else {
+        buf[i] = 20; buf[i + 1] = 46; buf[i + 2] = 110;
+      }
+    }
+  }
+  return sharpLib(buf, {
+    raw: { width: width, height: height, channels: channels }
+  }).png().toBuffer();
+}
+
+async function runFullFrameWhiteBorderCropCheck() {
+  const buf = await makeFullFrameWhiteBorderPng();
+  if (!buf) {
+    console.log('SKIP full-frame white-border crop check (sharp not installed)');
+    return;
+  }
+  const cropped = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  if (cropped.notes && String(cropped.notes).indexOf('sharp') !== -1) {
+    console.log('SKIP full-frame white-border crop check (sharp not installed)');
+    return;
+  }
+  if (cropped.notes && String(cropped.notes).indexOf('grading engine error') !== -1) {
+    console.error('FAIL full-frame white-border threw:', cropped.notes);
+    process.exitCode = 1;
+    return;
+  }
+  const box = cropped.debug && cropped.debug.box;
+  assert('alignment-crop box is the full JPEG',
+    box && box.left === 0 && box.top === 0 &&
+    box.right === cropped.debug.width - 1 &&
+    box.bottom === cropped.debug.height - 1);
+  assert('alignment-crop white-border detected', cropped.printCenteringDetected === true);
+  assert('alignment-crop white-border complete', cropped.incomplete === false);
+  assert('alignment-crop white-border has CEN', typeof cropped.subGrades.centering === 'number');
+  const topW = cropped.centeringDiagnostics && cropped.centeringDiagnostics.printBorderWidths
+    ? cropped.centeringDiagnostics.printBorderWidths.top
+    : 0;
+  assert('alignment-crop top width is the white frame, not 3px AA', topW >= 12);
+  assertHint('alignment-crop hint is printed-frame', cropped.centeringDiagnostics.hint, 'likely-printed-frame');
+}
+
 async function runHighSpreadInsetCheck() {
   const buf = await makeHighSpreadInsetPng();
   if (!buf) {
@@ -808,6 +887,8 @@ runGradeBufferUndetectedCheck().then(function () {
   return runEdgeTouchBleedCheck();
 }).then(function () {
   return runHighSpreadInsetCheck();
+}).then(function () {
+  return runFullFrameWhiteBorderCropCheck();
 }).then(function () {
   if (process.exitCode) {
     console.error('Judge math regression failed.');
