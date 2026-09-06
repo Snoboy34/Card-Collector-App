@@ -694,14 +694,18 @@ function scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight) {
 }
 
 function bandStddev(profile, widthPx) {
-  const end = Math.min(profile.length, Math.max(4, Math.floor(widthPx) - 2));
-  if (end < 4) return null;
+  // Skip the first 4px (cut-edge AA / bbox slop) and the last 2px (the
+  // inner-edge crossing). What remains should be flat ink on a printed
+  // frame, or chrome/art on a borderless photo inset.
+  const start = 4;
+  const end = Math.min(profile.length, Math.max(start + 4, Math.floor(widthPx) - 2));
+  if (end - start < 4) return null;
   let sum = 0;
-  for (let i = 0; i < end; i++) sum += profile[i];
-  const m = sum / end;
+  for (let i = start; i < end; i++) sum += profile[i];
+  const m = sum / (end - start);
   let ss = 0;
-  for (let i = 0; i < end; i++) ss += (profile[i] - m) * (profile[i] - m);
-  return Math.sqrt(ss / end);
+  for (let i = start; i < end; i++) ss += (profile[i] - m) * (profile[i] - m);
+  return Math.sqrt(ss / (end - start));
 }
 
 /**
