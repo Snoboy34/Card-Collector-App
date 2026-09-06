@@ -79,6 +79,8 @@ function itemHeadlineGrade(report) {
   return report.label || '—';
 }
 
+window.__judgeBooted = true;
+
 const appRoot = document.getElementById('app');
 const cameraInput = document.getElementById('cameraInput');
 const scanBtn = document.getElementById('scanBtn');
@@ -932,13 +934,14 @@ if (loginBtn) loginBtn.addEventListener('click', async () => {
    Boot: load inventory and init route
    ------------------------- */
 async function bootstrap() {
-  // load cached user
   const stored = localStorage.getItem('phase1_user');
   if (stored) {
-    try { state.user = JSON.parse(stored); loginBtn.textContent = `Hi ${state.user.username}`; } catch(e){ /* ignore */ }
+    try { state.user = JSON.parse(stored); if (loginBtn) loginBtn.textContent = `Hi ${state.user.username}`; } catch(e){ /* ignore */ }
   }
 
-  // load inventory from server (port 5000)
+  // Paint the route immediately so Scan is not blocked on inventory/stats.
+  renderRoute(location.hash.replace('#','') || 'dashboard');
+
   try {
     const res = await api.getInventory();
     if (res && res.ok) state.inventory = res.inventory || [];
@@ -946,7 +949,6 @@ async function bootstrap() {
     console.warn('Could not fetch inventory', err);
   }
 
-  // load unified stats from server (port 5000) — one-time fetch for immediate UI fill
   try {
     const s = await api.getStats();
     if (s && s.ok) state.stats = s;
@@ -954,13 +956,10 @@ async function bootstrap() {
     console.warn('Could not fetch stats (initial)', err);
   }
 
-  // Start SSE for live updates (or polling fallback)
   initSse();
-
-  // initial render based on hash
-  const route = location.hash.replace('#','') || 'dashboard';
-  renderRoute(route);
-  window.__judgeBooted = true;
+  if (activeRoute === 'dashboard') renderDashboard();
+  else if (activeRoute === 'inventory') renderInventory();
+  else updateStatsUI();
 }
 
 bootstrap();

@@ -250,15 +250,7 @@
     Scan
   </button>
 
-  <script src="/scan_level.js?v=scan-ui-fix"></script>
-  <script src="/app.js?v=scan-ui-fix" defer></script>
-  <script>
-    setTimeout(function () {
-      if (window.__judgeBooted) return;
-      var app = document.getElementById('app');
-      if (!app || app.querySelector('.panel')) return;
-      app.innerHTML = '<section class="panel"><h2>The Judge scripts did not load</h2><p>Hard-refresh this page (iPhone: hold Reload). On the Mac run <code>git checkout cursor/white-border-frame-9a65</code>, <code>git pull</code>, then <code>npm run start:lan</code>.</p></section>';
-    }, 2500);
-  </script>
+  <script src="/scan_level.js?v=scan-boot"></script>
+  <script src="/app.js?v=scan-boot" defer></script>
 </body>
 </html>
