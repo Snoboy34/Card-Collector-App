@@ -195,8 +195,7 @@ assertHint('undetected hint', undetectedHint.hint, 'undetected');
 assertEq('spread threshold is 12px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 12);
 assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
 assertEq('min median width is 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
-assertEq('border-band stddev cap is 16', g.BORDER_BAND_MAX_STDDEV, 16);
-assertEq('cut-edge baseline range cap is 36', g.BORDER_BASELINE_RANGE_MAX, 36);
+assertEq('paper-white band floor is 165', g.WHITE_BAND_MIN_GREY, 165);
 
 const tightInset = g.assessPrintBorderReliability(
   { left: 80, right: 719, top: 90, bottom: 1009, width: 640, height: 920 },
@@ -568,30 +567,30 @@ const starRookieGeometryOnly = g.assessPrintBorderReliability(
 assert('Star Rookie geometry alone would accept at 12px', starRookieGeometryOnly.accepted === true);
 assert('Star Rookie top consensus is 11.17', Math.abs(starRookieGeometryOnly.consensusRangePx.top - 11.17) < 0.02);
 
-const starRookieChrome = g.assessPrintBorderReliability(
+const starRookieNavy = g.assessPrintBorderReliability(
   starRookieBox,
   643,
   900,
   Object.assign({}, starRookieGeometry, {
-    bandStddev: { left: 34.2, right: 29.8, top: 41.5, bottom: 36.1 },
-    baselines: { left: 88, right: 102, top: 74, bottom: 161 }
+    bandStddev: { left: 8.47, right: 3.91, top: 10.5, bottom: 3.5 },
+    paperBandMean: { left: 72, right: 81, top: 64, bottom: 78 }
   }),
   { alignmentCrop: true }
 );
-const starRookieChromeHint = g.describeBorderSource({
+const starRookieNavyHint = g.describeBorderSource({
   imageWidth: 643,
   imageHeight: 900,
   box: starRookieBox,
   widths: starRookieGeometry.widths,
   samples: starRookieGeometry.samples,
-  bandStddev: { left: 34.2, right: 29.8, top: 41.5, bottom: 36.1 },
-  baselines: { left: 88, right: 102, top: 74, bottom: 161 },
+  bandStddev: { left: 8.47, right: 3.91, top: 10.5, bottom: 3.5 },
+  paperBandMean: { left: 72, right: 81, top: 64, bottom: 78 },
   detected: true,
   alignmentCrop: true
 });
-assert('Star Rookie chrome texture rejected', starRookieChrome.accepted === false);
-assert('Star Rookie names textured art', starRookieChrome.reasons.join(' ').indexOf('textured art') !== -1);
-assertHint('Star Rookie chrome hint is undetected', starRookieChromeHint.hint, 'undetected');
+assert('Star Rookie navy surround rejected', starRookieNavy.accepted === false);
+assert('Star Rookie names not a white printed frame', starRookieNavy.reasons.join(' ').indexOf('not a white printed frame') !== -1);
+assertHint('Star Rookie navy hint is undetected', starRookieNavyHint.hint, 'undetected');
 
 const flatInkNameplate = g.assessPrintBorderReliability(
   starRookieBox,
@@ -599,14 +598,14 @@ const flatInkNameplate = g.assessPrintBorderReliability(
   900,
   Object.assign({}, starRookieGeometry, {
     bandStddev: { left: 4.1, right: 3.6, top: 5.2, bottom: 3.9 },
-    baselines: { left: 242, right: 239, top: 244, bottom: 241 }
+    paperBandMean: { left: 228, right: 224, top: 231, bottom: 226 }
   }),
   { alignmentCrop: true }
 );
 assert('flat-ink nameplate still accepted at 12px', flatInkNameplate.accepted === true);
 
 // Live neon-crop #3 — Marshall Faulk (borderless). Geometry already agreed
-// inside 8px (top consensus 4.58) and scored CEN 9.0. Texture must reject it.
+// inside 8px (top consensus 4.58) and scored CEN 9.0. Paper-white must reject it.
 const faulkGeometry = {
   detected: true,
   widths: { left: 68.41, right: 59.74, top: 96.43, bottom: 84.03 },
@@ -623,30 +622,30 @@ const faulkGeometryOnly = g.assessPrintBorderReliability(
 );
 assert('Faulk geometry alone would accept', faulkGeometryOnly.accepted === true);
 
-const faulkChrome = g.assessPrintBorderReliability(
+const faulkNavy = g.assessPrintBorderReliability(
   faulkBox,
   643,
   900,
   Object.assign({}, faulkGeometry, {
-    bandStddev: { left: 31.4, right: 27.9, top: 39.2, bottom: 33.0 },
-    baselines: { left: 94, right: 118, top: 81, bottom: 172 }
+    bandStddev: { left: 4.24, right: 4.45, top: 3.18, bottom: 2.11 },
+    paperBandMean: { left: 68, right: 74, top: 61, bottom: 70 }
   }),
   { alignmentCrop: true }
 );
-const faulkChromeHint = g.describeBorderSource({
+const faulkNavyHint = g.describeBorderSource({
   imageWidth: 643,
   imageHeight: 900,
   box: faulkBox,
   widths: faulkGeometry.widths,
   samples: faulkGeometry.samples,
-  bandStddev: { left: 31.4, right: 27.9, top: 39.2, bottom: 33.0 },
-  baselines: { left: 94, right: 118, top: 81, bottom: 172 },
+  bandStddev: { left: 4.24, right: 4.45, top: 3.18, bottom: 2.11 },
+  paperBandMean: { left: 68, right: 74, top: 61, bottom: 70 },
   detected: true,
   alignmentCrop: true
 });
-assert('Faulk chrome texture rejected', faulkChrome.accepted === false);
-assertHint('Faulk chrome hint is undetected', faulkChromeHint.hint, 'undetected');
-assert('Faulk hint is not printed-frame', faulkChromeHint.hint !== 'likely-printed-frame');
+assert('Faulk navy surround rejected', faulkNavy.accepted === false);
+assertHint('Faulk navy hint is undetected', faulkNavyHint.hint, 'undetected');
+assert('Faulk hint is not printed-frame', faulkNavyHint.hint !== 'likely-printed-frame');
 
 // iMac confirmation trio (Faulk, then Star Rookie, then the real white-border).
 // The live Node log still printed threshold=8px and omitted bandStddev — that
@@ -724,6 +723,93 @@ const liveConfirmWhiteHint = g.describeBorderSource({
 assert('live confirm white-border accepted', liveConfirmWhiteBorder.accepted === true);
 assertHint('live confirm white-border hint', liveConfirmWhiteHint.hint, 'likely-printed-frame');
 assert('live confirm white-border left consensus under 8px', liveConfirmWhiteBorder.consensusRangePx.left <= 8);
+
+// 12px + texture-gate rescans. Faulk agreed and was flat (CEN 8.0). Star
+// Rookie still failed top consensus. The real white-border failed the
+// inverted stddev cap (left 18.32). That payload must accept again; Faulk
+// must reject once paper-white means are present.
+const live12FaulkGeometry = {
+  detected: true,
+  widths: { left: 57.79, right: 65.56, top: 77.75, bottom: 95.58 },
+  samples: {
+    left: [51.19, 56.31, 57, 57.79, 58.84, 59.7, 121.09],
+    right: [60.53, 64.13, 64.41, 65.56, 65.6, 98.67, 248],
+    top: [69.13, 74.67, 75.91, 77.75, 78.64, 83.25, 84.45],
+    bottom: [95.11, 95.28, 95.57, 95.58, 95.58, 95.61, 95.95]
+  },
+  bandStddev: { left: 4.24, right: 4.45, top: 3.18, bottom: 2.11 }
+};
+const live12FaulkFlat = g.assessPrintBorderReliability(
+  liveConfirmBox, 643, 900, live12FaulkGeometry, { alignmentCrop: true }
+);
+assert('live 12px Faulk geometry+flat band would accept', live12FaulkFlat.accepted === true);
+const live12FaulkPaper = g.assessPrintBorderReliability(
+  liveConfirmBox,
+  643,
+  900,
+  Object.assign({}, live12FaulkGeometry, {
+    paperBandMean: { left: 71, right: 79, top: 66, bottom: 74 }
+  }),
+  { alignmentCrop: true }
+);
+assert('live 12px Faulk paper-white rejected', live12FaulkPaper.accepted === false);
+
+const live12StarRookie = g.assessPrintBorderReliability(
+  liveConfirmBox,
+  643,
+  900,
+  {
+    detected: true,
+    widths: { left: 61.07, right: 65.29, top: 92.33, bottom: 84.9 },
+    samples: {
+      left: [59.62, 60.58, 60.98, 61.07, 61.26, 66.6, 293.07],
+      right: [62.47, 62.88, 65.25, 65.29, 65.43, 65.95, 94.5],
+      top: [83.75, 84.94, 85, 92.33, 98.33, 99.51, 101.83],
+      bottom: [4, 84.46, 84.79, 84.9, 84.98, 85.84, 86.15]
+    },
+    bandStddev: { left: 8.47, right: 3.91, top: 10.5, bottom: 3.5 }
+  },
+  { alignmentCrop: true }
+);
+assert('live 12px Star Rookie rejected on top consensus', live12StarRookie.accepted === false);
+assert('live 12px Star Rookie top consensus is 14.58', Math.abs(live12StarRookie.consensusRangePx.top - 14.58) < 0.02);
+
+const live12WhiteBorder = g.assessPrintBorderReliability(
+  liveConfirmBox,
+  643,
+  900,
+  {
+    detected: true,
+    widths: { left: 61.01, right: 62.15, top: 77.88, bottom: 94.19 },
+    samples: {
+      left: [54.44, 54.74, 60.37, 61.01, 61.12, 61.27, 61.29],
+      right: [8, 61.45, 61.75, 62.15, 62.51, 62.54, 62.55],
+      top: [76.11, 76.53, 77.39, 77.88, 78.36, 79.13, 79.2],
+      bottom: [3.78, 17.61, 93.24, 94.19, 94.26, 94.26, 94.47]
+    },
+    bandStddev: { left: 18.32, right: 3.77, top: 3.86, bottom: 3.41 },
+    paperBandMean: { left: 198, right: 214, top: 206, bottom: 201 }
+  },
+  { alignmentCrop: true }
+);
+const live12WhiteHint = g.describeBorderSource({
+  imageWidth: 643,
+  imageHeight: 900,
+  box: liveConfirmBox,
+  widths: { left: 61.01, right: 62.15, top: 77.88, bottom: 94.19 },
+  samples: {
+    left: [54.44, 54.74, 60.37, 61.01, 61.12, 61.27, 61.29],
+    right: [8, 61.45, 61.75, 62.15, 62.51, 62.54, 62.55],
+    top: [76.11, 76.53, 77.39, 77.88, 78.36, 79.13, 79.2],
+    bottom: [3.78, 17.61, 93.24, 94.19, 94.26, 94.26, 94.47]
+  },
+  bandStddev: { left: 18.32, right: 3.77, top: 3.86, bottom: 3.41 },
+  paperBandMean: { left: 198, right: 214, top: 206, bottom: 201 },
+  detected: true,
+  alignmentCrop: true
+});
+assert('live 12px white-border accepted despite left stddev 18.32', live12WhiteBorder.accepted === true);
+assertHint('live 12px white-border hint', live12WhiteHint.hint, 'likely-printed-frame');
 
 assert('consensus ignores a single outlier', g.consensusRangePx([16.56, 108.48, 109.83, 111.11, 111.54, 111.7, 111.99], 5) < 4);
 
@@ -1111,6 +1197,58 @@ async function makeWhiteBorderNameplatePng() {
   }).png().toBuffer();
 }
 
+/** Flat navy surround + rectangular photo — the live Faulk shape.
+ *  Geometry agrees and the band is flat; paper-white must still reject. */
+async function makeFlatNavyInsetPng() {
+  let sharpLib = null;
+  try { sharpLib = require('sharp'); } catch (e) { return null; }
+  const width = 400;
+  const height = 560;
+  const channels = 3;
+  const buf = Buffer.alloc(width * height * channels);
+  const inset = { left: 42, right: 357, top: 55, bottom: 503 };
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * channels;
+      const inPhoto = x >= inset.left && x <= inset.right && y >= inset.top && y <= inset.bottom;
+      if (inPhoto) {
+        buf[i] = 196; buf[i + 1] = 164; buf[i + 2] = 120;
+      } else {
+        buf[i] = 36; buf[i + 1] = 48; buf[i + 2] = 88;
+      }
+    }
+  }
+  return sharpLib(buf, {
+    raw: { width: width, height: height, channels: channels }
+  }).png().toBuffer();
+}
+
+async function runFlatNavyInsetCheck() {
+  const buf = await makeFlatNavyInsetPng();
+  if (!buf) {
+    console.log('SKIP flat-navy inset check (sharp not installed)');
+    return;
+  }
+  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
+    console.log('SKIP flat-navy inset check (sharp not installed)');
+    return;
+  }
+  if (report.notes && String(report.notes).indexOf('grading engine error') !== -1) {
+    console.error('FAIL flat-navy inset threw:', report.notes);
+    process.exitCode = 1;
+    return;
+  }
+  assertUndetectedNoFrameHint('flat-navy inset', report);
+  const reliability = report.centeringDiagnostics && report.centeringDiagnostics.borderReliability;
+  const reasons = reliability && reliability.reasons ? reliability.reasons.join(' ') : '';
+  assert('flat-navy names not a white printed frame',
+    reasons.indexOf('not a white printed frame') !== -1);
+  const paper = reliability && reliability.paperBandMean;
+  assert('flat-navy paper means are below the white floor',
+    paper && paper.left < g.WHITE_BAND_MIN_GREY && paper.right < g.WHITE_BAND_MIN_GREY);
+}
+
 async function runBusyInsetBorderlessCheck() {
   const buf = await makeBusyInsetBorderlessPng();
   if (!buf) {
@@ -1130,8 +1268,9 @@ async function runBusyInsetBorderlessCheck() {
   assertUndetectedNoFrameHint('busy-inset borderless', report);
   const reliability = report.centeringDiagnostics && report.centeringDiagnostics.borderReliability;
   const reasons = reliability && reliability.reasons ? reliability.reasons.join(' ') : '';
-  assert('busy-inset names texture or ink',
+  assert('busy-inset names texture, paper-white, or miss',
     reasons.indexOf('textured art') !== -1 ||
+    reasons.indexOf('not a white printed frame') !== -1 ||
     reasons.indexOf('cut-edge ink greys') !== -1 ||
     reasons.indexOf('did not resolve') !== -1);
 }
@@ -1218,6 +1357,8 @@ runGradeBufferUndetectedCheck().then(function () {
   return runFullFrameWhiteBorderCropCheck();
 }).then(function () {
   return runBusyInsetBorderlessCheck();
+}).then(function () {
+  return runFlatNavyInsetCheck();
 }).then(function () {
   return runWhiteBorderNameplateCheck();
 }).then(function () {
