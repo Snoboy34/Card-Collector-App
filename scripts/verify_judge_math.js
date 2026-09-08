@@ -197,6 +197,19 @@ assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
 assertEq('min median width is 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
 assertEq('paper-white band floor is 165', g.WHITE_BAND_MIN_GREY, 165);
 
+const brightBandVsDarkArt = g.describeBandVsInterior(
+  { left: 200, right: 198, top: 204, bottom: 196 },
+  { mean: 80, p50: 78, p95: 110, max: 140, glareFrac: 0, sampleCount: 100 }
+);
+assert('diagnostic ratio min is > 2 for white-on-dark', brightBandVsDarkArt.min > 2);
+assert('diagnostic does not invent an accept flag', brightBandVsDarkArt.accepted === undefined);
+
+const darkBandVsBrightArt = g.describeBandVsInterior(
+  { left: 70, right: 74, top: 66, bottom: 72 },
+  { mean: 140, p50: 138, p95: 200, max: 240, glareFrac: 0.1, sampleCount: 100 }
+);
+assert('diagnostic ratio min is < 1 for dark-on-bright', darkBandVsBrightArt.min < 1);
+
 const tightInset = g.assessPrintBorderReliability(
   { left: 80, right: 719, top: 90, bottom: 1009, width: 640, height: 920 },
   800,
@@ -1247,6 +1260,9 @@ async function runFlatNavyInsetCheck() {
   const paper = reliability && reliability.paperBandMean;
   assert('flat-navy paper means are below the white floor',
     paper && paper.left < g.WHITE_BAND_MIN_GREY && paper.right < g.WHITE_BAND_MIN_GREY);
+  const navyBvi = report.centeringDiagnostics.bandVsInterior;
+  assert('flat-navy diagnostic ratio exists', Boolean(navyBvi && navyBvi.min != null));
+  assert('flat-navy band is not brighter than interior', navyBvi.min < 1.05);
 }
 
 async function runBusyInsetBorderlessCheck() {
@@ -1295,6 +1311,115 @@ async function runWhiteBorderNameplateCheck() {
   assert('nameplate white-border complete', report.incomplete === false);
   assert('nameplate white-border has CEN', typeof report.subGrades.centering === 'number');
   assertHint('nameplate white-border hint is printed-frame', report.centeringDiagnostics.hint, 'likely-printed-frame');
+  const npBvi = report.centeringDiagnostics.bandVsInterior;
+  assert('nameplate diagnostic ratio exists', Boolean(npBvi && npBvi.min != null));
+  assert('nameplate band is brighter than interior', npBvi.min > 1.2);
+}
+
+/** Pastorini-class: white outer ring, orange inner frame, then photo. */
+async function makeCompoundWhiteOrangePng() {
+  let sharpLib = null;
+  try { sharpLib = require('sharp'); } catch (e) { return null; }
+  const width = 400;
+  const height = 560;
+  const channels = 3;
+  const buf = Buffer.alloc(width * height * channels);
+  const white = 28;
+  const orange = 48;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * channels;
+      const d = Math.min(x, y, width - 1 - x, height - 1 - y);
+      if (d < white) {
+        buf[i] = 245; buf[i + 1] = 245; buf[i + 2] = 245;
+      } else if (d < orange) {
+        buf[i] = 220; buf[i + 1] = 90; buf[i + 2] = 30;
+      } else {
+        buf[i] = 20; buf[i + 1] = 46; buf[i + 2] = 110;
+      }
+    }
+  }
+  return sharpLib(buf, {
+    raw: { width: width, height: height, channels: channels }
+  }).png().toBuffer();
+}
+
+/** Full-bleed bright foil with a hot glare patch — no printed margin. */
+async function makeFullBleedHoloPng() {
+  let sharpLib = null;
+  try { sharpLib = require('sharp'); } catch (e) { return null; }
+  const width = 400;
+  const height = 560;
+  const channels = 3;
+  const buf = Buffer.alloc(width * height * channels);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * channels;
+      const on = ((Math.floor(x / 6) + Math.floor(y / 6)) % 2) === 0;
+      if (on) {
+        buf[i] = 190; buf[i + 1] = 200; buf[i + 2] = 220;
+      } else {
+        buf[i] = 70; buf[i + 1] = 90; buf[i + 2] = 140;
+      }
+    }
+  }
+  for (let y = 180; y < 280; y++) {
+    for (let x = 140; x < 260; x++) {
+      const i = (y * width + x) * channels;
+      buf[i] = 255; buf[i + 1] = 255; buf[i + 2] = 255;
+    }
+  }
+  return sharpLib(buf, {
+    raw: { width: width, height: height, channels: channels }
+  }).png().toBuffer();
+}
+
+async function runCompoundWhiteOrangeCheck() {
+  const buf = await makeCompoundWhiteOrangePng();
+  if (!buf) {
+    console.log('SKIP compound white/orange check (sharp not installed)');
+    return;
+  }
+  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
+    console.log('SKIP compound white/orange check (sharp not installed)');
+    return;
+  }
+  if (report.notes && String(report.notes).indexOf('grading engine error') !== -1) {
+    console.error('FAIL compound white/orange threw:', report.notes);
+    process.exitCode = 1;
+    return;
+  }
+  const bvi = report.centeringDiagnostics && report.centeringDiagnostics.bandVsInterior;
+  assert('compound diagnostic ratio exists', Boolean(bvi && bvi.min != null));
+  assert('compound band is still brighter than interior', bvi.min > 1.1);
+  console.log('compound white/orange bandVsInterior', JSON.stringify(bvi));
+}
+
+async function runFullBleedHoloCheck() {
+  const buf = await makeFullBleedHoloPng();
+  if (!buf) {
+    console.log('SKIP full-bleed holo check (sharp not installed)');
+    return;
+  }
+  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
+    console.log('SKIP full-bleed holo check (sharp not installed)');
+    return;
+  }
+  if (report.notes && String(report.notes).indexOf('grading engine error') !== -1) {
+    console.error('FAIL full-bleed holo threw:', report.notes);
+    process.exitCode = 1;
+    return;
+  }
+  const bvi = report.centeringDiagnostics && report.centeringDiagnostics.bandVsInterior;
+  assert('holo diagnostic exists (interior at least)', Boolean(bvi && bvi.interior));
+  console.log('full-bleed holo bandVsInterior', JSON.stringify(bvi));
+  if (bvi && bvi.min != null) {
+    assert('holo min ratio is not a strong white-frame signal', bvi.min < 1.5);
+  }
+  const glare = bvi && bvi.interior && bvi.interior.glareFrac;
+  assert('holo interior records glare', glare != null && glare > 0);
 }
 
 async function runFullFrameWhiteBorderCropCheck() {
@@ -1326,6 +1451,10 @@ async function runFullFrameWhiteBorderCropCheck() {
     : 0;
   assert('alignment-crop top width is the white frame, not 3px AA', topW >= 12);
   assertHint('alignment-crop hint is printed-frame', cropped.centeringDiagnostics.hint, 'likely-printed-frame');
+  const whiteBvi = cropped.centeringDiagnostics.bandVsInterior;
+  assert('white-border diagnostic ratio exists', Boolean(whiteBvi && whiteBvi.min != null));
+  assert('white-border band is brighter than interior', whiteBvi.min > 1.2);
+  assert('white-border still accepted (diagnostic is not a gate)', cropped.incomplete === false);
 }
 
 async function runHighSpreadInsetCheck() {
@@ -1361,6 +1490,10 @@ runGradeBufferUndetectedCheck().then(function () {
   return runFlatNavyInsetCheck();
 }).then(function () {
   return runWhiteBorderNameplateCheck();
+}).then(function () {
+  return runCompoundWhiteOrangeCheck();
+}).then(function () {
+  return runFullBleedHoloCheck();
 }).then(function () {
   if (process.exitCode) {
     console.error('Judge math regression failed.');

@@ -119,10 +119,10 @@ const BORDER_SAMPLE_MIN_HITS = 5;
 const BORDER_MIN_MEDIAN_WIDTH_PX = 12;
 /**
  * Un-normalized greyscale mean inside the putative border band.
- * White card stock in a phone JPEG sits well above this; navy / foil
- * surrounds on borderless 90s cards sit well below. Lighting variation
- * on a real white edge can push normalized stddev over 16 (live left
- * 18.32) — do not use that as a reject.
+ * Empirically this camera's neon-crop AE writes both white stock and
+ * dark surrounds into ~105–152, so WHITE_BAND_MIN_GREY never fires on
+ * live scans. The cutoff is frozen (not used as a new threshold) so
+ * accept/reject stays unchanged while band-vs-interior is collected.
  */
 const WHITE_BAND_MIN_GREY = 165;
 /** BGS 10 centering window (48/52 — near 50/50). */
@@ -875,6 +875,108 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
   };
 }
 
+/**
+ * Un-normalized greyscale of the interior (inside the putative inner
+ * edges). Diagnostic only — never part of accept/reject.
+ *
+ * When all four border widths resolve, the sample rectangle is inset by
+ * those widths plus 4px. Otherwise the central 50% of the card is used.
+ */
+function measureInteriorGrey(getPixel, cardWidth, cardHeight, widths) {
+  const w = widths || {};
+  const fallback = Math.max(8, Math.floor(Math.min(cardWidth, cardHeight) * 0.22));
+  function inset(value) {
+    if (value != null && typeof value === 'number' && isFinite(value) && value > 0) {
+      return Math.floor(value) + 4;
+    }
+    return fallback;
+  }
+  let left = Math.min(cardWidth - 2, inset(w.left));
+  let right = Math.max(left + 1, cardWidth - 1 - inset(w.right));
+  let top = Math.min(cardHeight - 2, inset(w.top));
+  let bottom = Math.max(top + 1, cardHeight - 1 - inset(w.bottom));
+  if ((right - left) < cardWidth * 0.3 || (bottom - top) < cardHeight * 0.3) {
+    left = Math.floor(cardWidth * 0.25);
+    right = Math.floor(cardWidth * 0.75);
+    top = Math.floor(cardHeight * 0.25);
+    bottom = Math.floor(cardHeight * 0.75);
+  }
+
+  const samples = [];
+  let glareCount = 0;
+  const step = 2;
+  for (let y = top; y <= bottom; y += step) {
+    for (let x = left; x <= right; x += step) {
+      const v = Number(getPixel(x, y));
+      if (!isFinite(v)) continue;
+      samples.push(v);
+      if (v >= 220) glareCount += 1;
+    }
+  }
+  if (!samples.length) {
+    return {
+      mean: null, p50: null, p95: null, max: null,
+      glareFrac: null, sampleCount: 0,
+      rect: { left: left, right: right, top: top, bottom: bottom }
+    };
+  }
+  const sorted = samples.slice().sort(function (a, b) { return a - b; });
+  const p95Index = Math.min(sorted.length - 1, Math.round(0.95 * (sorted.length - 1)));
+  let max = sorted[0];
+  for (let i = 1; i < sorted.length; i++) if (sorted[i] > max) max = sorted[i];
+  return {
+    mean: mean(samples),
+    p50: median(sorted),
+    p95: sorted[p95Index],
+    max: max,
+    glareFrac: glareCount / samples.length,
+    sampleCount: samples.length,
+    rect: { left: left, right: right, top: top, bottom: bottom }
+  };
+}
+
+/**
+ * paperBandMean[edge] / interior.mean for each side. Diagnostic only.
+ */
+function describeBandVsInterior(paperBandMean, interiorGrey) {
+  const bands = paperBandMean || {};
+  const interior = interiorGrey || {};
+  const interiorMean = interior.mean;
+  const edges = ['left', 'right', 'top', 'bottom'];
+  const ratio = {};
+  const vals = [];
+  const bandVals = [];
+  for (let i = 0; i < edges.length; i++) {
+    const edge = edges[i];
+    const band = bands[edge];
+    if (band != null && typeof band === 'number' && isFinite(band) &&
+        interiorMean != null && typeof interiorMean === 'number' &&
+        isFinite(interiorMean) && interiorMean > 0) {
+      const r = band / interiorMean;
+      ratio[edge] = round2(r);
+      vals.push(r);
+      bandVals.push(band);
+    } else {
+      ratio[edge] = null;
+    }
+  }
+  const sortedRatios = vals.slice().sort(function (a, b) { return a - b; });
+  return {
+    interior: {
+      mean: round2(interior.mean),
+      p50: round2(interior.p50),
+      p95: round2(interior.p95),
+      max: round2(interior.max),
+      glareFrac: round2(interior.glareFrac),
+      sampleCount: interior.sampleCount || 0
+    },
+    ratio: ratio,
+    min: sortedRatios.length ? round2(sortedRatios[0]) : null,
+    median: sortedRatios.length ? round2(median(sortedRatios)) : null,
+    meanBand: bandVals.length ? round2(mean(bandVals)) : null
+  };
+}
+
 function sampleRangePx(samples) {
   if (!samples || !samples.length) return null;
   let min = samples[0];
@@ -1120,6 +1222,9 @@ function describeBorderSource(args) {
     paperBaselines: args.paperBaselines
   }, { alignmentCrop: Boolean(args.alignmentCrop) });
 
+  const bandVsInterior = args.bandVsInterior ||
+    describeBandVsInterior(args.paperBandMean, args.interiorGrey);
+
   let hint;
   let summary;
   if (!detected || !reliability.accepted) {
@@ -1180,6 +1285,7 @@ function describeBorderSource(args) {
     topBottomSampleSpreadPx: round2(topBottomSampleSpreadPx),
     axisSpreadNote: axisSpreadNote,
     borderReliability: reliability,
+    bandVsInterior: bandVsInterior,
     samples: {
       left: (samples.left || []).map(round2),
       right: (samples.right || []).map(round2),
@@ -1201,6 +1307,8 @@ function buildCenteringDiagnostics(width, height, box, centeringMeasurement, ext
     baselines: centeringMeasurement.baselines,
     paperBandMean: centeringMeasurement.paperBandMean,
     paperBaselines: centeringMeasurement.paperBaselines,
+    interiorGrey: extra.interiorGrey || centeringMeasurement.interiorGrey,
+    bandVsInterior: extra.bandVsInterior || centeringMeasurement.bandVsInterior,
     alignmentCrop: Boolean(extra.alignmentCrop),
     detected: centeringMeasurement.detected
   });
@@ -1624,6 +1732,14 @@ async function gradeBuffer(buffer, options) {
     const centeringMeasurement = measurePrintCentering(
       getPixel, centeringBox.width, centeringBox.height, getPaperPixel
     );
+    const interiorGrey = measureInteriorGrey(
+      getPaperPixel, centeringBox.width, centeringBox.height, centeringMeasurement.widths
+    );
+    const bandVsInterior = describeBandVsInterior(
+      centeringMeasurement.paperBandMean, interiorGrey
+    );
+    centeringMeasurement.interiorGrey = interiorGrey;
+    centeringMeasurement.bandVsInterior = bandVsInterior;
     const surface = measureSurfaceDefects(pixels, blurred, width, centeringBox);
     const edgesWhiteningCount = measureEdgeWhitening(pixels, width, centeringBox);
     const corners = measureCornerFraying(pixels, width, centeringBox);
@@ -1638,6 +1754,9 @@ async function gradeBuffer(buffer, options) {
       ' consensus=' + JSON.stringify(borderReliability.consensusRangePx) +
       ' bandStddev=' + JSON.stringify(borderReliability.bandStddev) +
       ' paperBandMean=' + JSON.stringify(borderReliability.paperBandMean) +
+      ' interiorMean=' + (bandVsInterior.interior && bandVsInterior.interior.mean) +
+      ' bandVsInterior=' + JSON.stringify(bandVsInterior.ratio) +
+      ' bandVsInteriorMin=' + bandVsInterior.min +
       ' baselineRange=' + borderReliability.baselineRange +
       ' accepted=' + borderReliability.accepted +
       (borderReliability.reasons.length
@@ -1698,7 +1817,9 @@ async function gradeBuffer(buffer, options) {
         edgesWhiteningCount: Number(edgesWhiteningCount) || 0,
         absoluteMaxCornerFray: cornerPhase.absoluteMaxCornerFray,
         centeringDiagnostics: buildCenteringDiagnostics(width, height, centeringBox, centeringMeasurement, {
-          alignmentCrop: Boolean(options.alignmentCrop)
+          alignmentCrop: Boolean(options.alignmentCrop),
+          interiorGrey: interiorGrey,
+          bandVsInterior: bandVsInterior
         })
       };
       if (options.debug) {
@@ -1710,6 +1831,8 @@ async function gradeBuffer(buffer, options) {
           printBorderBaselines: centeringMeasurement.baselines,
           printBorderPaperBandMean: centeringMeasurement.paperBandMean,
           printBorderPaperBaselines: centeringMeasurement.paperBaselines,
+          interiorGrey: interiorGrey,
+          bandVsInterior: bandVsInterior,
           borderReliability: borderReliability,
           corners, surface, edgesWhiteningCount
         };
@@ -1760,7 +1883,9 @@ async function gradeBuffer(buffer, options) {
       centeringUndetected: false,
       incomplete: false,
       centeringDiagnostics: buildCenteringDiagnostics(width, height, centeringBox, centeringMeasurement, {
-        alignmentCrop: Boolean(options.alignmentCrop)
+        alignmentCrop: Boolean(options.alignmentCrop),
+        interiorGrey: interiorGrey,
+        bandVsInterior: bandVsInterior
       })
     };
 
@@ -1773,6 +1898,8 @@ async function gradeBuffer(buffer, options) {
         printBorderBaselines: centeringMeasurement.baselines,
         printBorderPaperBandMean: centeringMeasurement.paperBandMean,
         printBorderPaperBaselines: centeringMeasurement.paperBaselines,
+        interiorGrey: interiorGrey,
+        bandVsInterior: bandVsInterior,
         borderReliability: borderReliability,
         corners, surface, edgesWhiteningCount
       };
@@ -1799,6 +1926,8 @@ module.exports = {
   buildCenteringDiagnostics,
   assessPrintBorderReliability,
   consensusRangePx,
+  measureInteriorGrey,
+  describeBandVsInterior,
   BORDER_SAMPLE_SPREAD_MAX_PX,
   BORDER_SAMPLE_MIN_HITS,
   BORDER_MIN_MEDIAN_WIDTH_PX,
