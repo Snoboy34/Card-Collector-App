@@ -112,6 +112,7 @@ function parseGradingOptions(body) {
   if (body.debug) opts.debug = body.debug === 'true' || body.debug === '1';
   const tilt = scanLevel.parseCaptureTilt(body);
   if (tilt) opts.captureTilt = tilt;
+  if (scanLevel.parseAlignmentCrop(body)) opts.alignmentCrop = true;
   return opts;
 }
 

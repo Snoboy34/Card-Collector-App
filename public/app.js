@@ -12,9 +12,9 @@
  *   - POST /api/grade → services/grading_engine.js (4-phase Judge + 0.5 ceiling)
  *   - Render 10-point sub-grades, ceiling flag, and primary-flaw text
  *
- * The canvas overlay is presentation only. It does not grade. All scoring
- * happens server-side in grading_engine.js so the formula cannot drift
- * between the viewport and The Judge.swift.
+ * The canvas overlay does not grade, but live capture crops to the neon
+ * 2.5×3.5 window so the JPEG cut matches what the operator lined up.
+ * Scoring stays server-side in grading_engine.js.
  */
 
 /* -------------------------
@@ -29,8 +29,9 @@ const api = {
   login: (payload) => fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)}).then(r=>r.json())
 };
 
-/** Standard sports-card / TCG slab window: 2.5" × 3.5" (width / height). */
-const CARD_ASPECT = 2.5 / 3.5;
+/** Standard sports-card / TCG slab window: 2.5" × 3.5" (width / height).
+ *  Named JUDGE_CARD_ASPECT so it cannot collide with scan_level.js. */
+const JUDGE_CARD_ASPECT = (window.ScanLevel && window.ScanLevel.CARD_ASPECT) || (2.5 / 3.5);
 
 /** Live camera bookkeeping. Stopped whenever the user leaves the Scan view. */
 let scanCameraStream = null;
@@ -79,11 +80,16 @@ function itemHeadlineGrade(report) {
   return report.label || '—';
 }
 
+window.__judgeBooted = true;
+
 const appRoot = document.getElementById('app');
 const cameraInput = document.getElementById('cameraInput');
 const scanBtn = document.getElementById('scanBtn');
 const navBtns = Array.from(document.querySelectorAll('.nav-btn'));
 const loginBtn = document.getElementById('loginBtn');
+/** Last painted hash route. Stops click + hashchange from remounting Scan
+ *  and killing getUserMedia outside a user gesture (iPhone Safari). */
+let activeRoute = null;
 
 /* -------------------------
    Simple client-side state
@@ -105,14 +111,16 @@ function navigateTo(route) {
 }
 
 function renderRoute(route) {
-  // Always release the camera + motion listener when leaving (or re-entering) Scan.
+  const key = String(route || 'dashboard').replace(/^#/, '') || 'dashboard';
+  if (key === activeRoute) return;
+  activeRoute = key;
+  // Always release the camera + motion listener when leaving Scan.
   stopScanCamera();
   stopLevelSensor();
-  if (!route || route === '#dashboard' || route === 'dashboard') {
-    renderDashboard();
-  } else if (route === '#inventory' || route === 'inventory') {
+  window.removeEventListener('resize', sizeGuideCanvas);
+  if (key === 'inventory') {
     renderInventory();
-  } else if (route === '#scan' || route === 'scan') {
+  } else if (key === 'scan') {
     renderScanView();
   } else {
     renderDashboard();
@@ -263,8 +271,8 @@ function renderScanView() {
 
 /**
  * Bind Start / Capture / Upload / Stop controls on the cloned viewport.
- * Capture draws the current video frame (NOT the overlay) to a JPEG blob
- * and posts it through the same /api/grade path as a file upload.
+ * Start Camera is a user-gesture getUserMedia call (required on iPhone).
+ * Capture crops to the neon frame and posts JPEG to /api/grade.
  */
 function wireScanViewport() {
   const startBtn = document.getElementById('startCameraBtn');
@@ -290,12 +298,7 @@ function wireScanViewport() {
   requestAnimationFrame(function () { sizeGuideCanvas(); });
   window.addEventListener('resize', sizeGuideCanvas);
   updateLevelHud();
-  startLevelSensor();
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    startScanCamera();
-  } else {
-    setScanStatus('Live camera is not available in this browser. Use Upload Photo.');
-  }
+  setScanStatus('Tap Start Camera, then fill the neon 2.5×3.5 frame.');
 }
 
 function setScanStatus(msg) {
@@ -548,7 +551,13 @@ function sizeGuideCanvas() {
   const dpr = window.devicePixelRatio || 1;
   const box = stage.getBoundingClientRect();
   const w = Math.max(1, Math.round(box.width) || stage.clientWidth || 320);
-  const h = Math.max(1, Math.round(box.height) || stage.offsetHeight || Math.round(w * 4 / 3));
+  // padding-bottom aspect boxes can report height 0 on older Safari.
+  const h = Math.max(
+    1,
+    Math.round(box.height),
+    stage.offsetHeight,
+    Math.round(w * 4 / 3)
+  );
   canvas.width = Math.max(1, Math.round(w * dpr));
   canvas.height = Math.max(1, Math.round(h * dpr));
   canvas.style.width = w + 'px';
@@ -648,19 +657,24 @@ function drawL(ctx, ox, oy, arm, dirX, dirY) {
 }
 
 function cardFrameRect(canvasW, canvasH) {
+  if (window.ScanLevel && typeof window.ScanLevel.cardFrameRect === 'function') {
+    return window.ScanLevel.cardFrameRect(canvasW, canvasH);
+  }
   const pad = Math.min(canvasW, canvasH) * 0.08;
   let h = canvasH - pad * 2;
-  let w = h * CARD_ASPECT;
+  let w = h * JUDGE_CARD_ASPECT;
   if (w > canvasW - pad * 2) {
     w = canvasW - pad * 2;
-    h = w / CARD_ASPECT;
+    h = w / JUDGE_CARD_ASPECT;
   }
   return { x: (canvasW - w) / 2, y: (canvasH - h) / 2, w: w, h: h };
 }
 
 /**
- * Snapshot the live video (guides are overlay-only and are NOT burned in),
- * JPEG-encode, and send through the same grading pipeline as a file upload.
+ * Snapshot the live video cropped to the neon 2.5×3.5 frame (mapped through
+ * object-fit: cover). Guides are not burned in. JPEG goes through the same
+ * grading pipeline as a file upload, with alignmentCrop=true so the crop
+ * edges are treated as the cut.
  */
 function captureFromCamera(mode) {
   if (captureInFlight) return;
@@ -675,11 +689,26 @@ function captureFromCamera(mode) {
   }
   captureInFlight = true;
   pendingCaptureMeta = snapshotCaptureTilt(mode || 'manual');
+  const videoW = video.videoWidth || 1280;
+  const videoH = video.videoHeight || 1720;
+  const viewW = video.clientWidth || videoW;
+  const viewH = video.clientHeight || videoH;
+  const SL = window.ScanLevel;
+  const crop = SL && typeof SL.alignmentCropInVideo === 'function'
+    ? SL.alignmentCropInVideo(videoW, videoH, viewW, viewH)
+    : null;
   const snap = document.createElement('canvas');
-  snap.width = video.videoWidth || 1280;
-  snap.height = video.videoHeight || 1720;
   const ctx = snap.getContext('2d');
-  ctx.drawImage(video, 0, 0, snap.width, snap.height);
+  if (crop && crop.w > 8 && crop.h > 8) {
+    snap.width = Math.max(1, Math.round(crop.w));
+    snap.height = Math.max(1, Math.round(crop.h));
+    ctx.drawImage(video, crop.x, crop.y, crop.w, crop.h, 0, 0, snap.width, snap.height);
+    pendingCaptureMeta.alignmentCrop = true;
+  } else {
+    snap.width = videoW;
+    snap.height = videoH;
+    ctx.drawImage(video, 0, 0, snap.width, snap.height);
+  }
   setScanStatus(mode === 'auto' ? 'Held level — captured.' : 'Capturing…');
   const onBlob = function (blob) {
     captureInFlight = false;
@@ -802,10 +831,11 @@ window.openReportFromId = (id) => {
 navBtns.forEach(btn => btn.addEventListener('click', (e) => navigateTo(btn.dataset.route)));
 window.addEventListener('hashchange', () => renderRoute(location.hash.replace('#','')));
 
-scanBtn.addEventListener('click', () => {
-  // Route into the guided camera viewport (file input is the fallback there).
-  navigateTo('scan');
-});
+if (scanBtn) {
+  scanBtn.addEventListener('click', () => {
+    navigateTo('scan');
+  });
+}
 
 /**
  * Shared preview + POST /api/grade path used by both live capture and file upload.
@@ -854,6 +884,9 @@ function previewAndOfferUpload(file) {
       fd.append('captureLevel', captureMeta.isLevel ? 'true' : 'false');
       fd.append('captureMode', captureMeta.mode || 'manual');
     }
+    if (captureMeta && captureMeta.alignmentCrop) {
+      fd.append('alignmentCrop', 'true');
+    }
 
     const status = document.getElementById('uploadStatus');
     status.innerHTML = 'Uploading to The Judge…';
@@ -878,14 +911,14 @@ function previewAndOfferUpload(file) {
 }
 
 /* Camera / file input handler */
-cameraInput.addEventListener('change', async (ev) => {
+if (cameraInput) cameraInput.addEventListener('change', async (ev) => {
   const file = ev.target.files && ev.target.files[0];
   if (!file) return;
   previewAndOfferUpload(file);
 });
 
 /* Auth mock */
-loginBtn.addEventListener('click', async () => {
+if (loginBtn) loginBtn.addEventListener('click', async () => {
   const username = prompt('Enter a username for Phase 1 (no password required):');
   if (!username) return;
   const res = await api.login({ username });
@@ -902,13 +935,14 @@ loginBtn.addEventListener('click', async () => {
    Boot: load inventory and init route
    ------------------------- */
 async function bootstrap() {
-  // load cached user
   const stored = localStorage.getItem('phase1_user');
   if (stored) {
-    try { state.user = JSON.parse(stored); loginBtn.textContent = `Hi ${state.user.username}`; } catch(e){ /* ignore */ }
+    try { state.user = JSON.parse(stored); if (loginBtn) loginBtn.textContent = `Hi ${state.user.username}`; } catch(e){ /* ignore */ }
   }
 
-  // load inventory from server (port 5000)
+  // Paint the route immediately so Scan is not blocked on inventory/stats.
+  renderRoute(location.hash.replace('#','') || 'dashboard');
+
   try {
     const res = await api.getInventory();
     if (res && res.ok) state.inventory = res.inventory || [];
@@ -916,7 +950,6 @@ async function bootstrap() {
     console.warn('Could not fetch inventory', err);
   }
 
-  // load unified stats from server (port 5000) — one-time fetch for immediate UI fill
   try {
     const s = await api.getStats();
     if (s && s.ok) state.stats = s;
@@ -924,12 +957,10 @@ async function bootstrap() {
     console.warn('Could not fetch stats (initial)', err);
   }
 
-  // Start SSE for live updates (or polling fallback)
   initSse();
-
-  // initial render based on hash
-  const route = location.hash.replace('#','') || 'dashboard';
-  renderRoute(route);
+  if (activeRoute === 'dashboard') renderDashboard();
+  else if (activeRoute === 'inventory') renderInventory();
+  else updateStatsUI();
 }
 
 bootstrap();
