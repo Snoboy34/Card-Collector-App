@@ -212,6 +212,10 @@ public class CenteringAnalyzer {
         try? requestHandler.perform([rectangleRequest])
     }
 
+    /// Live-preview slash-code hunt only (e.g. `123/250`).
+    /// Returns that string, or `nil` when nothing matches — callers must not
+    /// invent a player/set name on a miss. Full-card identity OCR lives on the
+    /// locked still path, not here.
     public func extractCardIdentifierText(from image: CGImage, cardBoundingBox: VNRectangleObservation, completion: @escaping (String?) -> Void) {
         let requestHandler = VNImageRequestHandler(cgImage: image, options: [:])
 
