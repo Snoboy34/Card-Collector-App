@@ -1,0 +1,77 @@
+{
+  "families": [
+    {
+      "id": "1976-topps",
+      "tokens": [
+        "1976",
+        "topps"
+      ],
+      "label": "1976 Topps"
+    },
+    {
+      "id": "1983-topps",
+      "tokens": [
+        "1983",
+        "topps"
+      ],
+      "label": "1983 Topps"
+    },
+    {
+      "id": "1984-topps",
+      "tokens": [
+        "1984",
+        "topps"
+      ],
+      "label": "1984 Topps"
+    },
+    {
+      "id": "1989-pro-set",
+      "tokens": [
+        "1989",
+        "pro set"
+      ],
+      "label": "1989 Pro Set"
+    },
+    {
+      "id": "1991-upper-deck",
+      "tokens": [
+        "1991",
+        "upper deck"
+      ],
+      "label": "1991 Upper Deck"
+    },
+    {
+      "id": "1993-bowman",
+      "tokens": [
+        "1993",
+        "bowman"
+      ],
+      "label": "1993 Bowman"
+    },
+    {
+      "id": "1993-topps",
+      "tokens": [
+        "1993",
+        "topps"
+      ],
+      "label": "1993 Topps"
+    },
+    {
+      "id": "1999-victory",
+      "tokens": [
+        "1999",
+        "victory"
+      ],
+      "label": "1999 Victory"
+    },
+    {
+      "id": "2016-topps-olympic",
+      "tokens": [
+        "2016",
+        "topps",
+        "olympic"
+      ],
+      "label": "2016 Topps Olympic"
+    }
+  ]
+}
