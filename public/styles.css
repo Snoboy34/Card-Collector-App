@@ -206,24 +206,22 @@ button:focus, a:focus{ outline:2px solid rgba(0,212,255,0.12); outline-offset:3p
 }
 .level-hud {
   position: absolute;
-  top: 10px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   z-index: 3;
   pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  width: 64px;
+  height: 64px;
 }
 .level-target {
   position: relative;
-  width: 72px;
-  height: 72px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   border: 2px solid #ffb020;
-  background: rgba(0, 0, 0, 0.45);
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.35);
+  background: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.28);
 }
 .level-hud.is-level .level-target {
   border-color: #00ff88;
@@ -252,12 +250,35 @@ button:focus, a:focus{ outline:2px solid rgba(0,212,255,0.12); outline-offset:3p
 }
 .level-hud.is-level .level-dot { background: #00ff88; }
 .level-readout {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: #fff;
   text-shadow: 0 1px 0 #000, 0 0 8px #000;
   white-space: nowrap;
+}
+.scan-gap-guide {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 10px;
+  z-index: 3;
+  pointer-events: none;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-shadow: 0 1px 0 #000;
+  line-height: 1.35;
 }
 .subgrade-pill {
   display: inline-block; margin: 2px 4px 2px 0; padding: 4px 8px;
