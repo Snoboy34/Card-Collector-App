@@ -233,6 +233,23 @@ struct CardScannerView: View {
                                 .font(.system(size: 8, design: .monospaced))
                                 .foregroundColor(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                            if let lastRemoteError {
+                                Divider()
+                                Text(lastRemoteError)
+                                    .font(.caption2)
+                                    .foregroundColor(.red)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            if !remoteGradeSummary.isEmpty {
+                                Divider()
+                                Text("NATIVE STILL /api/grade")
+                                    .font(.caption2).bold()
+                                    .foregroundColor(.cyan)
+                                Text(remoteGradeSummary)
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundColor(.primary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                         .font(.footnote)
                         .padding()
@@ -350,22 +367,6 @@ struct CardScannerView: View {
                 .cornerRadius(10)
             }
             .disabled(isRemoteGrading)
-            if let lastRemoteError {
-                Text(lastRemoteError)
-                    .font(.caption2)
-                    .foregroundColor(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if !remoteGradeSummary.isEmpty {
-                Text(remoteGradeSummary)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(8)
-            }
         }
         .padding(.horizontal)
     }
