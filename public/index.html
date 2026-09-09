@@ -97,24 +97,22 @@
     }
     .level-hud {
       position: absolute;
-      top: 10px;
+      top: 50%;
       left: 50%;
-      transform: translateX(-50%);
+      transform: translate(-50%, -50%);
       z-index: 3;
       pointer-events: none;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
+      width: 64px;
+      height: 64px;
     }
     .level-target {
       position: relative;
-      width: 72px;
-      height: 72px;
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
       border: 2px solid var(--guide-warn);
-      background: rgba(0, 0, 0, 0.45);
-      box-shadow: 0 0 0 1px rgba(255,255,255,0.35);
+      background: rgba(0, 0, 0, 0.12);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.28);
     }
     .level-hud.is-level .level-target {
       border-color: var(--guide-ok);
@@ -146,12 +144,35 @@
       background: var(--guide-ok);
     }
     .level-readout {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 50%;
+      transform: translateX(-50%);
       font-size: 0.72rem;
       font-weight: 700;
       letter-spacing: 0.04em;
       color: #fff;
       text-shadow: 0 1px 0 #000, 0 0 8px #000;
       white-space: nowrap;
+    }
+    .scan-gap-guide {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      top: 10px;
+      z-index: 3;
+      pointer-events: none;
+      margin: 0;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.62);
+      color: #fff;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-align: center;
+      text-shadow: 0 1px 0 #000;
+      line-height: 1.35;
     }
     .scan-status {
       margin: 0;
@@ -229,7 +250,8 @@
           </div>
           <div class="level-readout" id="levelReadout">P —°  R —°</div>
         </div>
-        <div class="scan-viewport-hint" id="scanHint">Tap Start Camera, then fill the neon frame</div>
+        <p class="scan-gap-guide" id="scanGapGuide">Leave a small gap on all four sides — do not push the card flush against the neon frame.</p>
+        <div class="scan-viewport-hint" id="scanHint">Tap Start Camera, then sit the card inside the neon frame with a gap</div>
       </div>
       <div class="scan-viewport-actions">
         <button type="button" id="startCameraBtn" class="small">Start Camera</button>
@@ -237,7 +259,7 @@
         <button type="button" id="uploadInsteadBtn" class="small ghost">Upload Photo</button>
         <button type="button" id="stopCameraBtn" class="small ghost">Stop Camera</button>
       </div>
-      <p class="scan-status" id="scanStatus" role="status">Start the camera, then hold the card flat in the frame.</p>
+      <p class="scan-status" id="scanStatus" role="status">Start the camera, then sit the card inside the frame with a small gap on every side.</p>
     </div>
   </template>
 
@@ -250,7 +272,7 @@
     Scan
   </button>
 
-  <script src="/scan_level.js?v=scan-noglobal"></script>
-  <script src="/app.js?v=scan-noglobal" defer></script>
+  <script src="/scan_level.js?v=scan-guide-unify"></script>
+  <script src="/app.js?v=scan-guide-unify" defer></script>
 </body>
 </html>

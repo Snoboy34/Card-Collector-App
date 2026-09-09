@@ -250,7 +250,7 @@ function renderScanView() {
   appRoot.innerHTML = `
     <section class="panel">
       <h2>Scan New Card</h2>
-      <p class="muted">Fill the neon 2.5×3.5 frame edge-to-edge. Hold the phone level until the bubble turns green — Capture stays locked until then, and auto-capture fires after a short hold. Lighting should be even — glare fools the surface pass.</p>
+      <p class="muted">Sit the card inside the neon 2.5×3.5 frame with a small gap on all four sides — do not push the edges flush against the guide. Hold the phone level until the center bubble turns green (it sits on the crosshair). Capture stays locked until then, and auto-capture fires after a short hold. Lighting should be even — glare fools the surface pass.</p>
       <div style="margin-top:12px;">
         <input id="scanName" placeholder="Card name (optional)" style="padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inherit; min-width:200px;" />
       </div>
@@ -298,7 +298,7 @@ function wireScanViewport() {
   requestAnimationFrame(function () { sizeGuideCanvas(); });
   window.addEventListener('resize', sizeGuideCanvas);
   updateLevelHud();
-  setScanStatus('Tap Start Camera, then fill the neon 2.5×3.5 frame.');
+  setScanStatus('Tap Start Camera, then sit the card inside the neon frame with a small gap on every side.');
 }
 
 function setScanStatus(msg) {
@@ -352,7 +352,7 @@ function updateLevelHud() {
         scanLevelState.roll.toFixed(1) + '°';
     }
   }
-  const radius = 28;
+  const radius = 24;
   if (scanLevelState.isLevel) {
     dot.style.transform = 'translate(-50%, -50%)';
   } else if (has) {
@@ -525,7 +525,7 @@ function startScanCamera() {
     const kick = function () { sizeGuideCanvas(); loopGuideOverlay(); };
     if (video.readyState >= 2) kick();
     else video.onloadedmetadata = kick;
-    setScanStatus('Camera live. Hold level (green bubble) to capture — auto-fires after a short hold.');
+    setScanStatus('Camera live. Leave a gap around the card, then hold level (center bubble on the crosshair) to capture.');
   }).catch(function (err) {
     setScanStatus('Camera blocked (' + (err && err.message ? err.message : 'permission') + '). Use Upload Photo.');
   });
