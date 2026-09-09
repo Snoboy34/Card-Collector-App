@@ -1,0 +1,295 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		BB0000000000000000000001 /* Applauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000001 /* Applauncher.swift */; };
+		BB0000000000000000000002 /* CameraCalibration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* CameraCalibration.swift */; };
+		BB0000000000000000000003 /* CardScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000003 /* CardScannerView.swift */; };
+		BB0000000000000000000004 /* CenteringAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000004 /* CenteringAnalyzer.swift */; };
+		BB0000000000000000000005 /* DefectAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000005 /* DefectAnalyzer.swift */; };
+		BB0000000000000000000006 /* LiveCameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000006 /* LiveCameraView.swift */; };
+		BB0000000000000000000007 /* PortfolioState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000007 /* PortfolioState.swift */; };
+		BB0000000000000000000008 /* PricingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000008 /* PricingEngine.swift */; };
+		BB0000000000000000000009 /* The Judge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000009 /* The Judge.swift */; };
+		BB000000000000000000000A /* UserSecurity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000000A /* UserSecurity.swift */; };
+		BB000000000000000000000B /* CardAlignmentCrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000000B /* CardAlignmentCrop.swift */; };
+		BB000000000000000000000C /* JudgeAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000000C /* JudgeAPIClient.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000001 /* Applauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Applauncher.swift; sourceTree = "<group>"; };
+		AA0000000000000000000002 /* CameraCalibration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraCalibration.swift; sourceTree = "<group>"; };
+		AA0000000000000000000003 /* CardScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardScannerView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000004 /* CenteringAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenteringAnalyzer.swift; sourceTree = "<group>"; };
+		AA0000000000000000000005 /* DefectAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefectAnalyzer.swift; sourceTree = "<group>"; };
+		AA0000000000000000000006 /* LiveCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCameraView.swift; sourceTree = "<group>"; };
+		AA0000000000000000000007 /* PortfolioState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioState.swift; sourceTree = "<group>"; };
+		AA0000000000000000000008 /* PricingEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PricingEngine.swift; sourceTree = "<group>"; };
+		AA0000000000000000000009 /* The Judge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "The Judge.swift"; sourceTree = "<group>"; };
+		AA000000000000000000000A /* UserSecurity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSecurity.swift; sourceTree = "<group>"; };
+		AA000000000000000000000B /* CardAlignmentCrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardAlignmentCrop.swift; sourceTree = "<group>"; };
+		AA000000000000000000000C /* JudgeAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JudgeAPIClient.swift; sourceTree = "<group>"; };
+		AA000000000000000000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AA000000000000000000000E /* CardGrade.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CardGrade.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		DD0000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		CC0000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				CC0000000000000000000002 /* Sources */,
+				CC0000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		CC0000000000000000000002 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000001 /* Applauncher.swift */,
+				AA0000000000000000000002 /* CameraCalibration.swift */,
+				AA000000000000000000000B /* CardAlignmentCrop.swift */,
+				AA0000000000000000000003 /* CardScannerView.swift */,
+				AA0000000000000000000004 /* CenteringAnalyzer.swift */,
+				AA0000000000000000000005 /* DefectAnalyzer.swift */,
+				AA000000000000000000000C /* JudgeAPIClient.swift */,
+				AA0000000000000000000006 /* LiveCameraView.swift */,
+				AA0000000000000000000007 /* PortfolioState.swift */,
+				AA0000000000000000000008 /* PricingEngine.swift */,
+				AA0000000000000000000009 /* The Judge.swift */,
+				AA000000000000000000000A /* UserSecurity.swift */,
+				AA000000000000000000000D /* Info.plist */,
+			);
+			name = Sources;
+			sourceTree = "<group>";
+		};
+		CC0000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA000000000000000000000E /* CardGrade.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DD0000000000000000000001 /* CardGrade */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EE0000000000000000000006 /* Build configuration list for PBXNativeTarget "CardGrade" */;
+			buildPhases = (
+				DD0000000000000000000002 /* Sources */,
+				DD0000000000000000000003 /* Frameworks */,
+				DD0000000000000000000004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CardGrade;
+			productName = CardGrade;
+			productReference = AA000000000000000000000E /* CardGrade.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA000000000000000000000F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1540;
+				LastUpgradeCheck = 1540;
+				TargetAttributes = {
+					DD0000000000000000000001 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+				};
+			};
+			buildConfigurationList = EE0000000000000000000005 /* Build configuration list for PBXProject "CardGrade" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = CC0000000000000000000001;
+			productRefGroup = CC0000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DD0000000000000000000001 /* CardGrade */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		DD0000000000000000000004 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		DD0000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000000001 /* Applauncher.swift in Sources */,
+				BB0000000000000000000002 /* CameraCalibration.swift in Sources */,
+				BB000000000000000000000B /* CardAlignmentCrop.swift in Sources */,
+				BB0000000000000000000003 /* CardScannerView.swift in Sources */,
+				BB0000000000000000000004 /* CenteringAnalyzer.swift in Sources */,
+				BB0000000000000000000005 /* DefectAnalyzer.swift in Sources */,
+				BB000000000000000000000C /* JudgeAPIClient.swift in Sources */,
+				BB0000000000000000000006 /* LiveCameraView.swift in Sources */,
+				BB0000000000000000000007 /* PortfolioState.swift in Sources */,
+				BB0000000000000000000008 /* PricingEngine.swift in Sources */,
+				BB0000000000000000000009 /* The Judge.swift in Sources */,
+				BB000000000000000000000A /* UserSecurity.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		EE0000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		EE0000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		EE0000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The Judge uses the rear camera to capture a locked-exposure still of the card for grading.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock the collection vault with Face ID.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "The Judge reads pitch and roll so the phone can be held level over the card.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cardgrader.thejudge;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		EE0000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The Judge uses the rear camera to capture a locked-exposure still of the card for grading.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock the collection vault with Face ID.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "The Judge reads pitch and roll so the phone can be held level over the card.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cardgrader.thejudge;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		EE0000000000000000000005 /* Build configuration list for PBXProject "CardGrade" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE0000000000000000000001 /* Debug */,
+				EE0000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EE0000000000000000000006 /* Build configuration list for PBXNativeTarget "CardGrade" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE0000000000000000000003 /* Debug */,
+				EE0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AA000000000000000000000F /* Project object */;
+}

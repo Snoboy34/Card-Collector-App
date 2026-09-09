@@ -66,6 +66,14 @@ struct CardScannerView: View {
     @State private var selectedMonitorCard: SavedCard? = nil
     @State private var lastProcessedFrameTime = Date.distantPast
 
+    // Native still path: session-once AE lock + PhotoOutput JPEG → neon crop → /api/grade
+    @State private var stillCaptureNonce: UInt64 = 0
+    @State private var exposureLockStatus = "Camera starting…"
+    @State private var judgeServerURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
+    @State private var isRemoteGrading = false
+    @State private var remoteGradeSummary = ""
+    @State private var lastRemoteError: String?
+
     private var filteredVaultRecords: [SavedCard] {
         searchVaultQuery.isEmpty ? portfolio.savedCards : portfolio.savedCards.filter {
             $0.name.localizedCaseInsensitiveContains(searchVaultQuery) || $0.setName.localizedCaseInsensitiveContains(searchVaultQuery)
@@ -174,6 +182,8 @@ struct CardScannerView: View {
 
                 cameraViewportSection
 
+                nativeStillGradeControls
+
                 Button(action: { advanceInspectionFlowPipeline() }) {
                     Text(currentPhase == .backPerimeter ? "Calculate Comprehensive Multi-Phase Grade" : "Lock & Advance to Next Scanning Phase")
                         .bold()
@@ -248,39 +258,116 @@ struct CardScannerView: View {
     }
 
     private var cameraViewportSection: some View {
-        ZStack {
-            LiveCameraView { processLiveCameraFrame($0) }.environmentObject(calibrationEngine).frame(height: 240).cornerRadius(12).clipped()
-            RoundedRectangle(cornerRadius: 16).stroke(guideBoxColor, lineWidth: guideBoxLineWidth).frame(width: 170, height: 210)
-                .overlay(Group {
-                    if !isCardDetected {
-                        VStack { Image(systemName: "viewfinder").font(.title2); Text("ALIGN CARD").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4) }.foregroundColor(.white)
-                    } else if let centeringRatio = scanResult { CenteringGuideOverlay(ratios: centeringRatio) }
-                })
-            VStack {
+        GeometryReader { geo in
+            let neon = CardAlignmentCrop.cardFrameRect(canvasWidth: geo.size.width, canvasHeight: geo.size.height)
+            ZStack {
+                LiveCameraView(
+                    stillCaptureNonce: $stillCaptureNonce,
+                    exposureLockStatus: $exposureLockStatus,
+                    onStillCaptured: handleStillCapture,
+                    onFrameCaptured: processLiveCameraFrame
+                )
+                .environmentObject(calibrationEngine)
+
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.cyan, lineWidth: 2)
+                    .frame(width: neon.w, height: neon.h)
+                    .position(x: neon.x + neon.w / 2, y: neon.y + neon.h / 2)
+                    .allowsHitTesting(false)
+
                 ZStack {
-                    Circle().stroke(calibrationEngine.isPerfectlyLevel ? Color.green : Color.red, lineWidth: 3).frame(width: 45, height: 45)
-                    Circle().fill(calibrationEngine.isPerfectlyLevel ? Color.green : Color.orange).frame(width: 10, height: 10).offset(x: CGFloat(calibrationEngine.currentRoll * 4), y: CGFloat(calibrationEngine.currentPitch * 4))
-                }; Spacer()
-            }.padding(.top, 10)
-            // NEW: while on the front-centering phase and a card is detected but the
-            // averaged reading isn't stable yet, prompt the user to hold steady — or, if
-            // the phone isn't level, prompt that first. FIXED: the level bubble previously
-            // had no effect on the actual scan; now a tilted phone is called out explicitly
-            // and (see processLiveCameraFrame) frames captured while tilted are excluded
-            // from the centering average entirely, so the bubble now genuinely matters.
-            if isCardDetected && currentPhase == .frontCentering && !isCenteringStable {
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(guideBoxColor, lineWidth: guideBoxLineWidth)
+                    if !isCardDetected {
+                        VStack {
+                            Image(systemName: "viewfinder").font(.title2)
+                            Text("FILL NEON 2.5×3.5").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4)
+                        }.foregroundColor(.white)
+                    } else if let centeringRatio = scanResult {
+                        CenteringGuideOverlay(ratios: centeringRatio, size: CGSize(width: neon.w, height: neon.h))
+                    }
+                }
+                .frame(width: neon.w, height: neon.h)
+                .position(x: neon.x + neon.w / 2, y: neon.y + neon.h / 2)
+                .allowsHitTesting(false)
+
                 VStack {
-                    Spacer()
-                    Text(calibrationEngine.isPerfectlyLevel ? "HOLD STEADY... \(centeringSampleCount)/4" : "LEVEL THE PHONE")
-                        .font(.caption2).bold()
-                        .padding(6)
-                        .background(Color.black.opacity(0.6))
-                        .foregroundColor(.white)
-                        .cornerRadius(6)
-                        .padding(.bottom, 8)
+                    ZStack {
+                        Circle().stroke(calibrationEngine.isPerfectlyLevel ? Color.green : Color.red, lineWidth: 3).frame(width: 45, height: 45)
+                        Circle().fill(calibrationEngine.isPerfectlyLevel ? Color.green : Color.orange).frame(width: 10, height: 10).offset(x: CGFloat(calibrationEngine.currentRoll * 4), y: CGFloat(calibrationEngine.currentPitch * 4))
+                    }; Spacer()
+                }.padding(.top, 10)
+                if isCardDetected && currentPhase == .frontCentering && !isCenteringStable {
+                    VStack {
+                        Spacer()
+                        Text(calibrationEngine.isPerfectlyLevel ? "HOLD STEADY... \(centeringSampleCount)/4" : "LEVEL THE PHONE")
+                            .font(.caption2).bold()
+                            .padding(6)
+                            .background(Color.black.opacity(0.6))
+                            .foregroundColor(.white)
+                            .cornerRadius(6)
+                            .padding(.bottom, 8)
+                    }
                 }
             }
-        }.padding(.horizontal)
+        }
+        .frame(minHeight: 320)
+        .frame(maxHeight: 420)
+        .cornerRadius(12)
+        .clipped()
+        .padding(.horizontal)
+    }
+
+    private var nativeStillGradeControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                TextField("https://192.168.x.x:5000", text: $judgeServerURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .font(.system(.caption, design: .monospaced))
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: judgeServerURL) {
+                        UserDefaults.standard.set(judgeServerURL, forKey: JudgeAPIClient.serverURLDefaultsKey)
+                    }
+            }
+            Text(exposureLockStatus)
+                .font(.caption2)
+                .foregroundColor(exposureLockStatus.contains("locked") ? .green : .orange)
+            Text("Lock AE on the empty mat, then fill the neon window. Still JPEG — not the live preview.")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            Button(action: requestNativeStillGrade) {
+                HStack {
+                    if isRemoteGrading { ProgressView().tint(.white) }
+                    Text(isRemoteGrading ? "Uploading still…" : "Capture Still & Grade")
+                        .bold()
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(isRemoteGrading ? Color.gray : Color.cyan)
+                .foregroundColor(.black)
+                .cornerRadius(10)
+            }
+            .disabled(isRemoteGrading)
+            if let lastRemoteError {
+                Text(lastRemoteError)
+                    .font(.caption2)
+                    .foregroundColor(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !remoteGradeSummary.isEmpty {
+                Text(remoteGradeSummary)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemBackground))
+                    .cornerRadius(8)
+            }
+        }
+        .padding(.horizontal)
     }
 
     private var vaultAnalyticsView: some View {
@@ -549,16 +636,66 @@ struct CardScannerView: View {
         }
     }
     @ViewBuilder
-    private func CenteringGuideOverlay(ratios: CenteringResult) -> some View {
+    private func CenteringGuideOverlay(ratios: CenteringResult, size: CGSize = CGSize(width: 170, height: 210)) -> some View {
         ZStack {
-            Path { $0.move(to: CGPoint(x: 0, y: 105)); $0.addLine(to: CGPoint(x: 170, y: 105)) }.stroke(Color.blue.opacity(0.3), lineWidth: 1)
-            Path { $0.move(to: CGPoint(x: 85, y: 0)); $0.addLine(to: CGPoint(x: 85, y: 210)) }.stroke(Color.blue.opacity(0.3), lineWidth: 1)
+            Path { $0.move(to: CGPoint(x: 0, y: size.height / 2)); $0.addLine(to: CGPoint(x: size.width, y: size.height / 2)) }.stroke(Color.blue.opacity(0.3), lineWidth: 1)
+            Path { $0.move(to: CGPoint(x: size.width / 2, y: 0)); $0.addLine(to: CGPoint(x: size.width / 2, y: size.height)) }.stroke(Color.blue.opacity(0.3), lineWidth: 1)
             VStack {
                 HStack { Text(String(format: "L:%.0f%%", ratios.leftRightRatio.left)); Spacer(); Text(String(format: "R:%.0f%%", ratios.leftRightRatio.right)) }
                 Spacer()
                 HStack { Text(String(format: "T:%.0f%%", ratios.topBottomRatio.top)); Spacer(); Text(String(format: "B:%.0f%%", ratios.topBottomRatio.bottom)) }
             }.font(.system(size: 9, weight: .bold)).foregroundColor(.green).padding(6)
-        }.frame(width: 170, height: 210)
+        }.frame(width: size.width, height: size.height)
+    }
+
+    private func requestNativeStillGrade() {
+        lastRemoteError = nil
+        remoteGradeSummary = ""
+        guard JudgeAPIClient.normalizedBaseURL(judgeServerURL) != nil else {
+            lastRemoteError = JudgeAPIClient.APIError.invalidServerURL.localizedDescription
+            return
+        }
+        stillCaptureNonce += 1
+    }
+
+    private func handleStillCapture(_ result: Result<LiveCameraView.StillCapture, Error>) {
+        switch result {
+        case .failure(let error):
+            lastRemoteError = error.localizedDescription
+        case .success(let still):
+            isRemoteGrading = true
+            lastRemoteError = nil
+            Task {
+                do {
+                    let cropped = try CardAlignmentCrop.cropJPEG(still.jpeg, previewSize: still.previewSize)
+                    let tilt = JudgeAPIClient.TiltSnapshot(
+                        pitchDeg: calibrationEngine.currentPitch,
+                        rollDeg: calibrationEngine.currentRoll,
+                        isLevel: calibrationEngine.isPerfectlyLevel
+                    )
+                    let cardType = selectedCategory == .sports ? "SPORTS" : "TCG"
+                    let report = try await JudgeAPIClient.shared.grade(
+                        jpeg: cropped,
+                        baseURL: judgeServerURL,
+                        name: automaticCardIdentifier,
+                        cardType: cardType,
+                        tilt: tilt
+                    )
+                    await MainActor.run {
+                        isRemoteGrading = false
+                        remoteGradeSummary = report.summaryText
+                        if !report.ok {
+                            lastRemoteError = "Server returned ok=false"
+                        }
+                    }
+                } catch {
+                    await MainActor.run {
+                        isRemoteGrading = false
+                        lastRemoteError = error.localizedDescription
+                    }
+                }
+            }
+        }
     }
     private func updatePricingAndGrades() {
         isSaveConfirmed = false
