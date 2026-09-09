@@ -32,7 +32,7 @@ struct CardScannerView: View {
     @State private var isLoadingPrice = false
     @State private var isSaveConfirmed = false
     @State private var isCardDetected = false
-    @State private var automaticCardIdentifier = "Processing Viewport..."
+    @State private var automaticCardIdentifier = "unknown"
 
     @State private var autoSurfaceScratches = 0
     @State private var autoEdgeWhitening = 0
@@ -620,7 +620,7 @@ struct CardScannerView: View {
         centeringSampleCount = 0
         isAutoAdvancing = false
         currentPhase = .frontCentering
-        automaticCardIdentifier = selectedCategory == .sports ? "Ryan Feltner Neon Pink Refractor #16" : "Charizard Holo Base Set #4"
+        automaticCardIdentifier = "unknown"
     }
     private func processLiveCameraFrame(_ imageFrame: CGImage) {
         guard !isLoadingPrice && !isSaveConfirmed else { return }
@@ -659,9 +659,10 @@ struct CardScannerView: View {
                 let automatedDefects = defectAnalyzer.analyzeCardSurface(from: imageFrame)
                 self.centeringAnalyzer.extractCardIdentifierText(from: imageFrame, cardBoundingBox: cardRect) { foundTextString in
                     Task { @MainActor in
-                        if let serialCode = foundTextString { self.automaticCardIdentifier = serialCode }
-                        else if self.automaticCardIdentifier == "Processing Viewport..." || self.automaticCardIdentifier.isEmpty {
-                            self.automaticCardIdentifier = self.selectedCategory == .sports ? "Ryan Feltner Neon Pink Refractor #16" : "Charizard Holo Base Set #4"
+                        if let serialCode = foundTextString, !serialCode.isEmpty {
+                            self.automaticCardIdentifier = serialCode
+                        } else if self.automaticCardIdentifier.isEmpty || self.automaticCardIdentifier == "Processing Viewport..." {
+                            self.automaticCardIdentifier = "unknown"
                         }
                     }
                 }
@@ -750,7 +751,7 @@ struct ActiveScanReportSheet: View {
             Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
             Text("AI GRADE REPORT").font(.headline).bold().foregroundColor(.blue)
             VStack(alignment: .leading, spacing: 6) {
-                Text(value?.cardName ?? "Ryan Feltner Neon Pink Refractor #16").font(.title3).bold()
+                Text(value?.cardName ?? "unknown").font(.title3).bold()
                 Text(value?.setName ?? "2024 Topps Update Series").font(.subheadline).foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
