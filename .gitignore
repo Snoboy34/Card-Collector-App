@@ -4,3 +4,6 @@ uploads/
 .DS_Store
 .vscode/
 .idea/
+xcuserdata/
+*.xcuserstate
+DerivedData/
