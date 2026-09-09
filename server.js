@@ -39,6 +39,7 @@ const multer = require('multer');
 const grading = require('./services/grading_engine');
 const classifier = require('./services/classifier_engine');
 const wallet = require('./services/wallet_engine');
+const cardFamily = require('./services/card_family_lookup');
 const lanHttps = require('./scripts/lan_https');
 const scanLevel = require('./public/scan_level');
 
@@ -114,6 +115,18 @@ function parseGradingOptions(body) {
   if (tilt) opts.captureTilt = tilt;
   if (scanLevel.parseAlignmentCrop(body)) opts.alignmentCrop = true;
   return opts;
+}
+
+/**
+ * Diagnostic-only family ID from client OCR text. Does not feed gradeBuffer.
+ * Missing/ambiguous OCR → unknown (never a guessed set).
+ */
+function attachCardIdentity(report, body) {
+  const identity = cardFamily.identify(body);
+  if (report && typeof report === 'object') {
+    report.cardIdentity = identity;
+  }
+  return identity;
 }
 
 /**
@@ -289,9 +302,11 @@ app.get('/api/stats', (req, res) => {
  *   name      optional display name
  *   cardType  optional SPORTS | TCG (reserved for Phase 3 corner templates)
  *   debug     optional "true" to attach metrology dumps
+ *   ocrLines  optional JSON array of strings from native still OCR
  *
  * Response: { ok: true, item } where item.gradingReport is the Judge payload
  * from services/grading_engine.js (10-point finalScore + 0–100 projections).
+ * item.cardIdentity is diagnostic (familyId / ocrLines / match) and is not a grade.
  */
 app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
   try {
@@ -310,12 +325,14 @@ app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
 
     // 2) Strict 4-phase Judge pipeline (centering / surface / edges / corners + 0.5 ceiling)
     const report = await grading.gradeBuffer(req.file.buffer, opts);
+    const cardIdentity = attachCardIdentity(report, req.body);
 
     const item = {
       id: String(Date.now()),
       name: req.body.name || safe || 'Untitled Card',
       imagePath: `/uploads/${filename}`,
       category: classification,
+      cardIdentity: cardIdentity,
       gradingReport: report,
       createdAt: new Date().toISOString()
     };
@@ -342,12 +359,14 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     const orig = req.file.originalname || path.basename(req.file.path);
     const classification = await classifier.classifyBuffer(buffer, { filename: orig });
     const report = await grading.gradeBuffer(buffer, opts);
+    const cardIdentity = attachCardIdentity(report, req.body);
 
     const item = {
       id: String(Date.now()),
       name: req.body.name || 'Untitled Card',
       imagePath: `/uploads/${path.basename(req.file.path)}`,
       category: classification,
+      cardIdentity: cardIdentity,
       gradingReport: report,
       createdAt: new Date().toISOString()
     };

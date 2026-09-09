@@ -1,0 +1,13 @@
+{
+  "families": [
+    { "id": "1976-topps", "tokens": ["1976", "topps"] },
+    { "id": "1983-topps", "tokens": ["1983", "topps"] },
+    { "id": "1984-topps", "tokens": ["1984", "topps"] },
+    { "id": "1989-pro-set", "tokens": ["1989", "pro set"] },
+    { "id": "1991-upper-deck", "tokens": ["1991", "upper deck"] },
+    { "id": "1993-bowman", "tokens": ["1993", "bowman"] },
+    { "id": "1993-topps", "tokens": ["1993", "topps"] },
+    { "id": "1999-victory", "tokens": ["1999", "victory"] },
+    { "id": "2016-topps-olympic", "tokens": ["2016", "topps", "olympic"] }
+  ]
+}
