@@ -669,6 +669,7 @@ struct CardScannerView: View {
             Task {
                 do {
                     let cropped = try CardAlignmentCrop.cropJPEG(still.jpeg, previewSize: still.previewSize)
+                    let ocrLines = (try? CardStillOCR.recognizeLines(from: cropped)) ?? []
                     let tilt = JudgeAPIClient.TiltSnapshot(
                         pitchDeg: calibrationEngine.currentPitch,
                         rollDeg: calibrationEngine.currentRoll,
@@ -680,7 +681,8 @@ struct CardScannerView: View {
                         baseURL: judgeServerURL,
                         name: automaticCardIdentifier,
                         cardType: cardType,
-                        tilt: tilt
+                        tilt: tilt,
+                        ocrLines: ocrLines
                     )
                     await MainActor.run {
                         isRemoteGrading = false

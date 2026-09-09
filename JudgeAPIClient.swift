@@ -25,6 +25,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var bandVsInteriorMin: Double?
         var bandVsInteriorJSON: String?
         var alignmentCrop: Bool?
+        var familyId: String?
+        var familyMatch: String?
+        var ocrLines: [String]
         var rawJSON: String
         var summaryText: String
     }
@@ -53,7 +56,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         baseURL: String,
         name: String,
         cardType: String?,
-        tilt: TiltSnapshot?
+        tilt: TiltSnapshot?,
+        ocrLines: [String] = []
     ) async throws -> RemoteReport {
         guard let root = Self.normalizedBaseURL(baseURL) else {
             throw APIError.invalidServerURL
@@ -69,7 +73,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             jpeg: jpeg,
             name: name,
             cardType: cardType,
-            tilt: tilt
+            tilt: tilt,
+            ocrLines: ocrLines
         )
 
         let (data, response) = try await session.data(for: request)
@@ -131,7 +136,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         jpeg: Data,
         name: String,
         cardType: String?,
-        tilt: TiltSnapshot?
+        tilt: TiltSnapshot?,
+        ocrLines: [String]
     ) -> Data {
         var body = Data()
         func appendField(_ name: String, _ value: String) {
@@ -155,6 +161,10 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             appendField("capturePitch", String(format: "%.2f", tilt.pitchDeg))
             appendField("captureRoll", String(format: "%.2f", tilt.rollDeg))
             appendField("captureLevel", tilt.isLevel ? "true" : "false")
+        }
+        if let payload = try? JSONSerialization.data(withJSONObject: ocrLines),
+           let json = String(data: payload, encoding: .utf8) {
+            appendField("ocrLines", json)
         }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         return body
@@ -186,6 +196,10 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let sub = report?["subGradesLabel"] as? String
         let flaw = report?["primaryFlawDescription"] as? String
         let alignmentCrop = (boolValue(diagnostics?["alignmentCrop"]) ?? false) || (boolValue(report?["alignmentCrop"]) ?? false)
+        let identity = (item?["cardIdentity"] as? [String: Any]) ?? (report?["cardIdentity"] as? [String: Any])
+        let familyId = identity?["familyId"] as? String
+        let familyMatch = identity?["match"] as? String
+        let ocrLines = (identity?["ocrLines"] as? [String]) ?? []
 
         var lines: [String] = []
         if let finalScore { lines.append(String(format: "finalScore  %.1f", finalScore)) }
@@ -197,6 +211,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         if let bandMin { lines.append(String(format: "bandVsInteriorMin  %.3f", bandMin)) }
         if let bandJSON { lines.append("bandVsInterior  \(bandJSON)") }
         if alignmentCrop == true { lines.append("alignmentCrop  true") }
+        if let familyId { lines.append("familyId  \(familyId)") }
+        if let familyMatch { lines.append("match  \(familyMatch)") }
+        if !ocrLines.isEmpty { lines.append("ocrLines  \(ocrLines.joined(separator: " | "))") }
         if lines.isEmpty { lines.append(raw) }
 
         return RemoteReport(
@@ -210,6 +227,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             bandVsInteriorMin: bandMin,
             bandVsInteriorJSON: bandJSON,
             alignmentCrop: alignmentCrop,
+            familyId: familyId,
+            familyMatch: familyMatch,
+            ocrLines: ocrLines,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )

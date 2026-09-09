@@ -19,6 +19,7 @@
 		BB000000000000000000000A /* UserSecurity.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000000A /* UserSecurity.swift */; };
 		BB000000000000000000000B /* CardAlignmentCrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000000B /* CardAlignmentCrop.swift */; };
 		BB000000000000000000000C /* JudgeAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000000C /* JudgeAPIClient.swift */; };
+		BB0000000000000000000011 /* CardStillOCR.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* CardStillOCR.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +35,7 @@
 		AA000000000000000000000A /* UserSecurity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSecurity.swift; sourceTree = "<group>"; };
 		AA000000000000000000000B /* CardAlignmentCrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardAlignmentCrop.swift; sourceTree = "<group>"; };
 		AA000000000000000000000C /* JudgeAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JudgeAPIClient.swift; sourceTree = "<group>"; };
+		AA0000000000000000000011 /* CardStillOCR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardStillOCR.swift; sourceTree = "<group>"; };
 		AA000000000000000000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA000000000000000000000E /* CardGrade.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CardGrade.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -64,6 +66,7 @@
 				AA0000000000000000000002 /* CameraCalibration.swift */,
 				AA000000000000000000000B /* CardAlignmentCrop.swift */,
 				AA0000000000000000000003 /* CardScannerView.swift */,
+				AA0000000000000000000011 /* CardStillOCR.swift */,
 				AA0000000000000000000004 /* CenteringAnalyzer.swift */,
 				AA0000000000000000000005 /* DefectAnalyzer.swift */,
 				AA000000000000000000000C /* JudgeAPIClient.swift */,
@@ -157,6 +160,7 @@
 				BB0000000000000000000002 /* CameraCalibration.swift in Sources */,
 				BB000000000000000000000B /* CardAlignmentCrop.swift in Sources */,
 				BB0000000000000000000003 /* CardScannerView.swift in Sources */,
+				BB0000000000000000000011 /* CardStillOCR.swift in Sources */,
 				BB0000000000000000000004 /* CenteringAnalyzer.swift in Sources */,
 				BB0000000000000000000005 /* DefectAnalyzer.swift in Sources */,
 				BB000000000000000000000C /* JudgeAPIClient.swift in Sources */,
