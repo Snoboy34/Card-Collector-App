@@ -10,6 +10,7 @@ public final class CameraCalibration: ObservableObject {
     @Published public var currentPitch: Double = 0.0
     @Published public var currentRoll: Double = 0.0
     @Published public var isPerfectlyLevel: Bool = false
+    @Published public var isMotionAvailable: Bool = false
 
     private let motionManager = CMMotionManager()
     private let updateInterval: TimeInterval = 0.1
@@ -22,7 +23,8 @@ public final class CameraCalibration: ObservableObject {
 
     /// Commences high-frequency gyroscope monitoring to enforce leveling rules
     public func startDeviceLevelMonitoring() {
-        guard motionManager.isDeviceMotionAvailable else { return }
+        isMotionAvailable = motionManager.isDeviceMotionAvailable
+        guard isMotionAvailable else { return }
 
         motionManager.deviceMotionUpdateInterval = updateInterval
         motionManager.startDeviceMotionUpdates(to: .main) { [weak self] motionData, error in

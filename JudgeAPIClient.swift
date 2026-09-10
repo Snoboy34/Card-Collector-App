@@ -14,6 +14,23 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var isLevel: Bool
     }
 
+    struct SweepFrame {
+        var bin: String
+        var jpeg: Data
+        var pitchDeg: Double
+        var rollDeg: Double
+    }
+
+    struct SurfaceSweepRow {
+        var bin: String?
+        var pitch: Double?
+        var roll: Double?
+        var scratchCount: Double?
+        var dimpleCount: Double?
+        var creaseSeverity: Double?
+        var glareFrac: Double?
+    }
+
     struct RemoteReport {
         var ok: Bool
         var finalScore: Double?
@@ -28,6 +45,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var familyId: String?
         var familyMatch: String?
         var ocrLines: [String]
+        var surfaceSweep: [SurfaceSweepRow]
         var rawJSON: String
         var summaryText: String
     }
@@ -57,7 +75,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         name: String,
         cardType: String?,
         tilt: TiltSnapshot?,
-        ocrLines: [String] = []
+        ocrLines: [String] = [],
+        sweepFrames: [SweepFrame] = []
     ) async throws -> RemoteReport {
         guard let root = Self.normalizedBaseURL(baseURL) else {
             throw APIError.invalidServerURL
@@ -74,7 +93,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             name: name,
             cardType: cardType,
             tilt: tilt,
-            ocrLines: ocrLines
+            ocrLines: ocrLines,
+            sweepFrames: sweepFrames
         )
 
         let (data, response) = try await session.data(for: request)
@@ -137,7 +157,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         name: String,
         cardType: String?,
         tilt: TiltSnapshot?,
-        ocrLines: [String]
+        ocrLines: [String],
+        sweepFrames: [SweepFrame]
     ) -> Data {
         var body = Data()
         func appendField(_ name: String, _ value: String) {
@@ -153,7 +174,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         appendField("name", name)
         appendField("alignmentCrop", "true")
         appendField("debug", "true")
-        appendField("captureMode", "native-still")
+        appendField("captureMode", sweepFrames.isEmpty ? "native-still" : "native-sweep")
         if let cardType, !cardType.isEmpty {
             appendField("cardType", cardType)
         }
@@ -161,6 +182,27 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             appendField("capturePitch", String(format: "%.2f", tilt.pitchDeg))
             appendField("captureRoll", String(format: "%.2f", tilt.rollDeg))
             appendField("captureLevel", tilt.isLevel ? "true" : "false")
+        }
+        if !sweepFrames.isEmpty {
+            let meta: [[String: Any]] = sweepFrames.map { frame in
+                [
+                    "bin": frame.bin,
+                    "pitch": (frame.pitchDeg * 100).rounded() / 100,
+                    "roll": (frame.rollDeg * 100).rounded() / 100
+                ]
+            }
+            if let payload = try? JSONSerialization.data(withJSONObject: meta),
+               let json = String(data: payload, encoding: .utf8) {
+                appendField("sweepMeta", json)
+            }
+            for frame in sweepFrames {
+                let filename = "sweep-\(frame.bin).jpg"
+                body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                body.append("Content-Disposition: form-data; name=\"sweep\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+                body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+                body.append(frame.jpeg)
+                body.append("\r\n".data(using: .utf8)!)
+            }
         }
         if let payload = try? JSONSerialization.data(withJSONObject: ocrLines),
            let json = String(data: payload, encoding: .utf8) {
@@ -200,6 +242,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let familyId = identity?["familyId"] as? String
         let familyMatch = identity?["match"] as? String
         let ocrLines = (identity?["ocrLines"] as? [String]) ?? []
+        let surfaceSweep = parseSurfaceSweep(report?["surfaceSweep"])
 
         var lines: [String] = []
         if let finalScore { lines.append(String(format: "finalScore  %.1f", finalScore)) }
@@ -214,6 +257,12 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         if let familyId { lines.append("familyId  \(familyId)") }
         if let familyMatch { lines.append("match  \(familyMatch)") }
         if !ocrLines.isEmpty { lines.append("ocrLines  \(ocrLines.joined(separator: " | "))") }
+        if !surfaceSweep.isEmpty {
+            lines.append("surfaceSweep  \(surfaceSweep.count) frames (diagnostic, SUR from level still)")
+            for row in surfaceSweep {
+                lines.append(formatSweepRow(row))
+            }
+        }
         if lines.isEmpty { lines.append(raw) }
 
         return RemoteReport(
@@ -230,9 +279,34 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             familyId: familyId,
             familyMatch: familyMatch,
             ocrLines: ocrLines,
+            surfaceSweep: surfaceSweep,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )
+    }
+
+    private static func parseSurfaceSweep(_ value: Any?) -> [SurfaceSweepRow] {
+        guard let rows = value as? [[String: Any]] else { return [] }
+        return rows.map { row in
+            SurfaceSweepRow(
+                bin: row["bin"] as? String,
+                pitch: doubleValue(row["pitch"]),
+                roll: doubleValue(row["roll"]),
+                scratchCount: doubleValue(row["scratchCount"]),
+                dimpleCount: doubleValue(row["dimpleCount"]),
+                creaseSeverity: doubleValue(row["creaseSeverity"]),
+                glareFrac: doubleValue(row["glareFrac"])
+            )
+        }
+    }
+
+    private static func formatSweepRow(_ row: SurfaceSweepRow) -> String {
+        func fmt(_ value: Double?, _ digits: Int) -> String {
+            guard let value else { return "—" }
+            return String(format: "%.\(digits)f", value)
+        }
+        let bin = row.bin ?? "?"
+        return "  \(bin)  P=\(fmt(row.pitch, 1)) R=\(fmt(row.roll, 1)) scratch=\(fmt(row.scratchCount, 0)) dimple=\(fmt(row.dimpleCount, 0)) crease=\(fmt(row.creaseSeverity, 2)) glare=\(fmt(row.glareFrac, 3))"
     }
 
     private static func doubleValue(_ value: Any?) -> Double? {
