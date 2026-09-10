@@ -22,6 +22,17 @@
   var SMOOTH_SAMPLE_COUNT = 5;
   var DISPLAY_CLAMP_DEG = 12;
   var LOG_INTERVAL_MS = 250;
+  var SWEEP_TARGET_DEG = 12;
+  var SWEEP_HOLD_MS = 250;
+  var SWEEP_BIN_TOLERANCE_DEG = 3.5;
+  var SWEEP_OFF_AXIS_MAX_DEG = 4;
+  var SWEEP_BINS = [
+    { id: 'level', pitch: 0, roll: 0, prompt: 'Hold level — first still' },
+    { id: 'pitchPlus', pitch: 12, roll: 0, prompt: 'Tip the top of the phone toward you until the dot hits the mark' },
+    { id: 'pitchMinus', pitch: -12, roll: 0, prompt: 'Tip the top of the phone away from you until the dot hits the mark' },
+    { id: 'rollPlus', pitch: 0, roll: 12, prompt: 'Tip the phone right until the dot hits the mark' },
+    { id: 'rollMinus', pitch: 0, roll: -12, prompt: 'Tip the phone left until the dot hits the mark' }
+  ];
 
   function isFiniteNumber(value) {
     return typeof value === 'number' && isFinite(value);
@@ -116,6 +127,62 @@
     return body.alignmentCrop === 'true' || body.alignmentCrop === true || body.alignmentCrop === '1';
   }
 
+  function matchSweepBin(pitchDeg, rollDeg, opts) {
+    if (!isFiniteNumber(pitchDeg) || !isFiniteNumber(rollDeg)) return null;
+    var binTol = opts && opts.binToleranceDeg != null ? opts.binToleranceDeg : SWEEP_BIN_TOLERANCE_DEG;
+    var offMax = opts && opts.offAxisMaxDeg != null ? opts.offAxisMaxDeg : SWEEP_OFF_AXIS_MAX_DEG;
+    var levelTol = opts && opts.levelToleranceDeg != null ? opts.levelToleranceDeg : LEVEL_TOLERANCE_DEG;
+    if (isDeviceLevel(pitchDeg, rollDeg, levelTol)) return 'level';
+    var bins = [
+      { id: 'pitchPlus', targetPitch: SWEEP_TARGET_DEG, targetRoll: 0 },
+      { id: 'pitchMinus', targetPitch: -SWEEP_TARGET_DEG, targetRoll: 0 },
+      { id: 'rollPlus', targetPitch: 0, targetRoll: SWEEP_TARGET_DEG },
+      { id: 'rollMinus', targetPitch: 0, targetRoll: -SWEEP_TARGET_DEG }
+    ];
+    var i;
+    for (i = 0; i < bins.length; i++) {
+      var b = bins[i];
+      var dPitch = Math.abs(pitchDeg - b.targetPitch);
+      var dRoll = Math.abs(rollDeg - b.targetRoll);
+      if (b.targetPitch !== 0 && dPitch <= binTol && Math.abs(rollDeg) <= offMax) return b.id;
+      if (b.targetRoll !== 0 && dRoll <= binTol && Math.abs(pitchDeg) <= offMax) return b.id;
+    }
+    return null;
+  }
+
+  function nextSweepBin(capturedIds) {
+    var have = capturedIds || [];
+    var i;
+    for (i = 0; i < SWEEP_BINS.length; i++) {
+      if (have.indexOf(SWEEP_BINS[i].id) === -1) return SWEEP_BINS[i];
+    }
+    return null;
+  }
+
+  function shouldGrabSweepBin(inTargetBin, heldMs, alreadyGrabbed, holdMs) {
+    var need = holdMs == null ? SWEEP_HOLD_MS : holdMs;
+    return Boolean(inTargetBin) && !alreadyGrabbed && Number(heldMs) >= need;
+  }
+
+  function parseSweepMeta(body) {
+    if (!body || body.sweepMeta == null) return [];
+    var raw = body.sweepMeta;
+    if (typeof raw === 'string') {
+      try { raw = JSON.parse(raw); } catch (e) { return []; }
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw.map(function (row) {
+      if (!row || typeof row !== 'object') return null;
+      var pitch = parseFloat(row.pitch);
+      var roll = parseFloat(row.roll);
+      return {
+        bin: row.bin ? String(row.bin) : null,
+        pitch: isFinite(pitch) ? Math.round(pitch * 100) / 100 : null,
+        roll: isFinite(roll) ? Math.round(roll * 100) / 100 : null
+      };
+    }).filter(Boolean);
+  }
+
   function parseCaptureTilt(body) {
     if (!body) return null;
     var pitch = parseFloat(body.capturePitch);
@@ -148,7 +215,16 @@
     videoCoverCrop: videoCoverCrop,
     alignmentCropInVideo: alignmentCropInVideo,
     parseAlignmentCrop: parseAlignmentCrop,
-    parseCaptureTilt: parseCaptureTilt
+    parseCaptureTilt: parseCaptureTilt,
+    parseSweepMeta: parseSweepMeta,
+    matchSweepBin: matchSweepBin,
+    nextSweepBin: nextSweepBin,
+    shouldGrabSweepBin: shouldGrabSweepBin,
+    SWEEP_TARGET_DEG: SWEEP_TARGET_DEG,
+    SWEEP_HOLD_MS: SWEEP_HOLD_MS,
+    SWEEP_BIN_TOLERANCE_DEG: SWEEP_BIN_TOLERANCE_DEG,
+    SWEEP_OFF_AXIS_MAX_DEG: SWEEP_OFF_AXIS_MAX_DEG,
+    SWEEP_BINS: SWEEP_BINS
   };
 
   if (typeof module !== 'undefined' && module.exports) {

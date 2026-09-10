@@ -249,6 +249,22 @@ button:focus, a:focus{ outline:2px solid rgba(0,212,255,0.12); outline-offset:3p
   transition: transform 80ms linear, background 80ms linear;
 }
 .level-hud.is-level .level-dot { background: #00ff88; }
+.sweep-tick {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.4);
+}
+.sweep-tick-n { top: -3px; left: 50%; transform: translateX(-50%); }
+.sweep-tick-s { bottom: -3px; left: 50%; transform: translateX(-50%); }
+.sweep-tick-e { right: -3px; top: 50%; transform: translateY(-50%); }
+.sweep-tick-w { left: -3px; top: 50%; transform: translateY(-50%); }
+.sweep-tick.is-target {
+  background: #00f6ff;
+  box-shadow: 0 0 8px #00f6ff;
+}
+.sweep-tick.is-done { background: #00ff88; }
 .level-readout {
   position: absolute;
   top: calc(100% + 4px);

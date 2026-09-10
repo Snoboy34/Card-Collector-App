@@ -1572,6 +1572,146 @@ function measureSurfaceDefects(pixels, blurred, imgWidth, box) {
 }
 
 /**
+ * Surface-only metrology for a sweep still. Does not score, does not set
+ * incomplete, and must not be used as a substitute for gradeBuffer.
+ *
+ * @returns {Promise<{ scratchCount: number|null, dimpleCount: number|null, creaseSeverity: number|null, glareFrac: number|null, error?: string }>}
+ */
+async function diagnoseSurfaceBuffer(buffer, options) {
+  options = Object.assign({ maxDim: 900 }, options || {});
+  if (!sharp || !buffer || !buffer.length) {
+    return {
+      scratchCount: null,
+      dimpleCount: null,
+      creaseSeverity: null,
+      glareFrac: null,
+      error: 'unreadable'
+    };
+  }
+  try {
+    let pipeline = sharp(buffer, { failOnError: false }).rotate();
+    const meta = await pipeline.metadata();
+    const srcW = meta.width || 1;
+    const srcH = meta.height || 1;
+    const shouldRotate = srcW > srcH * PORTRAIT_LOCK_WIDTH_RATIO;
+    if (shouldRotate) pipeline = pipeline.rotate(90);
+    const postRotate = shouldRotate
+      ? { width: srcH, height: srcW }
+      : { width: srcW, height: srcH };
+    const ratio = Math.max(postRotate.width, postRotate.height) / options.maxDim;
+    if (ratio > 1) {
+      pipeline = pipeline.resize({
+        width: Math.round(postRotate.width / ratio),
+        height: Math.round(postRotate.height / ratio)
+      });
+    }
+    const { data: paperData, info: paperInfo } = await pipeline
+      .clone()
+      .greyscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const { data, info } = await pipeline
+      .greyscale()
+      .normalize()
+      .blur(1)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const width = info.width;
+    const height = info.height;
+    const pixels = new Uint8Array(data);
+    const paperPixels = new Uint8Array(paperData);
+    if (paperInfo.width !== width || paperInfo.height !== height) {
+      throw new Error('paper greyscale size does not match normalized scan');
+    }
+    const { data: blurredData } = await sharp(Buffer.from(pixels), {
+      raw: { width, height, channels: 1 }
+    }).blur(4).raw().toBuffer({ resolveWithObject: true });
+    const blurred = new Uint8Array(blurredData);
+    const box = findCardBoundingBox(pixels, width, height);
+    let centeringBox = box;
+    if (options.alignmentCrop) {
+      centeringBox = {
+        left: 0,
+        right: width - 1,
+        top: 0,
+        bottom: height - 1,
+        width: width,
+        height: height,
+        bgApprox: box.bgApprox
+      };
+    }
+    const getPaperPixel = function (cx, cy) {
+      const x = centeringBox.left + cx;
+      const y = centeringBox.top + cy;
+      if (x < 0 || y < 0 || x >= width || y >= height) return 0;
+      return paperPixels[y * width + x];
+    };
+    const interiorGrey = measureInteriorGrey(
+      getPaperPixel, centeringBox.width, centeringBox.height, null
+    );
+    const surface = measureSurfaceDefects(pixels, blurred, width, centeringBox);
+    return {
+      scratchCount: Number(surface.scratchCount) || 0,
+      dimpleCount: Number(surface.dimpleOrDentCount) || 0,
+      creaseSeverity: Number(surface.wrinkleOrCreaseSeverity) || 0,
+      glareFrac: interiorGrey.glareFrac == null ? null : round2(interiorGrey.glareFrac)
+    };
+  } catch (err) {
+    return {
+      scratchCount: null,
+      dimpleCount: null,
+      creaseSeverity: null,
+      glareFrac: null,
+      error: err && err.message ? err.message : String(err)
+    };
+  }
+}
+
+function surfaceSweepEntryFromGrade(report, tilt, bin) {
+  const penalties = (report && report.surfacePenalties) || {};
+  const interior = report && report.centeringDiagnostics &&
+    report.centeringDiagnostics.bandVsInterior &&
+    report.centeringDiagnostics.bandVsInterior.interior;
+  return {
+    bin: bin || 'level',
+    pitch: tilt && tilt.pitchDeg != null ? tilt.pitchDeg : null,
+    roll: tilt && tilt.rollDeg != null ? tilt.rollDeg : null,
+    scratchCount: penalties.scratchCount != null ? penalties.scratchCount : null,
+    dimpleCount: penalties.dimpleOrDentCount != null ? penalties.dimpleOrDentCount : null,
+    creaseSeverity: penalties.wrinkleOrCreaseSeverity != null ? penalties.wrinkleOrCreaseSeverity : null,
+    glareFrac: interior && interior.glareFrac != null ? interior.glareFrac : null
+  };
+}
+
+/**
+ * Diagnostic sweep array. First row is always the graded level still.
+ * Extra frames are measured with diagnoseSurfaceBuffer only — they never
+ * replace subGrades.surface.
+ */
+async function buildSurfaceSweep(report, extraFrames, options) {
+  const opts = options || {};
+  const rows = [surfaceSweepEntryFromGrade(report, opts.levelTilt, 'level')];
+  const extras = Array.isArray(extraFrames) ? extraFrames : [];
+  for (let i = 0; i < extras.length; i++) {
+    const extra = extras[i] || {};
+    const measured = await diagnoseSurfaceBuffer(extra.buffer, {
+      alignmentCrop: Boolean(opts.alignmentCrop),
+      maxDim: opts.maxDim
+    });
+    rows.push({
+      bin: extra.bin || null,
+      pitch: extra.pitch != null ? extra.pitch : null,
+      roll: extra.roll != null ? extra.roll : null,
+      scratchCount: measured.scratchCount,
+      dimpleCount: measured.dimpleCount,
+      creaseSeverity: measured.creaseSeverity,
+      glareFrac: measured.glareFrac
+    });
+  }
+  return rows;
+}
+
+/**
  * Assemble the defensive / fallback report used when `sharp` is missing or
  * when decoding throws. Sub-grades are 0 so the wallet engine will not
  * invent a Gem Mint from a failed scan.
@@ -1928,6 +2068,9 @@ module.exports = {
   consensusRangePx,
   measureInteriorGrey,
   describeBandVsInterior,
+  diagnoseSurfaceBuffer,
+  buildSurfaceSweep,
+  surfaceSweepEntryFromGrade,
   BORDER_SAMPLE_SPREAD_MAX_PX,
   BORDER_SAMPLE_MIN_HITS,
   BORDER_MIN_MEDIAN_WIDTH_PX,
