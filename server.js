@@ -293,23 +293,45 @@ app.get('/api/stats', (req, res) => {
  * Response: { ok: true, item } where item.gradingReport is the Judge payload
  * from services/grading_engine.js (10-point finalScore + 0–100 projections).
  */
-app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
+const gradeUpload = memoryUpload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'sweep', maxCount: 8 }
+]);
+
+app.post('/api/grade', gradeUpload, async (req, res) => {
   try {
-    if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'image buffer required' });
+    const imageFile = req.files && req.files.image && req.files.image[0];
+    if (!imageFile || !imageFile.buffer) return res.status(400).json({ error: 'image buffer required' });
     const opts = parseGradingOptions(req.body);
 
     const ts = Date.now();
-    const orig = req.file.originalname || 'upload';
+    const orig = imageFile.originalname || 'upload';
     const safe = String(orig).replace(/\s+/g, '_').replace(/[^\w.-]/g, '');
     const filename = `${ts}_${safe}`;
     const filePath = path.join(uploadsDir, filename);
-    await fs.promises.writeFile(filePath, req.file.buffer);
+    await fs.promises.writeFile(filePath, imageFile.buffer);
 
     // 1) Classify the card (SPORTS | TCG | UNKNOWN)
-    const classification = await classifier.classifyBuffer(req.file.buffer, { filename: orig });
+    const classification = await classifier.classifyBuffer(imageFile.buffer, { filename: orig });
 
     // 2) Strict 4-phase Judge pipeline (centering / surface / edges / corners + 0.5 ceiling)
-    const report = await grading.gradeBuffer(req.file.buffer, opts);
+    const report = await grading.gradeBuffer(imageFile.buffer, opts);
+
+    const sweepFiles = (req.files && req.files.sweep) || [];
+    const sweepMeta = scanLevel.parseSweepMeta(req.body);
+    const extraFrames = sweepFiles.map(function (file, i) {
+      const meta = sweepMeta[i] || {};
+      return {
+        buffer: file.buffer,
+        bin: meta.bin || null,
+        pitch: meta.pitch,
+        roll: meta.roll
+      };
+    });
+    await grading.applySurfaceSweep(report, extraFrames, {
+      alignmentCrop: Boolean(opts.alignmentCrop),
+      levelTilt: opts.captureTilt
+    });
 
     const item = {
       id: String(Date.now()),
@@ -342,6 +364,10 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     const orig = req.file.originalname || path.basename(req.file.path);
     const classification = await classifier.classifyBuffer(buffer, { filename: orig });
     const report = await grading.gradeBuffer(buffer, opts);
+    await grading.applySurfaceSweep(report, [], {
+      alignmentCrop: Boolean(opts.alignmentCrop),
+      levelTilt: opts.captureTilt
+    });
 
     const item = {
       id: String(Date.now()),

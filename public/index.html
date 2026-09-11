@@ -143,6 +143,22 @@
     .level-hud.is-level .level-dot {
       background: var(--guide-ok);
     }
+    .sweep-tick {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.4);
+    }
+    .sweep-tick-n { top: -3px; left: 50%; transform: translateX(-50%); }
+    .sweep-tick-s { bottom: -3px; left: 50%; transform: translateX(-50%); }
+    .sweep-tick-e { right: -3px; top: 50%; transform: translateY(-50%); }
+    .sweep-tick-w { left: -3px; top: 50%; transform: translateY(-50%); }
+    .sweep-tick.is-target {
+      background: #00f6ff;
+      box-shadow: 0 0 8px #00f6ff;
+    }
+    .sweep-tick.is-done { background: #00ff88; }
     .level-readout {
       position: absolute;
       top: calc(100% + 4px);
@@ -245,21 +261,26 @@
         <canvas id="scanGuideCanvas" aria-hidden="true"></canvas>
         <div class="level-hud" id="levelHud">
           <div class="level-target" id="levelTarget" aria-hidden="true">
+            <div class="sweep-tick sweep-tick-n" data-bin="pitchMinus"></div>
+            <div class="sweep-tick sweep-tick-s" data-bin="pitchPlus"></div>
+            <div class="sweep-tick sweep-tick-e" data-bin="rollPlus"></div>
+            <div class="sweep-tick sweep-tick-w" data-bin="rollMinus"></div>
             <div class="level-deadzone"></div>
             <div class="level-dot" id="levelDot"></div>
           </div>
           <div class="level-readout" id="levelReadout">P —°  R —°</div>
         </div>
-        <p class="scan-gap-guide" id="scanGapGuide">Leave a small gap on all four sides — do not push the card flush against the neon frame.</p>
-        <div class="scan-viewport-hint" id="scanHint">Tap Start Camera, then sit the card inside the neon frame with a gap</div>
+        <p class="scan-gap-guide" id="scanGapGuide">Keep the whole card inside the neon frame so a corner or edge is not clipped. The crop edges are the cut — a gap is not used for mat-contrast detection.</p>
+        <div class="scan-viewport-hint" id="scanHint">Tap Start Camera, then hold the card fully inside the neon frame</div>
       </div>
       <div class="scan-viewport-actions">
         <button type="button" id="startCameraBtn" class="small">Start Camera</button>
         <button type="button" id="captureBtn" class="small">Capture &amp; Grade</button>
+        <button type="button" id="skipSweepBtn" class="small ghost">Skip remaining sweep</button>
         <button type="button" id="uploadInsteadBtn" class="small ghost">Upload Photo</button>
         <button type="button" id="stopCameraBtn" class="small ghost">Stop Camera</button>
       </div>
-      <p class="scan-status" id="scanStatus" role="status">Start the camera, then sit the card inside the frame with a small gap on every side.</p>
+      <p class="scan-status" id="scanStatus" role="status">Start the camera, then keep the whole card inside the neon frame.</p>
     </div>
   </template>
 
@@ -272,7 +293,7 @@
     Scan
   </button>
 
-  <script src="/scan_level.js?v=scan-guide-unify"></script>
-  <script src="/app.js?v=scan-guide-unify" defer></script>
+  <script src="/scan_level.js?v=surface-sweep"></script>
+  <script src="/app.js?v=surface-sweep" defer></script>
 </body>
 </html>
