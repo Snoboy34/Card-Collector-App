@@ -68,6 +68,8 @@
 // `gradeBuffer` returns a documented fallback report instead of crashing
 // the Express process (keeps /api/health and the rest of the app alive).
 // -----------------------------------------------------------------------------
+const scanLevel = require('../public/scan_level');
+
 let sharp = null;
 try {
   sharp = require('sharp');
@@ -1712,6 +1714,20 @@ async function buildSurfaceSweep(report, extraFrames, options) {
 }
 
 /**
+ * Attach surfaceSweep plus lock-set completeness fields. Missing bins are
+ * omitted from the array; surfaceSweepComplete is only true when all five
+ * expected ids are present. Does not change SUR.
+ */
+async function applySurfaceSweep(report, extraFrames, options) {
+  const rows = await buildSurfaceSweep(report, extraFrames, options);
+  const summary = scanLevel.summarizeSweepBins(rows);
+  report.surfaceSweep = rows;
+  report.surfaceSweepComplete = summary.surfaceSweepComplete;
+  report.capturedBins = summary.capturedBins;
+  return report;
+}
+
+/**
  * Assemble the defensive / fallback report used when `sharp` is missing or
  * when decoding throws. Sub-grades are 0 so the wallet engine will not
  * invent a Gem Mint from a failed scan.
@@ -2070,6 +2086,7 @@ module.exports = {
   describeBandVsInterior,
   diagnoseSurfaceBuffer,
   buildSurfaceSweep,
+  applySurfaceSweep,
   surfaceSweepEntryFromGrade,
   BORDER_SAMPLE_SPREAD_MAX_PX,
   BORDER_SAMPLE_MIN_HITS,

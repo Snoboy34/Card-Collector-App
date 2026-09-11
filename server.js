@@ -328,7 +328,7 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
         roll: meta.roll
       };
     });
-    report.surfaceSweep = await grading.buildSurfaceSweep(report, extraFrames, {
+    await grading.applySurfaceSweep(report, extraFrames, {
       alignmentCrop: Boolean(opts.alignmentCrop),
       levelTilt: opts.captureTilt
     });
@@ -364,7 +364,7 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     const orig = req.file.originalname || path.basename(req.file.path);
     const classification = await classifier.classifyBuffer(buffer, { filename: orig });
     const report = await grading.gradeBuffer(buffer, opts);
-    report.surfaceSweep = await grading.buildSurfaceSweep(report, [], {
+    await grading.applySurfaceSweep(report, [], {
       alignmentCrop: Boolean(opts.alignmentCrop),
       levelTilt: opts.captureTilt
     });

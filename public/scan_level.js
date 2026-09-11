@@ -164,6 +164,22 @@
     return Boolean(inTargetBin) && !alreadyGrabbed && Number(heldMs) >= need;
   }
 
+  function summarizeSweepBins(rows) {
+    var expected = SWEEP_BINS.map(function (b) { return b.id; });
+    var have = {};
+    var list = rows || [];
+    var i;
+    for (i = 0; i < list.length; i++) {
+      var id = list[i] && list[i].bin;
+      if (typeof id === 'string' && expected.indexOf(id) !== -1) have[id] = true;
+    }
+    var captured = expected.filter(function (id) { return have[id]; });
+    return {
+      capturedBins: captured,
+      surfaceSweepComplete: captured.length === expected.length
+    };
+  }
+
   function parseSweepMeta(body) {
     if (!body || body.sweepMeta == null) return [];
     var raw = body.sweepMeta;
@@ -217,6 +233,7 @@
     parseAlignmentCrop: parseAlignmentCrop,
     parseCaptureTilt: parseCaptureTilt,
     parseSweepMeta: parseSweepMeta,
+    summarizeSweepBins: summarizeSweepBins,
     matchSweepBin: matchSweepBin,
     nextSweepBin: nextSweepBin,
     shouldGrabSweepBin: shouldGrabSweepBin,

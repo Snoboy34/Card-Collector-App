@@ -948,6 +948,24 @@ assert('parseSweepMeta json', scanLevel.parseSweepMeta({
   sweepMeta: JSON.stringify([{ bin: 'pitchPlus', pitch: 11.8, roll: 0.2 }])
 })[0].bin === 'pitchPlus');
 
+const partialSummary = scanLevel.summarizeSweepBins([
+  { bin: 'level' },
+  { bin: 'pitchPlus' },
+  { bin: 'unknown' }
+]);
+assert('summarize partial is not complete', partialSummary.surfaceSweepComplete === false);
+assert('summarize partial capturedBins', partialSummary.capturedBins.join(',') === 'level,pitchPlus');
+const fullSummary = scanLevel.summarizeSweepBins([
+  { bin: 'rollMinus' },
+  { bin: 'level' },
+  { bin: 'pitchPlus' },
+  { bin: 'rollPlus' },
+  { bin: 'pitchMinus' }
+]);
+assert('summarize full is complete', fullSummary.surfaceSweepComplete === true);
+assert('summarize full canonical order', fullSummary.capturedBins.join(',') === 'level,pitchPlus,pitchMinus,rollPlus,rollMinus');
+assert('summarize empty is not complete', scanLevel.summarizeSweepBins([]).surfaceSweepComplete === false);
+
 const parsedTilt = scanLevel.parseCaptureTilt({
   capturePitch: '0.42',
   captureRoll: '-1.08',
@@ -1521,11 +1539,25 @@ runGradeBufferUndetectedCheck().then(function () {
   const sweep = await g.buildSurfaceSweep(graded, [
     { buffer: buf, bin: 'pitchPlus', pitch: 12, roll: 0 }
   ], { alignmentCrop: true, levelTilt: { pitchDeg: 0, rollDeg: 0 } });
+  await g.applySurfaceSweep(graded, [
+    { buffer: buf, bin: 'pitchPlus', pitch: 12, roll: 0 }
+  ], { alignmentCrop: true, levelTilt: { pitchDeg: 0, rollDeg: 0 } });
   assert('surfaceSweep does not change SUR', graded.subGrades.surface === surfaceBefore);
   assert('surfaceSweep has level + extra', sweep.length === 2);
   assert('surfaceSweep[0] is level', sweep[0].bin === 'level');
   assert('surfaceSweep extra keeps bin', sweep[1].bin === 'pitchPlus');
   assert('surfaceSweep extra has scratchCount', typeof sweep[1].scratchCount === 'number');
+  assert('partial apply is not complete', graded.surfaceSweepComplete === false);
+  assert('partial capturedBins', graded.capturedBins.join(',') === 'level,pitchPlus');
+  await g.applySurfaceSweep(graded, [
+    { buffer: buf, bin: 'pitchPlus', pitch: 12, roll: 0 },
+    { buffer: buf, bin: 'pitchMinus', pitch: -12, roll: 0 },
+    { buffer: buf, bin: 'rollPlus', pitch: 0, roll: 12 },
+    { buffer: buf, bin: 'rollMinus', pitch: 0, roll: -12 }
+  ], { alignmentCrop: true, levelTilt: { pitchDeg: 0, rollDeg: 0 } });
+  assert('full apply is complete', graded.surfaceSweepComplete === true);
+  assert('full capturedBins has five', graded.capturedBins.join(',') === 'level,pitchPlus,pitchMinus,rollPlus,rollMinus');
+  assert('full apply still does not change SUR', graded.subGrades.surface === surfaceBefore);
   console.log('PASS surfaceSweep is diagnostic-only (SUR unchanged)');
 }).then(function () {
   if (process.exitCode) {

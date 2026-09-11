@@ -903,8 +903,14 @@ function openReportModal(item) {
       ' · T ' + fmtPx(w.top) + ' · B ' + fmtPx(w.bottom)
     : '—';
   const sweep = report && Array.isArray(report.surfaceSweep) ? report.surfaceSweep : [];
+  const capturedBins = report && Array.isArray(report.capturedBins) ? report.capturedBins : [];
+  const sweepComplete = report && report.surfaceSweepComplete === true;
   const sweepHtml = sweep.length ? (
-    '<p class="muted">Surface sweep (diagnostic, SUR still from the level still):</p><ul>' +
+    '<p class="muted">Surface sweep (diagnostic, SUR still from the level still): ' +
+    (sweepComplete ? 'complete' : 'partial') +
+    ' · capturedBins ' +
+    escapeHtml(capturedBins.length ? capturedBins.join(', ') : '—') +
+    '</p><ul>' +
     sweep.map(function (row) {
       return '<li>' +
         escapeHtml(String(row.bin || 'frame')) +
