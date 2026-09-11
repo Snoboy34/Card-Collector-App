@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - Supported Multi-Phase Scanning Workflow States
 enum ScanningPhase: String, CaseIterable {
@@ -73,6 +74,24 @@ struct CardScannerView: View {
     @State private var isRemoteGrading = false
     @State private var remoteGradeSummary = ""
     @State private var lastRemoteError: String?
+
+    private struct NativeSweepFrame {
+        var bin: CardSweepBins.Bin
+        var jpeg: Data
+        var pitchDeg: Double
+        var rollDeg: Double
+    }
+
+    @State private var sweepActive = false
+    @State private var sweepTarget: CardSweepBins.Bin?
+    @State private var sweepFrames: [NativeSweepFrame] = []
+    @State private var sweepGrabbed: Set<CardSweepBins.Bin> = []
+    @State private var sweepInBinSince: Date?
+    @State private var sweepWaitingForStill = false
+    @State private var sweepUploadStarted = false
+    @State private var sweepStatus = ""
+    @State private var pendingLevelOCR: [String] = []
+    private let sweepClock = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     private var filteredVaultRecords: [SavedCard] {
         searchVaultQuery.isEmpty ? portfolio.savedCards : portfolio.savedCards.filter {
@@ -269,8 +288,17 @@ struct CardScannerView: View {
                     })
                 }
             }
-            .onAppear { calibrationEngine.startDeviceLevelMonitoring() }
+            .onAppear {
+                #if DEBUG
+                CardSweepBins.runContractChecks()
+                #endif
+                calibrationEngine.startDeviceLevelMonitoring()
+            }
             .onDisappear { calibrationEngine.stopDeviceLevelMonitoring() }
+            .onReceive(sweepClock) { date in
+                guard sweepActive else { return }
+                checkSweepGrab(now: date)
+            }
         }
     }
 
@@ -310,9 +338,22 @@ struct CardScannerView: View {
 
                 VStack {
                     ZStack {
-                        Circle().stroke(calibrationEngine.isPerfectlyLevel ? Color.green : Color.red, lineWidth: 3).frame(width: 45, height: 45)
-                        Circle().fill(calibrationEngine.isPerfectlyLevel ? Color.green : Color.orange).frame(width: 10, height: 10).offset(x: CGFloat(calibrationEngine.currentRoll * 4), y: CGFloat(calibrationEngine.currentPitch * 4))
-                    }; Spacer()
+                        Circle()
+                            .stroke(calibrationEngine.isPerfectlyLevel ? Color.green : Color.red, lineWidth: 3)
+                            .frame(width: 64, height: 64)
+                        sweepTick(bin: .pitchMinus, x: 0, y: -32)
+                        sweepTick(bin: .pitchPlus, x: 0, y: 32)
+                        sweepTick(bin: .rollPlus, x: 32, y: 0)
+                        sweepTick(bin: .rollMinus, x: -32, y: 0)
+                        Circle()
+                            .fill(calibrationEngine.isPerfectlyLevel ? Color.green : Color.orange)
+                            .frame(width: 10, height: 10)
+                            .offset(
+                                x: CGFloat(max(-12, min(12, calibrationEngine.currentRoll)) / 12 * 28),
+                                y: CGFloat(max(-12, min(12, calibrationEngine.currentPitch)) / 12 * 28)
+                            )
+                    }
+                    Spacer()
                 }.padding(.top, 10)
                 if isCardDetected && currentPhase == .frontCentering && !isCenteringStable {
                     VStack {
@@ -351,24 +392,55 @@ struct CardScannerView: View {
             Text(exposureLockStatus)
                 .font(.caption2)
                 .foregroundColor(exposureLockStatus.contains("locked") ? .green : .orange)
-            Text("Lock AE on the empty mat, then fill the neon window. Still JPEG — not the live preview.")
+            Text("Lock AE on the empty mat, then keep the whole card inside the neon window so a corner is not clipped. JPEG edges are the cut — a gap is not used for mat-contrast detection.")
                 .font(.caption2)
                 .foregroundColor(.secondary)
+            if !sweepStatus.isEmpty {
+                Text(sweepStatus)
+                    .font(.caption2)
+                    .foregroundColor(.cyan)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Button(action: requestNativeStillGrade) {
                 HStack {
                     if isRemoteGrading { ProgressView().tint(.white) }
-                    Text(isRemoteGrading ? "Uploading still…" : "Capture Still & Grade")
+                    Text(captureButtonTitle)
                         .bold()
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(isRemoteGrading ? Color.gray : Color.cyan)
+                .background((isRemoteGrading || sweepActive) ? Color.gray : Color.cyan)
                 .foregroundColor(.black)
                 .cornerRadius(10)
             }
-            .disabled(isRemoteGrading)
+            .disabled(isRemoteGrading || sweepActive)
+            if sweepActive {
+                Button("Skip remaining sweep") {
+                    finishSweepAndUpload()
+                }
+                .font(.caption)
+            }
         }
         .padding(.horizontal)
+    }
+
+    private var captureButtonTitle: String {
+        if isRemoteGrading { return "Uploading still…" }
+        if sweepActive {
+            return "Sweep \(sweepGrabbed.count)/5 — hold the highlighted tick"
+        }
+        return "Capture Still & Grade"
+    }
+
+    @ViewBuilder
+    private func sweepTick(bin: CardSweepBins.Bin, x: CGFloat, y: CGFloat) -> some View {
+        let isTarget = sweepActive && sweepTarget == bin
+        let isDone = sweepGrabbed.contains(bin)
+        RoundedRectangle(cornerRadius: 1)
+            .fill(isDone ? Color.green : (isTarget ? Color.yellow : Color.white.opacity(0.7)))
+            .frame(width: abs(x) > 0 ? 10 : 3, height: abs(y) > 0 ? 10 : 3)
+            .offset(x: x, y: y)
+            .opacity(isTarget ? 1 : 0.85)
     }
 
     private var vaultAnalyticsView: some View {
@@ -656,46 +728,175 @@ struct CardScannerView: View {
             lastRemoteError = JudgeAPIClient.APIError.invalidServerURL.localizedDescription
             return
         }
+        resetSweepSession()
         stillCaptureNonce += 1
+    }
+
+    private func resetSweepSession() {
+        sweepActive = false
+        sweepTarget = nil
+        sweepFrames = []
+        sweepGrabbed = []
+        sweepInBinSince = nil
+        sweepWaitingForStill = false
+        sweepUploadStarted = false
+        sweepStatus = ""
+        pendingLevelOCR = []
     }
 
     private func handleStillCapture(_ result: Result<LiveCameraView.StillCapture, Error>) {
         switch result {
         case .failure(let error):
+            sweepWaitingForStill = false
             lastRemoteError = error.localizedDescription
+            if sweepFrames.isEmpty {
+                sweepActive = false
+            }
         case .success(let still):
-            isRemoteGrading = true
+            if sweepUploadStarted { return }
             lastRemoteError = nil
-            Task {
-                do {
-                    let cropped = try CardAlignmentCrop.cropJPEG(still.jpeg, previewSize: still.previewSize)
+            do {
+                let cropped = try CardAlignmentCrop.cropJPEG(still.jpeg, previewSize: still.previewSize)
+                let pitch = calibrationEngine.currentPitch
+                let roll = calibrationEngine.currentRoll
+                if sweepFrames.isEmpty {
                     let ocrLines = (try? CardStillOCR.recognizeLines(from: cropped)) ?? []
-                    let tilt = JudgeAPIClient.TiltSnapshot(
-                        pitchDeg: calibrationEngine.currentPitch,
-                        rollDeg: calibrationEngine.currentRoll,
-                        isLevel: calibrationEngine.isPerfectlyLevel
-                    )
-                    let cardType = selectedCategory == .sports ? "SPORTS" : "TCG"
-                    let report = try await JudgeAPIClient.shared.grade(
-                        jpeg: cropped,
-                        baseURL: judgeServerURL,
-                        name: automaticCardIdentifier,
-                        cardType: cardType,
-                        tilt: tilt,
-                        ocrLines: ocrLines
-                    )
-                    await MainActor.run {
-                        isRemoteGrading = false
-                        remoteGradeSummary = report.summaryText
-                        if !report.ok {
-                            lastRemoteError = "Server returned ok=false"
-                        }
+                    storeSweepFrame(bin: .level, jpeg: cropped, pitch: pitch, roll: roll)
+                    pendingLevelOCR = ocrLines
+                    beginSweepAfterFirstStill()
+                } else if let target = sweepTarget {
+                    storeSweepFrame(bin: target, jpeg: cropped, pitch: pitch, roll: roll)
+                    advanceSweepAfterGrab()
+                } else {
+                    finishSweepAndUpload()
+                }
+            } catch {
+                sweepWaitingForStill = false
+                lastRemoteError = error.localizedDescription
+            }
+        }
+    }
+
+    private func storeSweepFrame(bin: CardSweepBins.Bin, jpeg: Data, pitch: Double, roll: Double) {
+        sweepFrames.append(NativeSweepFrame(bin: bin, jpeg: jpeg, pitchDeg: pitch, rollDeg: roll))
+        sweepGrabbed.insert(bin)
+        sweepWaitingForStill = false
+        sweepInBinSince = nil
+    }
+
+    private func beginSweepAfterFirstStill() {
+        guard calibrationEngine.isMotionAvailable else {
+            sweepStatus = "No motion sensor — uploading the first still only."
+            finishSweepAndUpload()
+            return
+        }
+        guard let next = CardSweepBins.nextSweepBin(captured: Array(sweepGrabbed)) else {
+            finishSweepAndUpload()
+            return
+        }
+        sweepActive = true
+        sweepTarget = next
+        sweepStatus = "\(next.prompt) (1/5)"
+    }
+
+    private func advanceSweepAfterGrab() {
+        guard let next = CardSweepBins.nextSweepBin(captured: Array(sweepGrabbed)) else {
+            finishSweepAndUpload()
+            return
+        }
+        sweepTarget = next
+        sweepInBinSince = nil
+        sweepStatus = "\(next.prompt) (\(sweepGrabbed.count)/5)"
+    }
+
+    private func checkSweepGrab(now: Date) {
+        guard sweepActive, let target = sweepTarget, !sweepWaitingForStill else { return }
+        let matched = CardSweepBins.matchSweepBin(
+            pitchDeg: calibrationEngine.currentPitch,
+            rollDeg: calibrationEngine.currentRoll
+        )
+        let inTarget = matched == target
+        if inTarget {
+            if sweepInBinSince == nil { sweepInBinSince = now }
+        } else {
+            sweepInBinSince = nil
+        }
+        let heldMs = sweepInBinSince.map { now.timeIntervalSince($0) * 1000 } ?? 0
+        if CardSweepBins.shouldGrabSweepBin(
+            inTargetBin: inTarget,
+            heldMs: heldMs,
+            alreadyGrabbed: sweepGrabbed.contains(target)
+        ) {
+            sweepWaitingForStill = true
+            stillCaptureNonce += 1
+        }
+    }
+
+    private func finishSweepAndUpload() {
+        guard !sweepUploadStarted else { return }
+        sweepActive = false
+        sweepTarget = nil
+        sweepWaitingForStill = false
+        sweepUploadStarted = true
+        guard let level = sweepFrames.first else {
+            lastRemoteError = "Sweep failed — no level still."
+            resetSweepSession()
+            return
+        }
+        let extras = Array(sweepFrames.dropFirst())
+        sweepStatus = extras.isEmpty
+            ? "Uploading first still…"
+            : "Uploading level still + \(extras.count) diagnostic sweep frames…"
+        uploadNativeGrade(levelJPEG: level.jpeg, extras: extras)
+    }
+
+    private func uploadNativeGrade(levelJPEG: Data, extras: [NativeSweepFrame]) {
+        isRemoteGrading = true
+        lastRemoteError = nil
+        let level = sweepFrames.first
+        let tilt = JudgeAPIClient.TiltSnapshot(
+            pitchDeg: level?.pitchDeg ?? calibrationEngine.currentPitch,
+            rollDeg: level?.rollDeg ?? calibrationEngine.currentRoll,
+            isLevel: CardSweepBins.isDeviceLevel(
+                level?.pitchDeg ?? calibrationEngine.currentPitch,
+                level?.rollDeg ?? calibrationEngine.currentRoll
+            )
+        )
+        let sweepPayload = extras.map {
+            JudgeAPIClient.SweepFrame(
+                bin: $0.bin.rawValue,
+                jpeg: $0.jpeg,
+                pitchDeg: $0.pitchDeg,
+                rollDeg: $0.rollDeg
+            )
+        }
+        let ocrLines = pendingLevelOCR
+        let cardType = selectedCategory == .sports ? "SPORTS" : "TCG"
+        Task {
+            do {
+                let report = try await JudgeAPIClient.shared.grade(
+                    jpeg: levelJPEG,
+                    baseURL: judgeServerURL,
+                    name: automaticCardIdentifier,
+                    cardType: cardType,
+                    tilt: tilt,
+                    ocrLines: ocrLines,
+                    sweepFrames: sweepPayload
+                )
+                await MainActor.run {
+                    isRemoteGrading = false
+                    remoteGradeSummary = report.summaryText
+                    sweepStatus = extras.isEmpty
+                        ? "Uploaded first still."
+                        : "Uploaded \(1 + extras.count) frames. SUR is still the level still."
+                    if !report.ok {
+                        lastRemoteError = "Server returned ok=false"
                     }
-                } catch {
-                    await MainActor.run {
-                        isRemoteGrading = false
-                        lastRemoteError = error.localizedDescription
-                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isRemoteGrading = false
+                    lastRemoteError = error.localizedDescription
                 }
             }
         }
