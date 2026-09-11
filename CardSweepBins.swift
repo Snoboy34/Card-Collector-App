@@ -93,6 +93,19 @@ enum CardSweepBins {
         return nil
     }
 
+    static let expectedBins: [Bin] = [.level, .pitchPlus, .pitchMinus, .rollPlus, .rollMinus]
+
+    static func summarize(bins: [String?]) -> (capturedBins: [Bin], complete: Bool) {
+        var have = Set<Bin>()
+        for raw in bins {
+            if let raw, let bin = Bin(rawValue: raw) {
+                have.insert(bin)
+            }
+        }
+        let captured = expectedBins.filter { have.contains($0) }
+        return (captured, captured.count == expectedBins.count)
+    }
+
     static func shouldGrabSweepBin(
         inTargetBin: Bool,
         heldMs: Double,
@@ -114,5 +127,11 @@ enum CardSweepBins {
         precondition(nextSweepBin(captured: [.level])?.rawValue == "pitchPlus")
         precondition(shouldGrabSweepBin(inTargetBin: true, heldMs: 250, alreadyGrabbed: false))
         precondition(!shouldGrabSweepBin(inTargetBin: true, heldMs: 200, alreadyGrabbed: false))
+        let partial = summarize(bins: ["level", "pitchPlus", "unknown"])
+        precondition(partial.complete == false)
+        precondition(partial.capturedBins.map(\.rawValue) == ["level", "pitchPlus"])
+        let full = summarize(bins: ["rollMinus", "level", "pitchPlus", "rollPlus", "pitchMinus"])
+        precondition(full.complete)
+        precondition(full.capturedBins.map(\.rawValue) == ["level", "pitchPlus", "pitchMinus", "rollPlus", "rollMinus"])
     }
 }

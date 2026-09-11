@@ -46,6 +46,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var familyMatch: String?
         var ocrLines: [String]
         var surfaceSweep: [SurfaceSweepRow]
+        var surfaceSweepComplete: Bool?
+        var capturedBins: [String]
         var rawJSON: String
         var summaryText: String
     }
@@ -243,6 +245,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let familyMatch = identity?["match"] as? String
         let ocrLines = (identity?["ocrLines"] as? [String]) ?? []
         let surfaceSweep = parseSurfaceSweep(report?["surfaceSweep"])
+        let capturedBins = (report?["capturedBins"] as? [String]) ?? []
+        let surfaceSweepComplete = boolValue(report?["surfaceSweepComplete"])
 
         var lines: [String] = []
         if let finalScore { lines.append(String(format: "finalScore  %.1f", finalScore)) }
@@ -257,8 +261,18 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         if let familyId { lines.append("familyId  \(familyId)") }
         if let familyMatch { lines.append("match  \(familyMatch)") }
         if !ocrLines.isEmpty { lines.append("ocrLines  \(ocrLines.joined(separator: " | "))") }
-        if !surfaceSweep.isEmpty {
-            lines.append("surfaceSweep  \(surfaceSweep.count) frames (diagnostic, SUR from level still)")
+        if !surfaceSweep.isEmpty || !capturedBins.isEmpty {
+            let flag: String
+            if let surfaceSweepComplete {
+                flag = surfaceSweepComplete ? "complete" : "partial"
+            } else {
+                flag = "\(surfaceSweep.count) frames"
+            }
+            let bins = capturedBins.isEmpty
+                ? surfaceSweep.compactMap(\.bin).joined(separator: ", ")
+                : capturedBins.joined(separator: ", ")
+            lines.append("surfaceSweep  \(flag) (diagnostic, SUR from level still)")
+            lines.append("capturedBins  \(bins.isEmpty ? "—" : bins)")
             for row in surfaceSweep {
                 lines.append(formatSweepRow(row))
             }
@@ -280,6 +294,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             familyMatch: familyMatch,
             ocrLines: ocrLines,
             surfaceSweep: surfaceSweep,
+            surfaceSweepComplete: surfaceSweepComplete,
+            capturedBins: capturedBins,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )
