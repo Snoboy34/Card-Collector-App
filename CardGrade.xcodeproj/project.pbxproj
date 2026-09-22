@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0372865C30620E9F00DBA0B1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0372865B30620E9F00DBA0B1 /* Assets.xcassets */; };
 		BB0000000000000000000001 /* Applauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000001 /* Applauncher.swift */; };
 		BB0000000000000000000002 /* CameraCalibration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* CameraCalibration.swift */; };
 		BB0000000000000000000003 /* CardScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000003 /* CardScannerView.swift */; };
@@ -24,6 +25,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0372865B30620E9F00DBA0B1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA0000000000000000000001 /* Applauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Applauncher.swift; sourceTree = "<group>"; };
 		AA0000000000000000000002 /* CameraCalibration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraCalibration.swift; sourceTree = "<group>"; };
 		AA0000000000000000000003 /* CardScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardScannerView.swift; sourceTree = "<group>"; };
@@ -36,10 +38,10 @@
 		AA000000000000000000000A /* UserSecurity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSecurity.swift; sourceTree = "<group>"; };
 		AA000000000000000000000B /* CardAlignmentCrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardAlignmentCrop.swift; sourceTree = "<group>"; };
 		AA000000000000000000000C /* JudgeAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JudgeAPIClient.swift; sourceTree = "<group>"; };
-		AA0000000000000000000011 /* CardStillOCR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardStillOCR.swift; sourceTree = "<group>"; };
-		AA0000000000000000000012 /* CardSweepBins.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardSweepBins.swift; sourceTree = "<group>"; };
 		AA000000000000000000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA000000000000000000000E /* CardGrade.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CardGrade.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000011 /* CardStillOCR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardStillOCR.swift; sourceTree = "<group>"; };
+		AA0000000000000000000012 /* CardSweepBins.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardSweepBins.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,6 +58,7 @@
 		CC0000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				0372865B30620E9F00DBA0B1 /* Assets.xcassets */,
 				CC0000000000000000000002 /* Sources */,
 				CC0000000000000000000003 /* Products */,
 			);
@@ -149,6 +152,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0372865C30620E9F00DBA0B1 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -221,7 +225,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 8R89NQ33MV;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
@@ -251,7 +255,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 8R89NQ33MV;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
