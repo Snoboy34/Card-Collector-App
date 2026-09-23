@@ -33,6 +33,7 @@ struct CardScannerView: View {
     @State private var isLoadingPrice = false
     @State private var isSaveConfirmed = false
     @State private var isCardDetected = false
+    @State private var cardMissStreak = 0
     @State private var automaticCardIdentifier = "unknown"
 
     @State private var autoSurfaceScratches = 0
@@ -163,59 +164,56 @@ struct CardScannerView: View {
         }
     }
 
-    // FIXED (layout): the capture/advance button used to live at the bottom of the same
-    // ScrollView as the diagnostics dump. Once the diagnostics text stopped being clipped
-    // (an earlier fix), that panel could grow tall enough to push the button off-screen
-    // entirely — you could see the camera or the button, never both, without scrolling.
-    // Restructured so the camera viewport, phase indicator, and the Lock & Advance button
-    // now live in a fixed (non-scrolling) block at the top of the screen — always visible
-    // together. Only the metrics/diagnostics panel below scrolls, so a long diagnostics
-    // dump can grow freely without ever hiding the capture controls again.
+    // Camera + URL field + Capture + Lock & Advance + diagnostics are taller than
+    // an iPhone once the tab bar and nav title are counted. The previous split
+    // (fixed header + inner ScrollView) crushed the inner scroll to ~0pt and left
+    // Capture/Advance off-screen with no way to reach them. One ScrollView around
+    // the whole dashboard; camera overlays do not take hits.
     private var scannerDashboardView: some View {
         NavigationView {
-            VStack(spacing: 16) {
-                Picker("Profile", selection: $selectedCategory) {
-                    ForEach(CardCategory.allCases, id: \.self) { category in
-                        Text(category.rawValue).tag(category)
+            ScrollView {
+                VStack(spacing: 16) {
+                    Picker("Profile", selection: $selectedCategory) {
+                        ForEach(CardCategory.allCases, id: \.self) { category in
+                            Text(category.rawValue).tag(category)
+                        }
                     }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .onChange(of: selectedCategory) {
-                    resetCurrentScanState()
-                }
-
-                HStack(spacing: 4) {
-                    ForEach(ScanningPhase.allCases, id: \.self) { phase in
-                        Rectangle()
-                            .fill(phase == currentPhase ? Color.blue : (ScanningPhase.allCases.firstIndex(of: phase)! < ScanningPhase.allCases.firstIndex(of: currentPhase)! ? Color.green : Color.gray.opacity(0.3)))
-                            .frame(height: 5)
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .onChange(of: selectedCategory) {
+                        resetCurrentScanState()
                     }
-                }
-                .padding(.horizontal)
 
-                Text(currentPhase.rawValue)
-                    .font(.system(.subheadline, design: .monospaced))
-                    .bold()
-                    .foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        ForEach(ScanningPhase.allCases, id: \.self) { phase in
+                            Rectangle()
+                                .fill(phase == currentPhase ? Color.blue : (ScanningPhase.allCases.firstIndex(of: phase)! < ScanningPhase.allCases.firstIndex(of: currentPhase)! ? Color.green : Color.gray.opacity(0.3)))
+                                .frame(height: 5)
+                        }
+                    }
+                    .padding(.horizontal)
 
-                cameraViewportSection
-
-                nativeStillGradeControls
-
-                Button(action: { advanceInspectionFlowPipeline() }) {
-                    Text(currentPhase == .backPerimeter ? "Calculate Comprehensive Multi-Phase Grade" : "Lock & Advance to Next Scanning Phase")
+                    Text(currentPhase.rawValue)
+                        .font(.system(.subheadline, design: .monospaced))
                         .bold()
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(canAdvancePhase ? Color.blue : Color.gray)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                .disabled(!canAdvancePhase)
+                        .foregroundColor(.secondary)
 
-                ScrollView {
+                    cameraViewportSection
+
+                    nativeStillGradeControls
+
+                    Button(action: { advanceInspectionFlowPipeline() }) {
+                        Text(currentPhase == .backPerimeter ? "Calculate Comprehensive Multi-Phase Grade" : "Lock & Advance to Next Scanning Phase")
+                            .bold()
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(canAdvancePhase ? Color.blue : Color.gray)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    .padding(.horizontal)
+                    .disabled(!canAdvancePhase)
+
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Image(systemName: "bolt.shield.fill").foregroundColor(.blue)
@@ -225,29 +223,7 @@ struct CardScannerView: View {
                             HStack { Text("Isolated Asset Profile:"); Spacer(); Text(automaticCardIdentifier).bold().foregroundColor(.blue) }
                             Divider()
                             phaseStatusExplainerLayout()
-                            // NEW: live diagnostic dump from CenteringAnalyzer for on-device
-                            // debugging during iPhone TestFlight testing — no Xcode console
-                            // available in that build path, so this surfaces the raw per-edge
-                            // sample-line data (position, baseline, local contrast range,
-                            // adaptive threshold) directly in the UI.
-                            //
-                            // FIXED: previously gated to `currentPhase == .frontCentering`
-                            // only — but auto-advance fires the instant centering locks,
-                            // often faster than there's time to screenshot. lastDiagnostics
-                            // is a frozen snapshot from the moment centering locked (it isn't
-                            // overwritten by later phases, which don't call
-                            // analyzeCenteringReal), so it's safe and actually useful to keep
-                            // showing it through phases 2-4 as well — same data, just now
-                            // there's time to actually capture it.
                             Divider()
-                            // FIXED: previously capped at lineLimit(6), which was cutting
-                            // off the TOP/BOTTOM diagnostic lines entirely and only ever
-                            // showing LEFT/RIGHT — the opposite axis of whichever one
-                            // turns out to be misbehaving on a given test run. No line
-                            // limit now; this view already sits inside a ScrollView so it
-                            // can grow without breaking the layout. It's also now the ONLY
-                            // thing in the scrollable area, so it growing long no longer
-                            // pushes the camera/button off-screen (see scannerDashboardView).
                             Text(centeringAnalyzer.diagnosticsSummaryText)
                                 .font(.system(size: 8, design: .monospaced))
                                 .foregroundColor(.secondary)
@@ -276,10 +252,10 @@ struct CardScannerView: View {
                         .cornerRadius(10)
                     }
                     .padding(.horizontal)
-                    .padding(.bottom)
+                    .padding(.bottom, 24)
                 }
+                .padding(.top)
             }
-            .padding(.top)
             .navigationTitle("AI Grade Scanner")
             .sheet(isPresented: $showingActiveScanReport) {
                 if let result = scanResult, let grade = calculatedGrade {
@@ -291,6 +267,7 @@ struct CardScannerView: View {
             .onAppear {
                 #if DEBUG
                 CardSweepBins.runContractChecks()
+                CameraCalibration.runContractChecks()
                 #endif
                 calibrationEngine.startDeviceLevelMonitoring()
             }
@@ -305,6 +282,7 @@ struct CardScannerView: View {
     private var cameraViewportSection: some View {
         GeometryReader { geo in
             let neon = CardAlignmentCrop.cardFrameRect(canvasWidth: geo.size.width, canvasHeight: geo.size.height)
+            let neonCenter = CGPoint(x: neon.x + neon.w / 2, y: neon.y + neon.h / 2)
             ZStack {
                 LiveCameraView(
                     stillCaptureNonce: $stillCaptureNonce,
@@ -313,49 +291,14 @@ struct CardScannerView: View {
                     onFrameCaptured: processLiveCameraFrame
                 )
                 .environmentObject(calibrationEngine)
-
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(Color.cyan, lineWidth: 2)
-                    .frame(width: neon.w, height: neon.h)
-                    .position(x: neon.x + neon.w / 2, y: neon.y + neon.h / 2)
-                    .allowsHitTesting(false)
-
-                ZStack {
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(guideBoxColor, lineWidth: guideBoxLineWidth)
-                    if !isCardDetected {
-                        VStack {
-                            Image(systemName: "viewfinder").font(.title2)
-                            Text("FILL NEON 2.5×3.5").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4)
-                        }.foregroundColor(.white)
-                    } else if let centeringRatio = scanResult {
-                        CenteringGuideOverlay(ratios: centeringRatio, size: CGSize(width: neon.w, height: neon.h))
-                    }
-                }
-                .frame(width: neon.w, height: neon.h)
-                .position(x: neon.x + neon.w / 2, y: neon.y + neon.h / 2)
                 .allowsHitTesting(false)
 
-                VStack {
-                    ZStack {
-                        Circle()
-                            .stroke(calibrationEngine.isPerfectlyLevel ? Color.green : Color.red, lineWidth: 3)
-                            .frame(width: 64, height: 64)
-                        sweepTick(bin: .pitchMinus, x: 0, y: -32)
-                        sweepTick(bin: .pitchPlus, x: 0, y: 32)
-                        sweepTick(bin: .rollPlus, x: 32, y: 0)
-                        sweepTick(bin: .rollMinus, x: -32, y: 0)
-                        Circle()
-                            .fill(calibrationEngine.isPerfectlyLevel ? Color.green : Color.orange)
-                            .frame(width: 10, height: 10)
-                            .offset(
-                                x: CGFloat(max(-12, min(12, calibrationEngine.currentRoll)) / 12 * 28),
-                                y: CGFloat(max(-12, min(12, calibrationEngine.currentPitch)) / 12 * 28)
-                            )
-                    }
-                    Spacer()
-                }.padding(.top, 10)
-                if isCardDetected && currentPhase == .frontCentering && !isCenteringStable {
+                neonFrameOverlay(neon: neon, center: neonCenter)
+
+                levelBubbleOverlay
+                    .position(x: neonCenter.x, y: neonCenter.y)
+
+                if currentPhase == .frontCentering && !isCenteringStable {
                     VStack {
                         Spacer()
                         Text(calibrationEngine.isPerfectlyLevel ? "HOLD STEADY... \(centeringSampleCount)/4" : "LEVEL THE PHONE")
@@ -368,12 +311,73 @@ struct CardScannerView: View {
                     }
                 }
             }
+            .allowsHitTesting(false)
         }
-        .frame(minHeight: 320)
-        .frame(maxHeight: 420)
+        .frame(height: 360)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .allowsHitTesting(false)
         .cornerRadius(12)
         .clipped()
         .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private func neonFrameOverlay(neon: CardAlignmentCrop.PixelRect, center: CGPoint) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(Color.cyan, lineWidth: 2)
+            Path { path in
+                path.move(to: CGPoint(x: 0, y: neon.h / 2))
+                path.addLine(to: CGPoint(x: neon.w, y: neon.h / 2))
+                path.move(to: CGPoint(x: neon.w / 2, y: 0))
+                path.addLine(to: CGPoint(x: neon.w / 2, y: neon.h))
+            }
+            .stroke(Color.white.opacity(0.45), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(guideBoxColor, lineWidth: guideBoxLineWidth)
+            if let centeringRatio = scanResult, isCardDetected {
+                CenteringGuideOverlay(ratios: centeringRatio, size: CGSize(width: neon.w, height: neon.h))
+            } else {
+                VStack {
+                    Image(systemName: "viewfinder").font(.title2)
+                    Text("FILL NEON 2.5×3.5").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4)
+                }
+                .foregroundColor(.white)
+            }
+        }
+        .frame(width: neon.w, height: neon.h)
+        .position(x: center.x, y: center.y)
+        .allowsHitTesting(false)
+    }
+
+    private var levelBubbleOverlay: some View {
+        let clamp: Double = 12
+        let radius: Double = 28
+        let pitch = max(-clamp, min(clamp, calibrationEngine.currentPitch))
+        let roll = max(-clamp, min(clamp, calibrationEngine.currentRoll))
+        return ZStack {
+            Circle()
+                .stroke(calibrationEngine.isPerfectlyLevel ? Color.green : Color.red, lineWidth: 3)
+                .frame(width: 64, height: 64)
+            sweepTick(bin: .pitchMinus, x: 0, y: -32)
+            sweepTick(bin: .pitchPlus, x: 0, y: 32)
+            sweepTick(bin: .rollPlus, x: 32, y: 0)
+            sweepTick(bin: .rollMinus, x: -32, y: 0)
+            Circle()
+                .fill(Color.white.opacity(0.2))
+                .frame(width: 14, height: 14)
+            Circle()
+                .fill(calibrationEngine.isPerfectlyLevel ? Color.green : Color.orange)
+                .frame(width: 10, height: 10)
+                .offset(
+                    x: CGFloat(roll / clamp * radius),
+                    y: CGFloat(pitch / clamp * radius)
+                )
+                .animation(nil, value: calibrationEngine.currentPitch)
+                .animation(nil, value: calibrationEngine.currentRoll)
+        }
+        .allowsHitTesting(false)
     }
 
     private var nativeStillGradeControls: some View {
@@ -952,7 +956,7 @@ struct CardScannerView: View {
         resetCurrentScanState()
     }
     private func resetCurrentScanState() {
-        scanResult = nil; activeValuation = nil; calculatedGrade = nil; isSaveConfirmed = false; isCardDetected = false
+        scanResult = nil; activeValuation = nil; calculatedGrade = nil; isSaveConfirmed = false; isCardDetected = false; cardMissStreak = 0
         autoSurfaceScratches = 0; autoEdgeWhitening = 0; autoCornerFraying = 0
         // NEW: clear the multi-frame centering buffer so a new card (or a new scan of the
         // same card) starts averaging fresh rather than blending in stale samples.
@@ -987,11 +991,9 @@ struct CardScannerView: View {
             centeringAnalyzer.detectCardRectangle(in: imageFrame) { recognizedObservation in
                 guard let cardRect = recognizedObservation else {
                     Task { @MainActor in
+                        self.cardMissStreak += 1
+                        guard self.cardMissStreak >= 3 else { return }
                         if self.isCardDetected { self.isCardDetected = false }
-                        // Card dropped out of frame — clear the averaging buffer so a
-                        // re-detected card (possibly repositioned) starts a fresh average.
-                        // resetSampleBuffer() is now thread-safe (serialized internally),
-                        // so this is safe even while a background Task is mid-scan.
                         self.centeringAnalyzer.resetSampleBuffer()
                         self.isCenteringStable = false
                         self.centeringSampleCount = 0
@@ -1016,6 +1018,7 @@ struct CardScannerView: View {
                 ? self.centeringAnalyzer.analyzeCenteringAveraged(from: cardRect, in: imageFrame)
                 : nil
                 Task { @MainActor in
+                    self.cardMissStreak = 0
                     if !self.isCardDetected { self.isCardDetected = true }
                     if let computedCentering = computedCentering, currentPhase == .frontCentering {
                         self.scanResult = computedCentering
