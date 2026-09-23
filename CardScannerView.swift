@@ -9,6 +9,39 @@ enum ScanningPhase: String, CaseIterable {
     case backPerimeter = "4. Back Border Check"
 }
 
+/// Fits neon + status + 44pt actions on SE (~455pt content) through 16 Pro.
+private struct CompactScanLayout {
+    let cameraHeight: CGFloat
+    let metricsHeight: CGFloat
+
+    init(availableHeight: CGFloat, sweepActive: Bool) {
+        let header: CGFloat = 50
+        let status: CGFloat = sweepActive ? 48 : 34
+        let actions: CGFloat = 44
+        let gaps: CGFloat = 28
+        let leftover = availableHeight - header - status - actions - gaps
+        let tight = leftover < 250
+        let metricsFloor: CGFloat = tight ? 56 : 72
+        let cameraMin: CGFloat = tight ? 160 : 168
+        let camera = min(340, max(cameraMin, leftover - metricsFloor))
+        cameraHeight = camera
+        metricsHeight = max(metricsFloor, leftover - camera)
+    }
+
+    #if DEBUG
+    static func runContractChecks() {
+        let se = CompactScanLayout(availableHeight: 455, sweepActive: false)
+        precondition(se.cameraHeight >= 168 && se.cameraHeight <= 340)
+        precondition(50 + 34 + 44 + 28 + se.cameraHeight + se.metricsHeight <= 456)
+        let seSweep = CompactScanLayout(availableHeight: 400, sweepActive: true)
+        precondition(50 + 48 + 44 + 28 + seSweep.cameraHeight + seSweep.metricsHeight <= 401)
+        let pro = CompactScanLayout(availableHeight: 680, sweepActive: false)
+        precondition(pro.cameraHeight == 340)
+        precondition(pro.metricsHeight >= 72)
+    }
+    #endif
+}
+
 struct CategoryAllocation: Identifiable {
     let id = UUID()
     let categoryName: String
@@ -164,99 +197,27 @@ struct CardScannerView: View {
         }
     }
 
-    // Camera + URL field + Capture + Lock & Advance + diagnostics are taller than
-    // an iPhone once the tab bar and nav title are counted. The previous split
-    // (fixed header + inner ScrollView) crushed the inner scroll to ~0pt and left
-    // Capture/Advance off-screen with no way to reach them. One ScrollView around
-    // the whole dashboard; camera overlays do not take hits.
+    // Primary chrome (neon frame, status, Capture/Advance) is pinned. Camera
+    // height is leftover space so SE through 16 Pro fit without scrolling.
+    // Long diagnostics stay in a short secondary ScrollView.
     private var scannerDashboardView: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 16) {
-                    Picker("Profile", selection: $selectedCategory) {
-                        ForEach(CardCategory.allCases, id: \.self) { category in
-                            Text(category.rawValue).tag(category)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-                    .onChange(of: selectedCategory) {
-                        resetCurrentScanState()
-                    }
-
-                    HStack(spacing: 4) {
-                        ForEach(ScanningPhase.allCases, id: \.self) { phase in
-                            Rectangle()
-                                .fill(phase == currentPhase ? Color.blue : (ScanningPhase.allCases.firstIndex(of: phase)! < ScanningPhase.allCases.firstIndex(of: currentPhase)! ? Color.green : Color.gray.opacity(0.3)))
-                                .frame(height: 5)
-                        }
-                    }
-                    .padding(.horizontal)
-
-                    Text(currentPhase.rawValue)
-                        .font(.system(.subheadline, design: .monospaced))
-                        .bold()
-                        .foregroundColor(.secondary)
-
-                    cameraViewportSection
-
-                    nativeStillGradeControls
-
-                    Button(action: { advanceInspectionFlowPipeline() }) {
-                        Text(currentPhase == .backPerimeter ? "Calculate Comprehensive Multi-Phase Grade" : "Lock & Advance to Next Scanning Phase")
-                            .bold()
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(canAdvancePhase ? Color.blue : Color.gray)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-                    .padding(.horizontal)
-                    .disabled(!canAdvancePhase)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Image(systemName: "bolt.shield.fill").foregroundColor(.blue)
-                            Text("HIGH-PRECISION AUTOMATED METRICS").font(.caption).bold().foregroundColor(.secondary)
-                        }
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack { Text("Isolated Asset Profile:"); Spacer(); Text(automaticCardIdentifier).bold().foregroundColor(.blue) }
-                            Divider()
-                            phaseStatusExplainerLayout()
-                            Divider()
-                            Text(centeringAnalyzer.diagnosticsSummaryText)
-                                .font(.system(size: 8, design: .monospaced))
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            if let lastRemoteError {
-                                Divider()
-                                Text(lastRemoteError)
-                                    .font(.caption2)
-                                    .foregroundColor(.red)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            if !remoteGradeSummary.isEmpty {
-                                Divider()
-                                Text("NATIVE STILL /api/grade")
-                                    .font(.caption2).bold()
-                                    .foregroundColor(.cyan)
-                                Text(remoteGradeSummary)
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundColor(.primary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                        .font(.footnote)
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(10)
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 24)
+            GeometryReader { geo in
+                let layout = CompactScanLayout(availableHeight: geo.size.height, sweepActive: sweepActive)
+                VStack(spacing: 6) {
+                    compactHeader
+                    cameraViewportSection(height: layout.cameraHeight)
+                    compactStatus
+                    compactActions
+                    compactMetricsPanel
+                        .frame(maxHeight: layout.metricsHeight)
                 }
-                .padding(.top)
+                .padding(.horizontal, 10)
+                .padding(.top, 4)
+                .padding(.bottom, 4)
             }
-            .navigationTitle("AI Grade Scanner")
+            .navigationTitle("Scan")
+            .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showingActiveScanReport) {
                 if let result = scanResult, let grade = calculatedGrade {
                     ActiveScanReportSheet(result: result, grade: grade, value: activeValuation, onCommit: {
@@ -268,6 +229,7 @@ struct CardScannerView: View {
                 #if DEBUG
                 CardSweepBins.runContractChecks()
                 CameraCalibration.runContractChecks()
+                CompactScanLayout.runContractChecks()
                 #endif
                 calibrationEngine.startDeviceLevelMonitoring()
             }
@@ -279,7 +241,141 @@ struct CardScannerView: View {
         }
     }
 
-    private var cameraViewportSection: some View {
+    private var compactHeader: some View {
+        VStack(spacing: 4) {
+            Picker("Profile", selection: $selectedCategory) {
+                ForEach(CardCategory.allCases, id: \.self) { category in
+                    Text(category.rawValue).tag(category)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: selectedCategory) {
+                resetCurrentScanState()
+            }
+            HStack(spacing: 4) {
+                ForEach(ScanningPhase.allCases, id: \.self) { phase in
+                    Rectangle()
+                        .fill(phase == currentPhase ? Color.blue : (ScanningPhase.allCases.firstIndex(of: phase)! < ScanningPhase.allCases.firstIndex(of: currentPhase)! ? Color.green : Color.gray.opacity(0.3)))
+                        .frame(height: 4)
+                }
+            }
+            Text(currentPhase.rawValue)
+                .font(.system(.caption2, design: .monospaced))
+                .bold()
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var compactStatus: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Text(exposureLockStatus)
+                    .font(.caption2)
+                    .foregroundColor(exposureLockStatus.contains("locked") ? .green : .orange)
+                    .lineLimit(1)
+                Spacer()
+                Text(automaticCardIdentifier)
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+                    .lineLimit(1)
+            }
+            Text(primaryInstructionText)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+            if !sweepStatus.isEmpty {
+                Text(sweepStatus)
+                    .font(.caption2)
+                    .foregroundColor(.cyan)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private var primaryInstructionText: String {
+        if sweepActive {
+            return "Hold the highlighted tick. Keep the whole card in the neon frame."
+        }
+        return "Keep the whole card in the neon frame. Crop edges are the cut."
+    }
+
+    private var compactActions: some View {
+        HStack(spacing: 8) {
+            Button(action: requestNativeStillGrade) {
+                HStack {
+                    if isRemoteGrading { ProgressView().tint(.black) }
+                    Text(captureButtonTitle)
+                        .font(.subheadline).bold()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background((isRemoteGrading || sweepActive) ? Color.gray : Color.cyan)
+                .foregroundColor(.black)
+                .cornerRadius(8)
+            }
+            .disabled(isRemoteGrading || sweepActive)
+
+            if sweepActive {
+                Button("Skip sweep") {
+                    finishSweepAndUpload()
+                }
+                .font(.subheadline).bold()
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(8)
+            } else {
+                Button(action: { advanceInspectionFlowPipeline() }) {
+                    Text(currentPhase == .backPerimeter ? "Submit grade" : "Advance")
+                        .font(.subheadline).bold()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(canAdvancePhase ? Color.blue : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
+                .disabled(!canAdvancePhase)
+            }
+        }
+    }
+
+    private var compactMetricsPanel: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 6) {
+                TextField("https://192.168.x.x:5000", text: $judgeServerURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .font(.system(.caption2, design: .monospaced))
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: judgeServerURL) {
+                        UserDefaults.standard.set(judgeServerURL, forKey: JudgeAPIClient.serverURLDefaultsKey)
+                    }
+                phaseStatusExplainerLayout()
+                if let lastRemoteError {
+                    Text(lastRemoteError)
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !remoteGradeSummary.isEmpty {
+                    Text(remoteGradeSummary)
+                        .font(.system(size: 10, design: .monospaced))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(centeringAnalyzer.diagnosticsSummaryText)
+                    .font(.system(size: 8, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(8)
+        }
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(8)
+    }
+
+    private func cameraViewportSection(height: CGFloat) -> some View {
         GeometryReader { geo in
             let neon = CardAlignmentCrop.cardFrameRect(canvasWidth: geo.size.width, canvasHeight: geo.size.height)
             let neonCenter = CGPoint(x: neon.x + neon.w / 2, y: neon.y + neon.h / 2)
@@ -313,13 +409,12 @@ struct CardScannerView: View {
             }
             .allowsHitTesting(false)
         }
-        .frame(height: 360)
+        .frame(height: height)
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
         .allowsHitTesting(false)
-        .cornerRadius(12)
+        .cornerRadius(8)
         .clipped()
-        .padding(.horizontal)
     }
 
     @ViewBuilder
@@ -380,60 +475,12 @@ struct CardScannerView: View {
         .allowsHitTesting(false)
     }
 
-    private var nativeStillGradeControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                TextField("https://192.168.x.x:5000", text: $judgeServerURL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .font(.system(.caption, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: judgeServerURL) {
-                        UserDefaults.standard.set(judgeServerURL, forKey: JudgeAPIClient.serverURLDefaultsKey)
-                    }
-            }
-            Text(exposureLockStatus)
-                .font(.caption2)
-                .foregroundColor(exposureLockStatus.contains("locked") ? .green : .orange)
-            Text("Lock AE on the empty mat, then keep the whole card inside the neon window so a corner is not clipped. JPEG edges are the cut — a gap is not used for mat-contrast detection.")
-                .font(.caption2)
-                .foregroundColor(.secondary)
-            if !sweepStatus.isEmpty {
-                Text(sweepStatus)
-                    .font(.caption2)
-                    .foregroundColor(.cyan)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Button(action: requestNativeStillGrade) {
-                HStack {
-                    if isRemoteGrading { ProgressView().tint(.white) }
-                    Text(captureButtonTitle)
-                        .bold()
-                }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background((isRemoteGrading || sweepActive) ? Color.gray : Color.cyan)
-                .foregroundColor(.black)
-                .cornerRadius(10)
-            }
-            .disabled(isRemoteGrading || sweepActive)
-            if sweepActive {
-                Button("Skip remaining sweep") {
-                    finishSweepAndUpload()
-                }
-                .font(.caption)
-            }
-        }
-        .padding(.horizontal)
-    }
-
     private var captureButtonTitle: String {
-        if isRemoteGrading { return "Uploading still…" }
+        if isRemoteGrading { return "Uploading…" }
         if sweepActive {
-            return "Sweep \(sweepGrabbed.count)/5 — hold the highlighted tick"
+            return "Sweep \(sweepGrabbed.count)/5"
         }
-        return "Capture Still & Grade"
+        return "Capture"
     }
 
     @ViewBuilder
