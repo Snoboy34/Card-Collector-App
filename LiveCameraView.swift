@@ -4,10 +4,10 @@ import CoreImage
 
 /// Live viewfinder + session-once AE/WB lock + high-quality stills.
 ///
-/// `AVCaptureVideoDataOutput` stays on for the preview / Vision overlay.
-/// `AVCapturePhotoOutput` is a separate still path — one JPEG per tap, not a
-/// video-frame grab. Exposure and white balance lock after `isAdjusting*`
-/// settles at session start (empty mat), then stay locked for the session.
+/// `AVCaptureVideoDataOutput` stays on for the preview / still-path OCR hook.
+/// Framing is the SwiftUI neon 2.5×3.5 — no live Vision quad (it flickered).
+/// The hosting UIView does not take hits so ScrollView and tab bar stay tappable.
+/// `AVCapturePhotoOutput` is a separate still path — one JPEG per tap.
 public struct LiveCameraView: UIViewRepresentable {
 
     public struct StillCapture {
