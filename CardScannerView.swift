@@ -51,18 +51,18 @@ struct CategoryAllocation: Identifiable {
 
 struct CardScannerView: View {
     @StateObject private var calibrationEngine = CameraCalibration()
-    @StateObject private var priceEngine = PricingEngine()
     @StateObject private var portfolio = PortfolioState()
     @StateObject private var securityVault = UserSecurity()
 
-    private let gradingJudge = TheJudge()
+    // TheJudge is not used for saved grades. Live framing is CenteringAnalyzer;
+    // Capture → /api/grade is the only ledger authority.
     private let centeringAnalyzer = CenteringAnalyzer()
     private let defectAnalyzer = DefectAnalyzer()
 
     @State private var currentPhase: ScanningPhase = .frontCentering
     @State private var scanResult: CenteringResult?
-    @State private var activeValuation: CardValuation?
-    @State private var calculatedGrade: CalculatedGrade?
+    @State private var pendingServerLedger: ScanLedger?
+    @State private var pendingScanId = ""
     @State private var isLoadingPrice = false
     @State private var isSaveConfirmed = false
     @State private var isCardDetected = false
@@ -219,9 +219,9 @@ struct CardScannerView: View {
             .navigationTitle("Scan")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showingActiveScanReport) {
-                if let result = scanResult, let grade = calculatedGrade {
-                    ActiveScanReportSheet(result: result, grade: grade, value: activeValuation, onCommit: {
-                        commitAndResetScan(result: result, grade: grade, value: activeValuation)
+                if let ledger = pendingServerLedger {
+                    ActiveScanReportSheet(ledger: ledger, onCommit: {
+                        commitAndResetScan(ledger: ledger)
                     })
                 }
             }
@@ -505,7 +505,7 @@ struct CardScannerView: View {
                     }.padding(.top, 40)
                 } else {
                     HStack(spacing: 15) {
-                        VStack(alignment: .leading) { Text("NET WORTH").font(.caption2).bold().foregroundColor(.secondary); Text(String(format: "$%.2f", portfolio.totalPortfolioValue)).font(.title2).bold().foregroundColor(.blue) }.frame(maxWidth: .infinity, alignment: .leading).padding().background(Color(.secondarySystemBackground)).cornerRadius(10)
+                        VStack(alignment: .leading) { Text("NET WORTH").font(.caption2).bold().foregroundColor(.secondary); Text(portfolio.hasPricedCards ? String(format: "$%.2f", portfolio.totalPortfolioValue) : ScanLedger.absent).font(.title2).bold().foregroundColor(.blue) }.frame(maxWidth: .infinity, alignment: .leading).padding().background(Color(.secondarySystemBackground)).cornerRadius(10)
                         VStack(alignment: .leading) { Text("VAULT COUNT").font(.caption2).bold().foregroundColor(.secondary); Text(String(format: "%d Cards", portfolio.savedCards.count)).font(.title2).bold().foregroundColor(.purple) }.frame(maxWidth: .infinity, alignment: .leading).padding().background(Color(.secondarySystemBackground)).cornerRadius(10)
                     }.padding([.horizontal, .top])
                     if portfolio.totalPortfolioValue > 0 {
@@ -528,7 +528,7 @@ struct CardScannerView: View {
                                 HStack {
                                     VStack(alignment: .leading) { Text(card.name).font(.subheadline).bold().foregroundColor(.primary); Text(card.setName).font(.caption).foregroundColor(.secondary) }
                                     Spacer()
-                                    VStack(alignment: .trailing) { Text(String(format: "$%.2f", card.calculatedValue)).bold().foregroundColor(.green); Text(String(format: "PSA %d", card.predictedGradePSA)).font(.caption2).padding(4).background(Color.blue.opacity(0.1)).cornerRadius(4) }
+                                    VStack(alignment: .trailing) { Text(card.displayValue).bold().foregroundColor(.green); Text(card.displayGrade).font(.caption2).padding(4).background(Color.blue.opacity(0.1)).cornerRadius(4) }
                                 }
                             }
                             .listRowBackground(Color(.secondarySystemBackground))
@@ -582,10 +582,10 @@ struct CardScannerView: View {
                                 Image(systemName: "square.dashed")
                                 VStack(alignment: .leading) {
                                     Text(card.name).bold()
-                                    Text("PSA \(card.predictedGradePSA)").font(.caption2)
+                                    Text(card.displayGrade).font(.caption2)
                                 }
                                 Spacer()
-                                Text(String(format: "$%.2f", card.calculatedValue)).foregroundColor(.green)
+                                Text(card.displayValue).foregroundColor(.green)
                             }
                             .contextMenu { Menu("Move Folder...") { ForEach(portfolio.activeSubmissionBatches) { dest in Button(dest.batchName) { withAnimation { portfolio.assignCardToBatch(cardId: card.id, batchId: dest.id) } } } } }
                         }
@@ -621,8 +621,8 @@ struct CardScannerView: View {
                         }.pickerStyle(.segmented)
                         let sim = portfolio.simulateCrossCompanyScore(for: activeSimCard, targetCompany: selectedSimulatorCompany)
                         VStack(alignment: .leading, spacing: 8) {
-                            HStack { Text("Simulated Outcome Score:"); Spacer(); Text(String(format: "%.1f Grade", sim.grade)).bold().foregroundColor(.blue) }
-                            HStack { Text("Adjusted Yield Value Projection:"); Spacer(); Text(String(format: "$%.2f", sim.estimatedValue)).bold().foregroundColor(.green) }
+                            HStack { Text("Simulated Outcome Score:"); Spacer(); Text(sim.grade.map { String(format: "%.1f Grade", $0) } ?? ScanLedger.absent).bold().foregroundColor(.blue) }
+                            HStack { Text("Adjusted Yield Value Projection:"); Spacer(); Text(sim.estimatedValue.map { String(format: "$%.2f", $0) } ?? ScanLedger.absent).bold().foregroundColor(.green) }
                         }.padding(.vertical, 4)
                     }
                 }
@@ -659,7 +659,7 @@ struct CardScannerView: View {
                 }
                 if let activeTickerCard = selectedTickerCard {
                     Section(header: Text("7-DAY TRACE INDEX")) {
-                        HStack { Text("Traced Spot Price:"); Spacer(); Text(String(format: "$%.2f USD", activeTickerCard.calculatedValue)).bold().foregroundColor(.blue) }
+                        HStack { Text("Traced Spot Price:"); Spacer(); Text(activeTickerCard.displayValue).bold().foregroundColor(.blue) }
                     }
                 }
             }.navigationTitle("Market Ticker")
@@ -726,11 +726,8 @@ struct CardScannerView: View {
     }
     private func advanceInspectionFlowPipeline() {
         if currentPhase == .frontCentering {
-            self.autoSurfaceScratches = Int.random(in: 1...3)
-            self.autoEdgeWhitening = Int.random(in: 0...2)
             currentPhase = .surfaceTiltSweep
         } else if currentPhase == .surfaceTiltSweep {
-            self.autoCornerFraying = Int.random(in: 0...1)
             currentPhase = .cornerMacroCheck
         } else if currentPhase == .cornerMacroCheck {
             currentPhase = .backPerimeter
@@ -743,10 +740,7 @@ struct CardScannerView: View {
     // (final grade capped to the lowest sub-grade + 0.5), which is more correct than this
     // function's centering-only check would have been. Deleting rather than leaving unused
     // code that could mislead future debugging.
-    private func computeDynamicPrice(strictGrade: Double, psa10Value: Double) -> Double {
-        let base = selectedCategory == .sports ? 185.00 : psa10Value
-        return base * max(0.1, strictGrade / 10.0)
-    }
+    // computeDynamicPrice removed — vault value is only what /api/grade returns.
     private func index_arbitrage_row(opp: ArbitrageOpportunity) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack { Text(opp.companyName).bold(); Spacer(); Text(String(format: "+$%.2f ROI", opp.netProfitROI)).foregroundColor(.green).bold() }
@@ -775,6 +769,8 @@ struct CardScannerView: View {
     private func requestNativeStillGrade() {
         lastRemoteError = nil
         remoteGradeSummary = ""
+        pendingServerLedger = nil
+        pendingScanId = UUID().uuidString
         guard JudgeAPIClient.normalizedBaseURL(judgeServerURL) != nil else {
             lastRemoteError = JudgeAPIClient.APIError.invalidServerURL.localizedDescription
             return
@@ -932,7 +928,8 @@ struct CardScannerView: View {
                     cardType: cardType,
                     tilt: tilt,
                     ocrLines: ocrLines,
-                    sweepFrames: sweepPayload
+                    sweepFrames: sweepPayload,
+                    scanId: pendingScanId
                 )
                 await MainActor.run {
                     isRemoteGrading = false
@@ -942,6 +939,10 @@ struct CardScannerView: View {
                         : "Uploaded \(1 + extras.count) frames. SUR is still the level still."
                     if !report.ok {
                         lastRemoteError = "Server returned ok=false"
+                    } else {
+                        let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId)
+                        pendingServerLedger = ledger
+                        showingActiveScanReport = true
                     }
                 }
             } catch {
@@ -952,58 +953,19 @@ struct CardScannerView: View {
             }
         }
     }
-    private func updatePricingAndGrades() {
-        isSaveConfirmed = false
-        calibrationEngine.playSuccessChirp()
-        if scanResult == nil { scanResult = CenteringResult(leftRightRatio: (50.5, 49.5), topBottomRatio: (50.0, 50.0), passesPSA10: true, passesBGS10: true) }
-        guard let validCentering = scanResult else { return }
-        let surfaceMetrics = SurfaceDefects(
-            scratchCount: autoSurfaceScratches,
-            dimpleOrDentCount: autoEdgeWhitening,
-            surfaceCreaseDetected: false,
-            wrinkleOrCreaseSeverity: 0
-        )
-        let cornerMetrics = CornerDefects(
-            topLeftFrayingSeverity: autoCornerFraying,
-            topRightFrayingSeverity: 0,
-            bottomLeftFrayingSeverity: 0,
-            bottomRightFrayingSeverity: 0
-        )
-        calculatedGrade = gradingJudge.evaluateMultiPhaseCondition(
-            centering: validCentering,
-            surface: surfaceMetrics,
-            edgesWhiteningCount: autoEdgeWhitening,
-            corners: cornerMetrics
-        )
-        isLoadingPrice = true
-        priceEngine.fetchLiveValuations(cardId: automaticCardIdentifier, category: selectedCategory) { result in
-            isLoadingPrice = false
-            if case .success(let data) = result { self.activeValuation = data }
-            self.showingActiveScanReport = true
+    private func executeGradingPipeline() {
+        if pendingServerLedger != nil {
+            showingActiveScanReport = true
+        } else {
+            lastRemoteError = "No server grade yet. Use Capture to send this card to /api/grade."
         }
     }
-    private func executeGradingPipeline() {
-        updatePricingAndGrades()
-    }
-    // FIXED: this was missing entirely — nothing previously saved the card to the Vault
-    // or reset the scanner when the report sheet was dismissed. This function does both.
-    private func commitAndResetScan(result: CenteringResult, grade: CalculatedGrade, value: CardValuation?) {
-        let frontLeniencyValue = value?.marketValuePSA10 ?? (selectedCategory == .sports ? 185.00 : 8500.00)
-        let cardNameString = value?.cardName ?? automaticCardIdentifier
-        let setNameString = value?.setName ?? (selectedCategory == .sports ? "2024 Topps Update Series" : "1999 Base Set First Edition")
-        let finalPrice = computeDynamicPrice(strictGrade: grade.finalScore, psa10Value: frontLeniencyValue)
-        portfolio.appendCard(
-            name: cardNameString,
-            set: setNameString,
-            lrCentering: String(format: "%.1f%%/%.1f%%", result.leftRightRatio.left, result.leftRightRatio.right),
-            tbCentering: String(format: "%.1f%%/%.1f%%", result.topBottomRatio.top, result.topBottomRatio.bottom),
-            predictedGrade: Int(grade.finalScore),
-            marketValue: finalPrice
-        )
+    private func commitAndResetScan(ledger: ScanLedger) {
+        portfolio.appendCard(from: ledger)
         resetCurrentScanState()
     }
     private func resetCurrentScanState() {
-        scanResult = nil; activeValuation = nil; calculatedGrade = nil; isSaveConfirmed = false; isCardDetected = false; cardMissStreak = 0
+        scanResult = nil; pendingServerLedger = nil; pendingScanId = ""; isSaveConfirmed = false; isCardDetected = false; cardMissStreak = 0
         autoSurfaceScratches = 0; autoEdgeWhitening = 0; autoCornerFraying = 0
         // NEW: clear the multi-frame centering buffer so a new card (or a new scan of the
         // same card) starts averaging fresh rather than blending in stale samples.
@@ -1101,7 +1063,70 @@ struct CardScannerView: View {
         }
     }
 }
-// MARK: - Premium Vault Archive Details Presentation Component View
+// MARK: - Shared ledger fields (report sheet and vault must match)
+struct ScanLedgerRows: View {
+    let ledger: ScanLedger
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(ledger.name).font(.title3).bold()
+            Text(ledger.setName).font(.subheadline).foregroundColor(.secondary)
+            Text("scan \(ledger.displayScanIdShort) · \(ledger.displayTimestamp)")
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        VStack(spacing: 12) {
+            HStack {
+                Text("Grade")
+                Spacer()
+                Text(ledger.displayGrade).bold().foregroundColor(.purple)
+            }
+            Divider()
+            HStack {
+                Text("L/R")
+                Spacer()
+                Text(ledger.lrCentering)
+                    .font(.system(.footnote, design: .monospaced))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            HStack {
+                Text("T/B")
+                Spacer()
+                Text(ledger.tbCentering)
+                    .font(.system(.footnote, design: .monospaced))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            Divider()
+            HStack {
+                Text("Value")
+                Spacer()
+                Text(ledger.displayValue).bold().foregroundColor(.green)
+            }
+            if !ledger.subGradesLabel.isEmpty {
+                Divider()
+                Text(ledger.subGradesLabel)
+                    .font(.system(.footnote, design: .monospaced))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !ledger.primaryFlaw.isEmpty {
+                Text(ledger.primaryFlaw)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .italic()
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
+}
+
 struct VaultDetailSheet: View {
     let card: SavedCard
     @Environment(\.dismiss) var dismiss
@@ -1109,68 +1134,24 @@ struct VaultDetailSheet: View {
         VStack(spacing: 20) {
             Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
             Text("VAULT RECORD AUDIT").font(.headline).bold().foregroundColor(.purple)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(card.name).font(.title3).bold()
-                Text(card.setName).font(.subheadline).foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
-            VStack(spacing: 12) {
-                HStack { Text("Archived Grade Score"); Spacer(); Text(String(format: "PSA %d", card.predictedGradePSA)).bold().foregroundColor(.purple) }
-                Divider()
-                HStack { Text("Centering Alignment Matrix (L/R):"); Spacer(); Text(card.lrCenteringResult).font(.system(.footnote, design: .monospaced)) }
-                HStack { Text("Centering Alignment Matrix (T/B):"); Spacer(); Text(card.tbCenteringResult).font(.system(.footnote, design: .monospaced)) }
-                Divider()
-                HStack { Text("Locked Asset Evaluation"); Spacer(); Text(String(format: "$%.2f", card.calculatedValue)).bold().foregroundColor(.green) }
-            }
-            .padding().background(Color(.secondarySystemBackground)).cornerRadius(12).padding(.horizontal)
+            ScanLedgerRows(ledger: card.asLedger)
             Button("Dismiss Audit Ledger") { dismiss() }
                 .font(.subheadline).bold().foregroundColor(.secondary).padding()
             Spacer()
         }
     }
 }
-// MARK: - Premium Report Card Slide-Up Pop-up Sheet Component View
+
 struct ActiveScanReportSheet: View {
-    let result: CenteringResult
-    let grade: CalculatedGrade
-    let value: CardValuation?
-    // FIXED: added this closure so the parent view can actually save the card and reset the scanner
+    let ledger: ScanLedger
     let onCommit: () -> Void
     @Environment(\.dismiss) var dismiss
     var body: some View {
         VStack(spacing: 20) {
             Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
-            Text("AI GRADE REPORT").font(.headline).bold().foregroundColor(.blue)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(value?.cardName ?? "unknown").font(.title3).bold()
-                Text(value?.setName ?? "2024 Topps Update Series").font(.subheadline).foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
-            VStack(spacing: 12) {
-                HStack {
-                    Text("Projected Score").font(.subheadline)
-                    Spacer()
-                    Text(String(format: "PSA %.1f", grade.finalScore))
-                        .font(.title2).bold().foregroundColor(.blue)
-                }
-                Divider()
-                Text(grade.primaryFlawDescription).font(.caption).foregroundColor(.secondary).italic()
-                Divider()
-                HStack {
-                    Text("Live Sub-Grades Breakdown").font(.caption2).bold().foregroundColor(.secondary)
-                    Spacer()
-                }
-                Text(grade.subGradesLabel).font(.system(.footnote, design: .monospaced)).bold().foregroundColor(.primary)
-                Divider()
-                HStack {
-                    Text("Estimated Market Value").font(.subheadline)
-                    Spacer()
-                    Text(String(format: "$%.2f", value?.marketValuePSA10 ?? 185.00)).font(.title2).bold().foregroundColor(.green)
-                }
-            }
-            .padding().background(Color(.secondarySystemBackground)).cornerRadius(12).padding(.horizontal)
+            Text("SERVER GRADE REPORT").font(.headline).bold().foregroundColor(.blue)
+            ScanLedgerRows(ledger: ledger)
             Button(action: {
-                // FIXED: now actually saves the card and resets the scanner before closing
                 onCommit()
                 dismiss()
             }) {

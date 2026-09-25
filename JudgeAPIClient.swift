@@ -33,6 +33,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
 
     struct RemoteReport {
         var ok: Bool
+        var scanId: String?
         var finalScore: Double?
         var subGradesLabel: String?
         var primaryFlaw: String?
@@ -44,6 +45,11 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var alignmentCrop: Bool?
         var familyId: String?
         var familyMatch: String?
+        var identityName: String?
+        var identitySet: String?
+        var marketValue: Double?
+        var leftRightRatio: (left: Double, right: Double)?
+        var topBottomRatio: (top: Double, bottom: Double)?
         var ocrLines: [String]
         var surfaceSweep: [SurfaceSweepRow]
         var surfaceSweepComplete: Bool?
@@ -78,7 +84,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         cardType: String?,
         tilt: TiltSnapshot?,
         ocrLines: [String] = [],
-        sweepFrames: [SweepFrame] = []
+        sweepFrames: [SweepFrame] = [],
+        scanId: String
     ) async throws -> RemoteReport {
         guard let root = Self.normalizedBaseURL(baseURL) else {
             throw APIError.invalidServerURL
@@ -96,7 +103,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             cardType: cardType,
             tilt: tilt,
             ocrLines: ocrLines,
-            sweepFrames: sweepFrames
+            sweepFrames: sweepFrames,
+            scanId: scanId
         )
 
         let (data, response) = try await session.data(for: request)
@@ -160,7 +168,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         cardType: String?,
         tilt: TiltSnapshot?,
         ocrLines: [String],
-        sweepFrames: [SweepFrame]
+        sweepFrames: [SweepFrame],
+        scanId: String
     ) -> Data {
         var body = Data()
         func appendField(_ name: String, _ value: String) {
@@ -174,6 +183,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         body.append(jpeg)
         body.append("\r\n".data(using: .utf8)!)
         appendField("name", name)
+        appendField("scanId", scanId)
         appendField("alignmentCrop", "true")
         appendField("debug", "true")
         appendField("captureMode", sweepFrames.isEmpty ? "native-still" : "native-sweep")
@@ -243,12 +253,22 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let identity = (item?["cardIdentity"] as? [String: Any]) ?? (report?["cardIdentity"] as? [String: Any])
         let familyId = identity?["familyId"] as? String
         let familyMatch = identity?["match"] as? String
+        let identityName = (identity?["name"] as? String) ?? (identity?["cardName"] as? String)
+        let identitySet = (identity?["setName"] as? String) ?? (identity?["set"] as? String)
         let ocrLines = (identity?["ocrLines"] as? [String]) ?? []
         let surfaceSweep = parseSurfaceSweep(report?["surfaceSweep"])
         let capturedBins = (report?["capturedBins"] as? [String]) ?? []
         let surfaceSweepComplete = boolValue(report?["surfaceSweepComplete"])
+        let scanId = (item?["scanId"] as? String) ?? (root["scanId"] as? String) ?? (report?["scanId"] as? String)
+        let marketValue = doubleValue(item?["marketValue"])
+            ?? doubleValue(report?["marketValue"])
+            ?? doubleValue(report?["marketValuePSA10"])
+        let metrics = report?["centeringMetrics"] as? [String: Any]
+        let leftRightRatio = ratioPair(metrics?["leftRightRatio"], first: "left", second: "right")
+        let topBottomRatio = ratioPair(metrics?["topBottomRatio"], first: "top", second: "bottom")
 
         var lines: [String] = []
+        if let scanId, !scanId.isEmpty { lines.append("scanId  \(scanId)") }
         if let finalScore { lines.append(String(format: "finalScore  %.1f", finalScore)) }
         if incomplete { lines.append("incomplete  true") }
         if let sub { lines.append(sub) }
@@ -281,6 +301,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
 
         return RemoteReport(
             ok: boolValue(root["ok"]) ?? false,
+            scanId: scanId,
             finalScore: finalScore,
             subGradesLabel: sub,
             primaryFlaw: flaw,
@@ -292,12 +313,63 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             alignmentCrop: alignmentCrop,
             familyId: familyId,
             familyMatch: familyMatch,
+            identityName: identityName,
+            identitySet: identitySet,
+            marketValue: marketValue,
+            leftRightRatio: leftRightRatio,
+            topBottomRatio: topBottomRatio,
             ocrLines: ocrLines,
             surfaceSweep: surfaceSweep,
             surfaceSweepComplete: surfaceSweepComplete,
             capturedBins: capturedBins,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
+        )
+    }
+
+    /// Vault/report fields from a server grade. Name/set/grade/value stay
+    /// Unidentified / — unless the server actually produced them.
+    static func ledger(from report: RemoteReport, clientScanId: String, timestamp: Date = Date()) -> ScanLedger {
+        let scanId = {
+            if let remote = report.scanId, !remote.isEmpty { return remote }
+            return clientScanId
+        }()
+        let familyId = report.familyId.flatMap { $0.isEmpty ? nil : $0 }
+        let match = report.familyMatch.flatMap { value -> String? in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { return nil }
+            if trimmed.lowercased() == "none" || trimmed.lowercased() == "unidentified" { return nil }
+            return trimmed
+        }
+        let identified = familyId != nil || match != nil
+        let name: String
+        if identified {
+            let candidate = report.identityName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? match ?? ""
+            name = candidate.isEmpty ? ScanLedger.unidentified : candidate
+        } else {
+            name = ScanLedger.unidentified
+        }
+        let setName: String
+        if identified, let set = report.identitySet?.trimmingCharacters(in: .whitespacesAndNewlines), !set.isEmpty {
+            setName = set
+        } else {
+            setName = ScanLedger.absent
+        }
+        let lr = report.leftRightRatio.map { String(format: "%.1f%%/%.1f%%", $0.left, $0.right) } ?? ScanLedger.absent
+        let tb = report.topBottomRatio.map { String(format: "%.1f%%/%.1f%%", $0.top, $0.bottom) } ?? ScanLedger.absent
+        return ScanLedger(
+            scanId: scanId,
+            committedAt: timestamp,
+            name: name,
+            setName: setName,
+            grade: report.finalScore,
+            lrCentering: lr,
+            tbCentering: tb,
+            value: report.marketValue,
+            familyId: familyId,
+            subGradesLabel: report.subGradesLabel ?? "",
+            primaryFlaw: report.primaryFlaw ?? "",
+            incomplete: report.incomplete ?? false
         )
     }
 
@@ -323,6 +395,15 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         }
         let bin = row.bin ?? "?"
         return "  \(bin)  P=\(fmt(row.pitch, 1)) R=\(fmt(row.roll, 1)) scratch=\(fmt(row.scratchCount, 0)) dimple=\(fmt(row.dimpleCount, 0)) crease=\(fmt(row.creaseSeverity, 2)) glare=\(fmt(row.glareFrac, 3))"
+    }
+
+    private static func ratioPair(_ value: Any?, first: String, second: String) -> (Double, Double)? {
+        guard let map = value as? [String: Any],
+              let a = doubleValue(map[first]),
+              let b = doubleValue(map[second]) else {
+            return nil
+        }
+        return (a, b)
     }
 
     private static func doubleValue(_ value: Any?) -> Double? {
