@@ -1100,6 +1100,18 @@ struct ScanLedgerRows: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
+            HStack {
+                Text("Corners")
+                Spacer()
+                Text(ledger.displayCorners)
+                    .font(.system(.footnote, design: .monospaced))
+            }
+            if let debugPath = ledger.debugPath, !debugPath.isEmpty {
+                Text("Debug: \(debugPath)/")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Divider()
             HStack {
                 Text("Value")

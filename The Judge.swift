@@ -90,9 +90,11 @@ public class TheJudge {
         // 5. THE STRICT REAL-WORLD GRADE CEILING ENFORCEMENT RULES
         // Real-world laboratories utilize strict sub-grade capping policies.
         // A card cannot receive a final grade higher than 0.5 points above its lowest sub-grade score.
-        let subGradesList = [centeringScore, finalSurfaceScore, edgeScore, cornerScore]
+        // CRN is omitted when corners were not actually measured (nil / unused).
+        // Passing zeros here would fake a 10 and pull the average up.
+        let subGradesList = [centeringScore, finalSurfaceScore, edgeScore]
         let lowestIsolatedSubGrade = subGradesList.min() ?? 1.0
-        let overallMathematicalAverage = subGradesList.reduce(0.0, +) / 4.0
+        let overallMathematicalAverage = subGradesList.reduce(0.0, +) / 3.0
 
         let absoluteConditionCeilingLimit = lowestIsolatedSubGrade + 0.5
         let strictCalculatedFinalGrade = min(overallMathematicalAverage, absoluteConditionCeilingLimit)
@@ -118,8 +120,8 @@ public class TheJudge {
         let cappedFinalGrade = min(10.0, max(1.0, roundedFinalGrade))
 
         let subGradesDisplayLabel = String(
-            format: "CEN: %.1f | SUR: %.1f | EDG: %.1f | CRN: %.1f",
-            centeringScore, finalSurfaceScore, edgeScore, cornerScore
+            format: "CEN: %.1f | SUR: %.1f | EDG: %.1f | CRN: —",
+            centeringScore, finalSurfaceScore, edgeScore
         )
 
         return CalculatedGrade(

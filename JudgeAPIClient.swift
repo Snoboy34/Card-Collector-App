@@ -54,6 +54,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var surfaceSweep: [SurfaceSweepRow]
         var surfaceSweepComplete: Bool?
         var capturedBins: [String]
+        var cornersGrade: Double?
+        var debugPath: String?
         var rawJSON: String
         var summaryText: String
     }
@@ -266,6 +268,10 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let metrics = report?["centeringMetrics"] as? [String: Any]
         let leftRightRatio = ratioPair(metrics?["leftRightRatio"], first: "left", second: "right")
         let topBottomRatio = ratioPair(metrics?["topBottomRatio"], first: "top", second: "bottom")
+        let subGrades = report?["subGrades"] as? [String: Any]
+        let cornersGrade = doubleValue(subGrades?["corners"])
+        let artifacts = (report?["debugArtifacts"] as? [String: Any]) ?? (item?["debugArtifacts"] as? [String: Any])
+        let debugPath = (artifacts?["dir"] as? String) ?? (artifacts?["debugJson"] as? String)
 
         var lines: [String] = []
         if let scanId, !scanId.isEmpty { lines.append("scanId  \(scanId)") }
@@ -322,6 +328,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             surfaceSweep: surfaceSweep,
             surfaceSweepComplete: surfaceSweepComplete,
             capturedBins: capturedBins,
+            cornersGrade: cornersGrade,
+            debugPath: debugPath,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )
@@ -369,7 +377,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             familyId: familyId,
             subGradesLabel: report.subGradesLabel ?? "",
             primaryFlaw: report.primaryFlaw ?? "",
-            incomplete: report.incomplete ?? false
+            incomplete: report.incomplete ?? false,
+            cornersGrade: report.cornersGrade,
+            debugPath: report.debugPath
         )
     }
 
