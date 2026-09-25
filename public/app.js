@@ -969,6 +969,9 @@ function openReportModal(item) {
       <button id="closeModal" style="float:right" class="small">Close</button>
       <h3>${escapeHtml(item.name || 'Unidentified')}</h3>
       <p class="muted">scan ${escapeHtml(String(scanId).slice(0, 8) || '—')} · ${escapeHtml(scanStamp)}</p>
+      ${report && report.debugArtifacts && report.debugArtifacts.dir
+        ? '<p class="muted">Debug: ' + escapeHtml(report.debugArtifacts.dir) + '/</p>'
+        : ''}
       <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
         <img src="${itemImage(item)}" alt="${escapeHtml(item.name || 'Unidentified')}" style="width:180px; height:220px; object-fit:cover; border-radius:8px; flex-shrink:0;" />
         <div>
@@ -977,8 +980,8 @@ function openReportModal(item) {
           ${ceiling}
           ${report ? `
             <ul>
-              <li>Centering (0–100 projection): ${report.centering}</li>
-              <li>Corners (0–100 projection): ${report.corners}</li>
+              <li>Centering (0–100 projection): ${report.centering == null ? '—' : report.centering}</li>
+              <li>Corners: —</li>
               <li>Edges (0–100 projection): ${report.edges}</li>
               <li>Surface (0–100 projection): ${report.surface}</li>
               <li><strong>Weighted projection: ${report.weighted}</strong></li>

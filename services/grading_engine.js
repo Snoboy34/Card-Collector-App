@@ -69,6 +69,7 @@
 // the Express process (keeps /api/health and the rest of the app alive).
 // -----------------------------------------------------------------------------
 const scanLevel = require('../public/scan_level');
+const scanDebug = require('./scan_debug');
 
 let sharp = null;
 try {
@@ -320,7 +321,7 @@ function describePrimaryFlaw(args) {
   if (surface.surfaceCreaseDetected || surface.wrinkleOrCreaseSeverity >= 2) {
     return 'Capped Condition Grade. Volumetric frame processing tracked structural cardboard crease lines or soft wrinkles.';
   }
-  if (absoluteMaxCornerFray >= 3) {
+  if (args.cornersMeasured && absoluteMaxCornerFray >= 3) {
     return 'Pristine criteria broken due to corner layer separation or localized card paper splitting.';
   }
   if (finalSurfaceScore <= 8.5) {
@@ -367,7 +368,10 @@ function labelForFinalScore(finalScore) {
  * @param {{ leftRightRatio: {left:number, right:number}, topBottomRatio: {top:number, bottom:number} }} centering
  * @param {{ scratchCount: number, dimpleOrDentCount: number, surfaceCreaseDetected: boolean, wrinkleOrCreaseSeverity: number }} surface
  * @param {number} edgesWhiteningCount
- * @param {{ topLeftFrayingSeverity: number, topRightFrayingSeverity: number, bottomLeftFrayingSeverity: number, bottomRightFrayingSeverity: number }} corners
+ * @param {{ topLeftFrayingSeverity: number, topRightFrayingSeverity: number, bottomLeftFrayingSeverity: number, bottomRightFrayingSeverity: number }|null} corners
+ *   Pass a real fray reading to score CRN. Pass `null` when corners were
+ *   not measured — CRN is then omitted from the average and the 0.5 cap
+ *   (equal-weight mean of the remaining subs). Do not pass zeros to fake a 10.
  * @returns {object} CalculatedGrade-equivalent plus diagnostic ceiling fields
  */
 function evaluateMultiPhaseCondition(centering, surface, edgesWhiteningCount, corners) {
@@ -379,12 +383,7 @@ function evaluateMultiPhaseCondition(centering, surface, edgesWhiteningCount, co
     surfaceCreaseDetected: false,
     wrinkleOrCreaseSeverity: 0
   };
-  const cornerInput = corners || {
-    topLeftFrayingSeverity: 0,
-    topRightFrayingSeverity: 0,
-    bottomLeftFrayingSeverity: 0,
-    bottomRightFrayingSeverity: 0
-  };
+  const cornersMeasured = corners != null;
 
   // ----- Phase 1: Centering -----
   const centeringPhase = scoreCenteringPhase(leftRightRatio, topBottomRatio);
@@ -397,19 +396,25 @@ function evaluateMultiPhaseCondition(centering, surface, edgesWhiteningCount, co
   // ----- Phase 3: Edges -----
   const edgeScore = scoreEdgesPhase(edgesWhiteningCount);
 
-  // ----- Phase 4: Corners -----
-  const cornerPhase = scoreCornersPhase(cornerInput);
-  const cornerScore = cornerPhase.score;
-  const absoluteMaxCornerFray = cornerPhase.absoluteMaxCornerFray;
+  // ----- Phase 4: Corners (optional) -----
+  let cornerScore = null;
+  let absoluteMaxCornerFray = null;
+  if (cornersMeasured) {
+    const cornerPhase = scoreCornersPhase(corners);
+    cornerScore = cornerPhase.score;
+    absoluteMaxCornerFray = cornerPhase.absoluteMaxCornerFray;
+  }
 
   // ----- STRICT REAL-WORLD GRADE CEILING -----
   // A card cannot receive a final grade higher than 0.5 points above its
-  // lowest isolated sub-grade. This is the rule that stops a Gem-looking
-  // average from surviving a single 8.0 corner or a crease-killed surface.
-  const subGradesList = [centeringScore, finalSurfaceScore, edgeScore, cornerScore];
+  // lowest *measured* sub-grade. Unmeasured CRN is excluded from both the
+  // equal-weight average and the cap (it is not a 10).
+  const subGradesList = [centeringScore, finalSurfaceScore, edgeScore];
+  if (cornersMeasured) subGradesList.push(cornerScore);
   const lowestIsolatedSubGrade = Math.min.apply(null, subGradesList);
   const overallMathematicalAverage =
-    (centeringScore + finalSurfaceScore + edgeScore + cornerScore) / 4.0;
+    subGradesList.reduce(function (sum, score) { return sum + score; }, 0) /
+    subGradesList.length;
 
   const absoluteConditionCeilingLimit =
     lowestIsolatedSubGrade + GRADE_SCALE.conditionCeilingOffset;
@@ -429,14 +434,15 @@ function evaluateMultiPhaseCondition(centering, surface, edgesWhiteningCount, co
     surface: surfaceInput,
     absoluteMaxCornerFray,
     finalSurfaceScore,
-    centeringScore
+    centeringScore,
+    cornersMeasured
   });
 
   const subGradesDisplayLabel =
     'CEN: ' + centeringScore.toFixed(1) +
     ' | SUR: ' + finalSurfaceScore.toFixed(1) +
     ' | EDG: ' + edgeScore.toFixed(1) +
-    ' | CRN: ' + cornerScore.toFixed(1);
+    ' | CRN: ' + (cornersMeasured ? cornerScore.toFixed(1) : '—');
 
   const leftPct = leftRightRatio.left;
   const topPct = topBottomRatio.top;
@@ -459,8 +465,9 @@ function evaluateMultiPhaseCondition(centering, surface, edgesWhiteningCount, co
       centering: centeringScore,
       surface: finalSurfaceScore,
       edges: edgeScore,
-      corners: cornerScore
+      corners: cornersMeasured ? cornerScore : null
     },
+    cornersMeasured,
 
     // Ceiling diagnostics (not in the Swift struct; added so operators can
     // see WHEN the 0.5-point rule actually fired).
@@ -756,23 +763,30 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
   const baselines = [];
   const paperMeans = [];
   const paperBaselines = [];
+  const sampleLineResults = [];
+  const sampleLineOffsets = [];
 
   for (let sample = 0; sample < sampleCount; sample++) {
     const span = dimension - 2 * margin;
     const lineOffset = margin + Math.round(sample * span / (sampleCount - 1));
+    sampleLineOffsets.push(lineOffset);
     const hit = scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight, getPaperPixel);
     if (hit != null) {
+      sampleLineResults.push(hit.pos);
       positions.push(hit.pos);
       if (hit.bandStddev != null) stddevs.push(hit.bandStddev);
       if (hit.baseline != null) baselines.push(hit.baseline);
       if (hit.paperBandMean != null) paperMeans.push(hit.paperBandMean);
       if (hit.paperBaseline != null) paperBaselines.push(hit.paperBaseline);
+    } else {
+      sampleLineResults.push(null);
     }
   }
 
   if (!positions.length) {
     return {
-      width: null, samples: [], bandStddev: null, baseline: null,
+      width: null, samples: [], sampleLineResults: sampleLineResults,
+      sampleLineOffsets: sampleLineOffsets, bandStddev: null, baseline: null,
       paperBandMean: null, paperBaseline: null, attempted: sampleCount
     };
   }
@@ -780,6 +794,8 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
   return {
     width: median(positions),
     samples: positions,
+    sampleLineResults: sampleLineResults,
+    sampleLineOffsets: sampleLineOffsets,
     bandStddev: stddevs.length ? median(stddevs) : null,
     baseline: baselines.length ? median(baselines) : null,
     paperBandMean: paperMeans.length ? median(paperMeans) : null,
@@ -816,6 +832,18 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
     top: topScan.samples,
     bottom: bottomScan.samples
   };
+  const sampleLineResults = {
+    left: leftScan.sampleLineResults,
+    right: rightScan.sampleLineResults,
+    top: topScan.sampleLineResults,
+    bottom: bottomScan.sampleLineResults
+  };
+  const sampleLineOffsets = {
+    left: leftScan.sampleLineOffsets,
+    right: rightScan.sampleLineOffsets,
+    top: topScan.sampleLineOffsets,
+    bottom: bottomScan.sampleLineOffsets
+  };
   const bandStddev = {
     left: leftScan.bandStddev,
     right: rightScan.bandStddev,
@@ -850,6 +878,8 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
       detected: false,
       widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
       samples: samples,
+      sampleLineResults: sampleLineResults,
+      sampleLineOffsets: sampleLineOffsets,
       bandStddev: bandStddev,
       baselines: baselines,
       paperBandMean: paperBandMean,
@@ -870,6 +900,8 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
     detected: true,
     widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
     samples: samples,
+    sampleLineResults: sampleLineResults,
+    sampleLineOffsets: sampleLineOffsets,
     bandStddev: bandStddev,
     baselines: baselines,
     paperBandMean: paperBandMean,
@@ -1758,7 +1790,7 @@ async function applySurfaceSweep(report, extraFrames, options) {
 function fallbackReport(reason) {
   return {
     centering: 0,
-    corners: 0,
+    corners: null,
     edges: 0,
     surface: 0,
     weighted: 0,
@@ -1767,8 +1799,9 @@ function fallbackReport(reason) {
     finalScore: 0,
     isGemMint: false,
     primaryFlawDescription: reason,
-    subGradesLabel: 'CEN: 0.0 | SUR: 0.0 | EDG: 0.0 | CRN: 0.0',
-    subGrades: { centering: 0, surface: 0, edges: 0, corners: 0 },
+    subGradesLabel: 'CEN: — | SUR: — | EDG: — | CRN: —',
+    subGrades: { centering: null, surface: 0, edges: 0, corners: null },
+    cornersMeasured: false,
     conditionCeilingApplied: false
   };
 }
@@ -1930,7 +1963,8 @@ async function gradeBuffer(buffer, options) {
     const surface = measureSurfaceDefects(pixels, blurred, width, centeringBox);
     const edgesWhiteningCount = measureEdgeWhitening(pixels, width, centeringBox);
     const measuredCorners = measureCornerFraying(pixels, width, centeringBox);
-    const corners = unusedCornerFrayingUntilRealDetector();
+    // Not measured — do not score CRN as 10. Brightness mapping is debug-only.
+    const corners = null;
     const borderReliability = assessPrintBorderReliability(
       centeringBox, width, height, centeringMeasurement,
       { alignmentCrop: Boolean(options.alignmentCrop) }
@@ -1952,6 +1986,31 @@ async function gradeBuffer(buffer, options) {
         : '')
     );
 
+    async function attachScanDebug(gradeResult) {
+      if (!options.scansRoot || !options.scanId) return gradeResult;
+      try {
+        gradeResult.debugArtifacts = await scanDebug.persist({
+          scansRoot: options.scansRoot,
+          scanId: options.scanId,
+          report: gradeResult,
+          pixels: pixels,
+          width: width,
+          height: height,
+          shouldRotate: shouldRotate,
+          alignmentCrop: Boolean(options.alignmentCrop),
+          findBox: box,
+          centeringBox: centeringBox,
+          measurement: centeringMeasurement,
+          borderReliability: borderReliability,
+          familyId: options.familyId || null
+        });
+      } catch (err) {
+        console.error('[scan-debug] persist failed', options.scanId, err && err.message);
+        gradeResult.debugArtifacts = { error: err && err.message ? err.message : String(err) };
+      }
+      return gradeResult;
+    }
+
     // Failed print-border detection is UNKNOWN, not 50/50. Do not feed
     // fabricated ratios into evaluateMultiPhaseCondition — that scorer has
     // no "undetected" state and would emit a fake Gem centering sub-grade.
@@ -1960,13 +2019,12 @@ async function gradeBuffer(buffer, options) {
     if (!centeringMeasurement.detected || !borderReliability.accepted) {
       const surfacePhase = scoreSurfacePhase(surface);
       const edgeScore = scoreEdgesPhase(edgesWhiteningCount);
-      const cornerPhase = scoreCornersPhase(corners);
       const incompleteReason = !centeringMeasurement.detected
         ? 'centering undetectable — no printed border found'
         : 'centering undetectable — print-border samples do not agree on a printed frame';
       const report = {
         centering: null,
-        corners: clamp01to100(Math.round(cornerPhase.score * 10)),
+        corners: null,
         edges: clamp01to100(Math.round(edgeScore * 10)),
         surface: clamp01to100(Math.round(surfacePhase.score * 10)),
         weighted: null,
@@ -1978,13 +2036,14 @@ async function gradeBuffer(buffer, options) {
         subGradesLabel:
           'CEN: — | SUR: ' + surfacePhase.score.toFixed(1) +
           ' | EDG: ' + edgeScore.toFixed(1) +
-          ' | CRN: ' + cornerPhase.score.toFixed(1),
+          ' | CRN: —',
         subGrades: {
           centering: null,
           surface: surfacePhase.score,
           edges: edgeScore,
-          corners: cornerPhase.score
+          corners: null
         },
+        cornersMeasured: false,
         centeringUndetected: true,
         incomplete: true,
         incompleteReason: incompleteReason,
@@ -2003,7 +2062,7 @@ async function gradeBuffer(buffer, options) {
           creasePenalty: surfacePhase.creasePenalty
         },
         edgesWhiteningCount: Number(edgesWhiteningCount) || 0,
-        absoluteMaxCornerFray: cornerPhase.absoluteMaxCornerFray,
+        absoluteMaxCornerFray: null,
         cornerWearDisabled: true,
         measuredCornerBrightnessSeverity: measuredCorners,
         centeringDiagnostics: buildCenteringDiagnostics(width, height, centeringBox, centeringMeasurement, {
@@ -2030,7 +2089,7 @@ async function gradeBuffer(buffer, options) {
           edgesWhiteningCount
         };
       }
-      return returnGrade(report);
+      return returnGrade(await attachScanDebug(report));
     }
 
     const judged = evaluateMultiPhaseCondition(
@@ -2045,7 +2104,9 @@ async function gradeBuffer(buffer, options) {
     const centering100 = clamp01to100(Math.round(judged.subGrades.centering * 10));
     const surface100 = clamp01to100(Math.round(judged.subGrades.surface * 10));
     const edges100 = clamp01to100(Math.round(judged.subGrades.edges * 10));
-    const corners100 = clamp01to100(Math.round(judged.subGrades.corners * 10));
+    const corners100 = judged.subGrades.corners == null
+      ? null
+      : clamp01to100(Math.round(judged.subGrades.corners * 10));
     const weighted100 = clamp01to100(Math.round(judged.finalScore * 10));
 
     const report = {
@@ -2073,6 +2134,7 @@ async function gradeBuffer(buffer, options) {
       edgesWhiteningCount: judged.edgesWhiteningCount,
       absoluteMaxCornerFray: judged.absoluteMaxCornerFray,
       cornerWearDisabled: true,
+      cornersMeasured: judged.cornersMeasured === true,
       measuredCornerBrightnessSeverity: measuredCorners,
       printCenteringDetected: centeringMeasurement.detected,
       centeringUndetected: false,
@@ -2102,7 +2164,7 @@ async function gradeBuffer(buffer, options) {
       };
     }
 
-    return returnGrade(report);
+    return returnGrade(await attachScanDebug(report));
   } catch (err) {
     return returnGrade(fallbackReport('grading engine error: ' + (err && err.message ? err.message : String(err))));
   }
