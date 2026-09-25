@@ -74,6 +74,33 @@ const oneEdge = g.evaluateMultiPhaseCondition(pristineCentering, cleanSurface, 1
 assertEq('1-edge finalScore (ceiling 9.5)', oneEdge.finalScore, 9.5);
 assertEq('1-edge edges sub', oneEdge.subGrades.edges, 9.0);
 
+const unmeasured = g.evaluateMultiPhaseCondition(pristineCentering, cleanSurface, 0, null);
+assertEq('unmeasured CRN is null', unmeasured.subGrades.corners, null);
+assertEq('unmeasured CRN not a 10', unmeasured.cornersMeasured, false);
+assertEq('unmeasured still gem from CEN/SUR/EDG', unmeasured.finalScore, 10);
+assert('unmeasured label uses CRN em dash', unmeasured.subGradesLabel.indexOf('CRN: —') !== -1);
+
+// Excluding a fake CRN 10 must be allowed to change the average.
+// CEN 8 (56/44), SUR 8 (4 scratches), EDG 8 (2 whitening sites).
+const threeWay = g.evaluateMultiPhaseCondition(
+  { leftRightRatio: { left: 56, right: 44 }, topBottomRatio: { top: 50, bottom: 50 } },
+  Object.assign({}, cleanSurface, { scratchCount: 4 }),
+  2,
+  null
+);
+assertEq('3-sub average is 8.0 not 8.5', threeWay.finalScore, 8.0);
+assertEq('3-sub CRN null', threeWay.subGrades.corners, null);
+
+const sd = require('../services/scan_debug');
+const inner = sd.innerLines(
+  { left: 0, right: 99, top: 0, bottom: 149 },
+  { left: 10, right: 15, top: 8, bottom: 12 }
+);
+assertEq('debug inner leftX', inner.leftX, 10);
+assertEq('debug inner rightX', inner.rightX, 84);
+assertEq('debug inner topY', inner.topY, 8);
+assertEq('debug inner bottomY', inner.bottomY, 137);
+
 assertEq('normalizeScanId uuid', g.normalizeScanId('550e8400-e29b-41d4-a716-446655440000'), '550e8400-e29b-41d4-a716-446655440000');
 assertEq('normalizeScanId reject short', g.normalizeScanId('abc'), null);
 const unusedCorners = g.unusedCornerFrayingUntilRealDetector();
@@ -117,6 +144,30 @@ async function runGradeBufferUndetectedCheck() {
   });
   assertEq('gradeBuffer echoes scanId', fallback.scanId, '550e8400-e29b-41d4-a716-446655440000');
 
+  const os = require('os');
+  const path = require('path');
+  const fs = require('fs');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'scan-debug-'));
+  const persisted = await sd.persist({
+    scansRoot: tmp,
+    scanId: 'test-scan-id-01',
+    report: { finalScore: 8, subGrades: { corners: null }, cornersMeasured: false },
+    measurement: {
+      detected: true,
+      widths: { left: 10, right: 12, top: 8, bottom: 9 },
+      sampleLineResults: { left: [10, 10, null], right: [12], top: [8], bottom: [9] },
+      leftRightRatio: { left: 45.5, right: 54.5 },
+      topBottomRatio: { top: 47.1, bottom: 52.9 }
+    },
+    centeringBox: { left: 0, right: 99, top: 0, bottom: 149, width: 100, height: 150 }
+  });
+  const debugFile = path.join(tmp, 'test-scan-id-01', 'debug.json');
+  assert('wrote scans/<scanId>/debug.json', fs.existsSync(debugFile));
+  const dumped = JSON.parse(fs.readFileSync(debugFile, 'utf8'));
+  assertEq('debug.json scanId', dumped.scanId, 'test-scan-id-01');
+  assertEq('debug.json source is server still', dumped.source, 'server measurePrintCentering on Capture still');
+  assertEq('persist meta dir', persisted.dir, path.join('scans', 'test-scan-id-01'));
+
   const buf = await makeTinyUniformPng();
   if (!buf) {
     console.log('SKIP gradeBuffer undetected check (sharp not installed)');
@@ -142,8 +193,9 @@ async function runGradeBufferUndetectedCheck() {
   assert('gradeBuffer still reports surface', typeof report.subGrades.surface === 'number');
   assert('gradeBuffer still reports edges', typeof report.subGrades.edges === 'number');
   assert('gradeBuffer still reports corners', typeof report.subGrades.corners === 'number');
-  assertEq('gradeBuffer CRN unused until real fray detector', report.subGrades.corners, 10);
+  assertEq('gradeBuffer CRN not measured', report.subGrades.corners, null);
   assert('gradeBuffer cornerWearDisabled', report.cornerWearDisabled === true);
+  assert('gradeBuffer cornersMeasured false', report.cornersMeasured === false);
 }
 
 function assertHint(label, actual, expected) {

@@ -336,6 +336,7 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
     const opts = parseGradingOptions(req.body);
     const scanId = resolveScanId(req.body);
     opts.scanId = scanId;
+    opts.scansRoot = path.join(__dirname, 'scans');
 
     const ts = Date.now();
     const orig = imageFile.originalname || 'upload';
@@ -401,6 +402,7 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     const opts = parseGradingOptions(req.body);
     const scanId = resolveScanId(req.body);
     opts.scanId = scanId;
+    opts.scansRoot = path.join(__dirname, 'scans');
     const buffer = await fs.promises.readFile(req.file.path);
     const orig = req.file.originalname || path.basename(req.file.path);
     const classification = await classifier.classifyBuffer(buffer, { filename: orig });
