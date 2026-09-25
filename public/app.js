@@ -884,7 +884,11 @@ function openReportModal(item) {
   modal.className = 'modal';
   const scoreLine = report && typeof report.finalScore === 'number'
     ? report.finalScore.toFixed(1) + ' ' + (report.label || '')
-    : (report ? report.label : 'Unscanned');
+    : '—';
+  const scanId = item.scanId || (report && report.scanId) || '';
+  const scanStamp = item.createdAt
+    ? new Date(item.createdAt).toLocaleString()
+    : '—';
   const sub = report && report.subGrades ? report.subGrades : null;
   const ceiling = report && report.conditionCeilingApplied
     ? '<p class="ceiling-flag">0.5-point condition ceiling applied (final cannot exceed worst sub-grade + 0.5).</p>'
@@ -963,9 +967,10 @@ function openReportModal(item) {
   modal.innerHTML = `
     <div class="panel" role="dialog" aria-modal="true" aria-label="Grading Report">
       <button id="closeModal" style="float:right" class="small">Close</button>
-      <h3>${escapeHtml(item.name)}</h3>
+      <h3>${escapeHtml(item.name || 'Unidentified')}</h3>
+      <p class="muted">scan ${escapeHtml(String(scanId).slice(0, 8) || '—')} · ${escapeHtml(scanStamp)}</p>
       <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
-        <img src="${itemImage(item)}" alt="${escapeHtml(item.name)}" style="width:180px; height:220px; object-fit:cover; border-radius:8px; flex-shrink:0;" />
+        <img src="${itemImage(item)}" alt="${escapeHtml(item.name || 'Unidentified')}" style="width:180px; height:220px; object-fit:cover; border-radius:8px; flex-shrink:0;" />
         <div>
           <h4 style="margin:0 0 8px 0;">Judge Grade: <span style="color:var(--accent)">${escapeHtml(scoreLine)}</span></h4>
           ${subLine}
@@ -1043,9 +1048,13 @@ function previewAndOfferUpload(file) {
 
   document.getElementById('uploadBtn').addEventListener('click', async () => {
     const fname = (nameInput && nameInput.value) || file.name || 'Scanned Card';
+    const scanId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : ('scan-' + Date.now() + '-' + Math.random().toString(16).slice(2, 10));
     const fd = new FormData();
     fd.append('image', file, file.name);
     fd.append('name', fname);
+    fd.append('scanId', scanId);
     // Always request metrology dumps while we settle printed-frame vs backdrop
     // and L/R vs T/B drift. The report modal reads centeringDiagnostics even
     // if this flag is later turned off.

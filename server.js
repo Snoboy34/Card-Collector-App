@@ -35,6 +35,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const multer = require('multer');
+const crypto = require('crypto');
 
 const grading = require('./services/grading_engine');
 const classifier = require('./services/classifier_engine');
@@ -105,6 +106,33 @@ let inventory = []; // Each item: { id, name, imagePath, gradingReport, createdA
  * @param {object} body
  * @returns {{ cardType?: string, debug?: boolean, captureTilt?: object }}
  */
+function parseOcrLines(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function resolveScanId(body) {
+  return grading.normalizeScanId(body && body.scanId) || crypto.randomUUID();
+}
+
+function honestCardIdentity(body) {
+  return {
+    name: 'Unidentified',
+    setName: '—',
+    cardIdentity: {
+      familyId: null,
+      match: null,
+      ocrLines: parseOcrLines(body && body.ocrLines)
+    }
+  };
+}
+
 function parseGradingOptions(body) {
   const opts = {};
   if (!body) return opts;
@@ -113,6 +141,8 @@ function parseGradingOptions(body) {
   const tilt = scanLevel.parseCaptureTilt(body);
   if (tilt) opts.captureTilt = tilt;
   if (scanLevel.parseAlignmentCrop(body)) opts.alignmentCrop = true;
+  const scanId = grading.normalizeScanId(body.scanId);
+  if (scanId) opts.scanId = scanId;
   return opts;
 }
 
@@ -286,7 +316,8 @@ app.get('/api/stats', (req, res) => {
  *
  * Body (multipart/form-data):
  *   image     file buffer (required)
- *   name      optional display name
+ *   scanId    optional client UUID (echoed on item.scanId and logged)
+ *   name      ignored for identity (title is Unidentified until family match)
  *   cardType  optional SPORTS | TCG (reserved for Phase 3 corner templates)
  *   debug     optional "true" to attach metrology dumps
  *
@@ -303,6 +334,8 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
     const imageFile = req.files && req.files.image && req.files.image[0];
     if (!imageFile || !imageFile.buffer) return res.status(400).json({ error: 'image buffer required' });
     const opts = parseGradingOptions(req.body);
+    const scanId = resolveScanId(req.body);
+    opts.scanId = scanId;
 
     const ts = Date.now();
     const orig = imageFile.originalname || 'upload';
@@ -333,15 +366,21 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
       levelTilt: opts.captureTilt
     });
 
+    const identity = honestCardIdentity(req.body);
+    report.scanId = scanId;
     const item = {
-      id: String(Date.now()),
-      name: req.body.name || safe || 'Untitled Card',
+      id: scanId,
+      scanId: scanId,
+      name: identity.name,
+      setName: identity.setName,
+      cardIdentity: identity.cardIdentity,
       imagePath: `/uploads/${filename}`,
       category: classification,
       gradingReport: report,
       createdAt: new Date().toISOString()
     };
 
+    console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
     persistGradedItem(item, classification);
     return res.json({ ok: true, item });
   } catch (err) {
@@ -360,6 +399,8 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'image file is required' });
     const opts = parseGradingOptions(req.body);
+    const scanId = resolveScanId(req.body);
+    opts.scanId = scanId;
     const buffer = await fs.promises.readFile(req.file.path);
     const orig = req.file.originalname || path.basename(req.file.path);
     const classification = await classifier.classifyBuffer(buffer, { filename: orig });
@@ -369,15 +410,21 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
       levelTilt: opts.captureTilt
     });
 
+    const identity = honestCardIdentity(req.body);
+    report.scanId = scanId;
     const item = {
-      id: String(Date.now()),
-      name: req.body.name || 'Untitled Card',
+      id: scanId,
+      scanId: scanId,
+      name: identity.name,
+      setName: identity.setName,
+      cardIdentity: identity.cardIdentity,
       imagePath: `/uploads/${path.basename(req.file.path)}`,
       category: classification,
       gradingReport: report,
       createdAt: new Date().toISOString()
     };
 
+    console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
     persistGradedItem(item, classification);
     return res.json({ ok: true, item });
   } catch (err) {

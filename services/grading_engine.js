@@ -1355,8 +1355,31 @@ function peakBrightnessInRect(pixels, imgWidth, x0, y0, x1, y1) {
 }
 
 /**
+ * STAGE A: brightness→severity is not a fray detector. White-border corners
+ * read as 4–5 and cap the grade at 4.0. Until a real detector exists, CRN
+ * is held at 10 (zero fray). measureCornerFraying still runs for debug only.
+ */
+function unusedCornerFrayingUntilRealDetector() {
+  return {
+    topLeftFrayingSeverity: 0,
+    topRightFrayingSeverity: 0,
+    bottomLeftFrayingSeverity: 0,
+    bottomRightFrayingSeverity: 0
+  };
+}
+
+function normalizeScanId(raw) {
+  if (raw == null) return null;
+  const text = String(raw).trim();
+  if (!/^[A-Za-z0-9._-]{8,80}$/.test(text)) return null;
+  return text;
+}
+
+/**
  * PHASE 4 metrology: independent 0–5 fray reading at each corner square.
  * Sample size is ~8% of the short card side (DefectAnalyzer.swift).
+ * Do not pass this into evaluateMultiPhaseCondition — Stage A holds CRN
+ * at 10 until a real fray detector exists.
  */
 function measureCornerFraying(pixels, imgWidth, box) {
   const cornerSize = Math.max(20, Math.round(Math.min(box.width, box.height) * 0.08));
@@ -1785,10 +1808,18 @@ async function gradeBuffer(buffer, options) {
 
   // TEMP: dump every gradeBuffer payload to the server log (remove after LAN testing).
   function returnGrade(gradeResult) {
+    if (options.scanId) gradeResult.scanId = options.scanId;
     if (options.captureTilt) {
       gradeResult.captureTilt = options.captureTilt;
       if (gradeResult.debug) gradeResult.debug.captureTilt = options.captureTilt;
     }
+    console.log(JSON.stringify({
+      event: 'grade',
+      scanId: gradeResult.scanId || null,
+      finalScore: gradeResult.finalScore,
+      incomplete: Boolean(gradeResult.incomplete),
+      cornerWearDisabled: Boolean(gradeResult.cornerWearDisabled)
+    }));
     console.log(JSON.stringify(gradeResult, null, 2));
     return gradeResult;
   }
@@ -1898,7 +1929,8 @@ async function gradeBuffer(buffer, options) {
     centeringMeasurement.bandVsInterior = bandVsInterior;
     const surface = measureSurfaceDefects(pixels, blurred, width, centeringBox);
     const edgesWhiteningCount = measureEdgeWhitening(pixels, width, centeringBox);
-    const corners = measureCornerFraying(pixels, width, centeringBox);
+    const measuredCorners = measureCornerFraying(pixels, width, centeringBox);
+    const corners = unusedCornerFrayingUntilRealDetector();
     const borderReliability = assessPrintBorderReliability(
       centeringBox, width, height, centeringMeasurement,
       { alignmentCrop: Boolean(options.alignmentCrop) }
@@ -1972,6 +2004,8 @@ async function gradeBuffer(buffer, options) {
         },
         edgesWhiteningCount: Number(edgesWhiteningCount) || 0,
         absoluteMaxCornerFray: cornerPhase.absoluteMaxCornerFray,
+        cornerWearDisabled: true,
+        measuredCornerBrightnessSeverity: measuredCorners,
         centeringDiagnostics: buildCenteringDiagnostics(width, height, centeringBox, centeringMeasurement, {
           alignmentCrop: Boolean(options.alignmentCrop),
           interiorGrey: interiorGrey,
@@ -1990,7 +2024,10 @@ async function gradeBuffer(buffer, options) {
           interiorGrey: interiorGrey,
           bandVsInterior: bandVsInterior,
           borderReliability: borderReliability,
-          corners, surface, edgesWhiteningCount
+          corners: measuredCorners,
+          cornersUsedForGrade: corners,
+          surface,
+          edgesWhiteningCount
         };
       }
       return returnGrade(report);
@@ -2035,6 +2072,8 @@ async function gradeBuffer(buffer, options) {
       surfacePenalties: judged.surfacePenalties,
       edgesWhiteningCount: judged.edgesWhiteningCount,
       absoluteMaxCornerFray: judged.absoluteMaxCornerFray,
+      cornerWearDisabled: true,
+      measuredCornerBrightnessSeverity: measuredCorners,
       printCenteringDetected: centeringMeasurement.detected,
       centeringUndetected: false,
       incomplete: false,
@@ -2057,7 +2096,9 @@ async function gradeBuffer(buffer, options) {
         interiorGrey: interiorGrey,
         bandVsInterior: bandVsInterior,
         borderReliability: borderReliability,
-        corners, surface, edgesWhiteningCount
+        corners: measuredCorners,
+        cornersUsedForGrade: corners,
+        surface, edgesWhiteningCount
       };
     }
 
@@ -2088,6 +2129,8 @@ module.exports = {
   buildSurfaceSweep,
   applySurfaceSweep,
   surfaceSweepEntryFromGrade,
+  normalizeScanId,
+  unusedCornerFrayingUntilRealDetector,
   BORDER_SAMPLE_SPREAD_MAX_PX,
   BORDER_SAMPLE_MIN_HITS,
   BORDER_MIN_MEDIAN_WIDTH_PX,

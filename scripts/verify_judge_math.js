@@ -74,6 +74,12 @@ const oneEdge = g.evaluateMultiPhaseCondition(pristineCentering, cleanSurface, 1
 assertEq('1-edge finalScore (ceiling 9.5)', oneEdge.finalScore, 9.5);
 assertEq('1-edge edges sub', oneEdge.subGrades.edges, 9.0);
 
+assertEq('normalizeScanId uuid', g.normalizeScanId('550e8400-e29b-41d4-a716-446655440000'), '550e8400-e29b-41d4-a716-446655440000');
+assertEq('normalizeScanId reject short', g.normalizeScanId('abc'), null);
+const unusedCorners = g.unusedCornerFrayingUntilRealDetector();
+assertEq('unused corners TL', unusedCorners.topLeftFrayingSeverity, 0);
+assertEq('unused corners TR', unusedCorners.topRightFrayingSeverity, 0);
+
 function assert(label, cond) {
   if (!cond) {
     console.error('FAIL', label);
@@ -106,6 +112,11 @@ async function makeTinyUniformPng() {
 }
 
 async function runGradeBufferUndetectedCheck() {
+  const fallback = await g.gradeBuffer(Buffer.from('not-an-image'), {
+    scanId: '550e8400-e29b-41d4-a716-446655440000'
+  });
+  assertEq('gradeBuffer echoes scanId', fallback.scanId, '550e8400-e29b-41d4-a716-446655440000');
+
   const buf = await makeTinyUniformPng();
   if (!buf) {
     console.log('SKIP gradeBuffer undetected check (sharp not installed)');
@@ -131,6 +142,8 @@ async function runGradeBufferUndetectedCheck() {
   assert('gradeBuffer still reports surface', typeof report.subGrades.surface === 'number');
   assert('gradeBuffer still reports edges', typeof report.subGrades.edges === 'number');
   assert('gradeBuffer still reports corners', typeof report.subGrades.corners === 'number');
+  assertEq('gradeBuffer CRN unused until real fray detector', report.subGrades.corners, 10);
+  assert('gradeBuffer cornerWearDisabled', report.cornerWearDisabled === true);
 }
 
 function assertHint(label, actual, expected) {
