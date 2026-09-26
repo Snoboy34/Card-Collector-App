@@ -268,7 +268,7 @@ function renderScanView() {
   appRoot.innerHTML = `
     <section class="panel">
       <h2>Scan New Card</h2>
-      <p class="muted">Keep the whole card inside the neon 2.5×3.5 window so the crop does not clip a corner or edge. The JPEG edges <em>are</em> the cut (alignmentCrop) — a gap is not used for mat-contrast detection. Hold level until the center bubble turns green, then follow the four tick marks for a diagnostic surface sweep. Capture stays locked until the phone is level.</p>
+      <p class="muted">Keep the whole card inside the frame with a little background showing. The server locates the card's edges in that margin and grades only the card — a photo with no visible card edge is rejected as "card not found". Hold level until the center bubble turns green, then follow the four tick marks for a diagnostic surface sweep. Capture stays locked until the phone is level.</p>
       <div style="margin-top:12px;">
         <input id="scanName" placeholder="Card name (optional)" style="padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inherit; min-width:200px;" />
       </div>
@@ -318,7 +318,7 @@ function wireScanViewport() {
   requestAnimationFrame(function () { sizeGuideCanvas(); });
   window.addEventListener('resize', sizeGuideCanvas);
   updateLevelHud();
-  setScanStatus('Tap Start Camera. Keep the whole card inside the neon frame — do not clip an edge.');
+  setScanStatus('Tap Start Camera. Keep the whole card inside the frame with a little background showing.');
 }
 
 function setScanStatus(msg) {
@@ -894,12 +894,11 @@ function openReportModal(item) {
     ? '<p class="ceiling-flag">0.5-point condition ceiling applied (final cannot exceed worst sub-grade + 0.5).</p>'
     : '';
   const diag = report && report.centeringDiagnostics ? report.centeringDiagnostics : null;
+  const cardDet = report && report.cardDetection ? report.cardDetection : null;
+  function dash(v) { return v == null ? '—' : v; }
   const diagBox = diag && diag.box
     ? diag.box.width + '×' + diag.box.height +
       ' at (' + diag.box.left + ',' + diag.box.top + ')'
-    : '—';
-  const diagFill = diag && typeof diag.boxFillRatio === 'number'
-    ? Math.round(diag.boxFillRatio * 100) + '%'
     : '—';
   const w = diag && diag.printBorderWidths ? diag.printBorderWidths : {};
   const diagWidths = diag
@@ -945,7 +944,7 @@ function openReportModal(item) {
       <p class="muted">${escapeHtml(diag.summary || '')}</p>
       <ul>
         <li>Photo: ${diag.imageWidth || '—'}×${diag.imageHeight || '—'}</li>
-        <li>Card box: ${escapeHtml(diagBox)} — ${escapeHtml(diagFill)} of photo</li>
+        <li>Card box: quad source ${escapeHtml(cardDet ? cardDet.quadSource : '—')} — ${escapeHtml(cardDet && cardDet.cardBoxPctOfPhoto != null ? cardDet.cardBoxPctOfPhoto + '%' : '—')} of photo (graded on the ${escapeHtml(diagBox)} warp)</li>
         <li>Print borders (px): ${escapeHtml(diagWidths)}</li>
         <li>L/R sample spread: ${fmtPx(diag.leftRightSampleSpreadPx)} · T/B sample spread: ${fmtPx(diag.topBottomSampleSpreadPx)}</li>
       </ul>
@@ -977,11 +976,11 @@ function openReportModal(item) {
           ${ceiling}
           ${report ? `
             <ul>
-              <li>Centering (0–100 projection): ${report.centering}</li>
-              <li>Corners (0–100 projection): ${report.corners}</li>
-              <li>Edges (0–100 projection): ${report.edges}</li>
-              <li>Surface (0–100 projection): ${report.surface}</li>
-              <li><strong>Weighted projection: ${report.weighted}</strong></li>
+              <li>Centering (0–100 projection): ${dash(report.centering)}</li>
+              <li>Corners: ${dash(report.corners)}</li>
+              <li>Edges (0–100 projection): ${dash(report.edges)}</li>
+              <li>Surface (0–100 projection): ${dash(report.surface)}</li>
+              <li><strong>Weighted projection: ${dash(report.weighted)}</strong></li>
             </ul>
             <p class="muted">${escapeHtml(report.primaryFlawDescription || report.notes || '')}</p>
             ${diagHtml}
@@ -1085,7 +1084,12 @@ function previewAndOfferUpload(file) {
 
     try {
       const res = await api.uploadImage(fd);
-      if (!res.ok) throw new Error(res.error || 'Upload failed');
+      if (!res.ok) {
+        if (res.error === 'card not found') {
+          throw new Error('Card not found — retake. ' + (res.reason || ''));
+        }
+        throw new Error(res.error || 'Upload failed');
+      }
       state.inventory.unshift(res.item);
       status.innerHTML = 'Grade complete.';
       try {

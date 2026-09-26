@@ -270,8 +270,8 @@
           </div>
           <div class="level-readout" id="levelReadout">P —°  R —°</div>
         </div>
-        <p class="scan-gap-guide" id="scanGapGuide">Keep the whole card inside the neon frame so a corner or edge is not clipped. The crop edges are the cut — a gap is not used for mat-contrast detection.</p>
-        <div class="scan-viewport-hint" id="scanHint">Tap Start Camera, then hold the card fully inside the neon frame</div>
+        <p class="scan-gap-guide" id="scanGapGuide">Keep the whole card inside the frame with a little background showing. The server finds the card's edges in that margin — a card that fills the frame edge-to-edge cannot be found.</p>
+        <div class="scan-viewport-hint" id="scanHint">Tap Start Camera, then keep the whole card inside the frame with a little background showing</div>
       </div>
       <div class="scan-viewport-actions">
         <button type="button" id="startCameraBtn" class="small">Start Camera</button>
@@ -280,7 +280,7 @@
         <button type="button" id="uploadInsteadBtn" class="small ghost">Upload Photo</button>
         <button type="button" id="stopCameraBtn" class="small ghost">Stop Camera</button>
       </div>
-      <p class="scan-status" id="scanStatus" role="status">Start the camera, then keep the whole card inside the neon frame.</p>
+      <p class="scan-status" id="scanStatus" role="status">Start the camera, then keep the whole card inside the frame with a little background showing.</p>
     </div>
   </template>
 

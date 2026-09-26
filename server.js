@@ -74,8 +74,8 @@ app.use(express.static(publicDir));
 /* =========================
    Upload storage
    ========================= */
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+const uploadsDir = process.env.JUDGE_UPLOADS_DIR || path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -143,7 +143,47 @@ function parseGradingOptions(body) {
   if (scanLevel.parseAlignmentCrop(body)) opts.alignmentCrop = true;
   const scanId = grading.normalizeScanId(body.scanId);
   if (scanId) opts.scanId = scanId;
+  if (body.cardQuad) opts.cardQuad = body.cardQuad;
+  if (body.quadImageWidth) opts.quadImageWidth = Number(body.quadImageWidth);
+  if (body.quadImageHeight) opts.quadImageHeight = Number(body.quadImageHeight);
+  if (body.quadConfidence) opts.quadConfidence = Number(body.quadConfidence);
   return opts;
+}
+
+/**
+ * Append one line per rejected scan to data/failed_scans.jsonl. Card-not-found
+ * scans are never written to inventory, so this is the only trace of them.
+ */
+function logFailedScan(entry) {
+  try {
+    const dir = path.dirname(FAILED_SCANS_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(FAILED_SCANS_PATH, JSON.stringify(entry) + '\n', 'utf8');
+  } catch (e) {
+    console.error('Failed to append failed_scans.jsonl', e);
+  }
+}
+
+function respondCardNotFound(res, args) {
+  const report = args.report;
+  const reason = report.cardNotFoundReason || 'card not found';
+  logFailedScan({
+    scanId: args.scanId,
+    timestamp: new Date().toISOString(),
+    route: args.route,
+    reason: reason,
+    imagePath: args.imagePath || null,
+    captureTilt: report.captureTilt || null,
+    diagnostics: report.cardDetection || null
+  });
+  console.log('[grade] scanId=' + args.scanId + ' card not found: ' + reason);
+  return res.status(422).json({
+    ok: false,
+    error: 'card not found',
+    reason: reason,
+    scanId: args.scanId,
+    report: report
+  });
 }
 
 /**
@@ -170,7 +210,9 @@ function persistGradedItem(item, classification) {
    Simple JSON "DB" helpers (data/database.json)
    Maintains db.inventory and db.categoryCounts { SPORTS, TCG, UNKNOWN }
    ========================= */
-const DB_PATH = path.join(__dirname, 'data', 'database.json');
+const DATA_DIR = process.env.JUDGE_DATA_DIR || path.join(__dirname, 'data');
+const DB_PATH = path.join(DATA_DIR, 'database.json');
+const FAILED_SCANS_PATH = path.join(DATA_DIR, 'failed_scans.jsonl');
 function loadDatabase() {
   try {
     const raw = fs.readFileSync(DB_PATH, 'utf8');
@@ -317,12 +359,17 @@ app.get('/api/stats', (req, res) => {
  * Body (multipart/form-data):
  *   image     file buffer (required)
  *   scanId    optional client UUID (echoed on item.scanId and logged)
+ *   cardQuad  optional JSON {tl,tr,br,bl} card corners in image pixels
+ *             (quadImageWidth / quadImageHeight / quadConfidence alongside)
  *   name      ignored for identity (title is Unidentified until family match)
  *   cardType  optional SPORTS | TCG (reserved for Phase 3 corner templates)
  *   debug     optional "true" to attach metrology dumps
  *
  * Response: { ok: true, item } where item.gradingReport is the Judge payload
  * from services/grading_engine.js (10-point finalScore + 0–100 projections).
+ * No card found: HTTP 422 { ok: false, error: 'card not found', reason,
+ * scanId, report } — nothing is saved to inventory; the attempt is appended
+ * to data/failed_scans.jsonl.
  */
 const gradeUpload = memoryUpload.fields([
   { name: 'image', maxCount: 1 },
@@ -349,6 +396,12 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
 
     // 2) Strict 4-phase Judge pipeline (centering / surface / edges / corners + 0.5 ceiling)
     const report = await grading.gradeBuffer(imageFile.buffer, opts);
+    report.scanId = scanId;
+    if (report.cardNotFound) {
+      return respondCardNotFound(res, {
+        report: report, scanId: scanId, route: '/api/grade', imagePath: `/uploads/${filename}`
+      });
+    }
 
     const sweepFiles = (req.files && req.files.sweep) || [];
     const sweepMeta = scanLevel.parseSweepMeta(req.body);
@@ -405,6 +458,13 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     const orig = req.file.originalname || path.basename(req.file.path);
     const classification = await classifier.classifyBuffer(buffer, { filename: orig });
     const report = await grading.gradeBuffer(buffer, opts);
+    report.scanId = scanId;
+    if (report.cardNotFound) {
+      return respondCardNotFound(res, {
+        report: report, scanId: scanId, route: '/api/grade/upload',
+        imagePath: `/uploads/${path.basename(req.file.path)}`
+      });
+    }
     await grading.applySurfaceSweep(report, [], {
       alignmentCrop: Boolean(opts.alignmentCrop),
       levelTilt: opts.captureTilt
@@ -475,17 +535,32 @@ function logHttpsReady() {
   console.log('then Settings → General → About → Certificate Trust Settings → enable The Judge LAN.');
 }
 
-if (LAN_HTTPS) {
-  let tls;
-  try {
-    tls = lanHttps.ensureLanCertificate(lanAddress.ip);
-  } catch (err) {
-    console.error('Failed to mint the LAN HTTPS certificate:', err && err.message ? err.message : err);
-    process.exit(1);
-  }
-  https.createServer({ key: tls.key, cert: tls.cert }, app).listen(PORT, '0.0.0.0', () => {
-    logHttpsReady();
-  });
-} else {
-  app.listen(PORT, '0.0.0.0', logHttpReady);
+function ensureDatabaseFile() {
+  if (fs.existsSync(DB_PATH)) return;
+  saveDatabase({ inventory: [], categoryCounts: { SPORTS: 0, TCG: 0, UNKNOWN: 0 } });
+  console.log('Created empty ' + DB_PATH);
 }
+
+function startServer() {
+  ensureDatabaseFile();
+  if (LAN_HTTPS) {
+    let tls;
+    try {
+      tls = lanHttps.ensureLanCertificate(lanAddress.ip);
+    } catch (err) {
+      console.error('Failed to mint the LAN HTTPS certificate:', err && err.message ? err.message : err);
+      process.exit(1);
+    }
+    https.createServer({ key: tls.key, cert: tls.cert }, app).listen(PORT, '0.0.0.0', () => {
+      logHttpsReady();
+    });
+  } else {
+    app.listen(PORT, '0.0.0.0', logHttpReady);
+  }
+}
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, DB_PATH, FAILED_SCANS_PATH, ensureDatabaseFile };

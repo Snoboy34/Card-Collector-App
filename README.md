@@ -53,6 +53,19 @@ Uploads land in `./uploads`. Swap that for object storage before production.
 | `name`   | no       | display name |
 | `cardType` | no     | reserved for sports vs TCG corner templates |
 | `debug`  | no       | `"true"` attaches metrology dumps. The scan UI always sends this while we settle printed-frame vs backdrop. |
+| `scanId` | no       | client UUID, echoed and logged |
+| `cardQuad` | no     | JSON `{tl,tr,br,bl}` card corners in upload pixels (native Vision). With `quadImageWidth`, `quadImageHeight`, `quadConfidence`. |
+
+Card box: the server grades only the card. It uses `cardQuad` if valid, else
+its own detector; the card is perspective-warped to 643×900 before any
+metrology. If neither finds a card the response is
+`422 { ok: false, error: "card not found", reason, scanId, report }`, nothing
+is saved to inventory, and the attempt is appended to
+`data/failed_scans.jsonl`. Keep a little background visible around the card.
+
+SUR and EDG are reported as not measured (`null`) until their detectors are
+validated on printed borders, and CRN is always `null`; a report without
+CEN, SUR, and EDG is `incomplete` with `finalScore: null`.
 
 Response: `{ ok: true, item }` where `item.gradingReport` includes:
 
