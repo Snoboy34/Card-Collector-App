@@ -35,6 +35,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const multer = require('multer');
+const crypto = require('crypto');
 
 const grading = require('./services/grading_engine');
 const classifier = require('./services/classifier_engine');
@@ -73,8 +74,8 @@ app.use(express.static(publicDir));
 /* =========================
    Upload storage
    ========================= */
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+const uploadsDir = process.env.JUDGE_UPLOADS_DIR || path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -105,6 +106,33 @@ let inventory = []; // Each item: { id, name, imagePath, gradingReport, createdA
  * @param {object} body
  * @returns {{ cardType?: string, debug?: boolean, captureTilt?: object }}
  */
+function parseOcrLines(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function resolveScanId(body) {
+  return grading.normalizeScanId(body && body.scanId) || crypto.randomUUID();
+}
+
+function honestCardIdentity(body) {
+  return {
+    name: 'Unidentified',
+    setName: '—',
+    cardIdentity: {
+      familyId: null,
+      match: null,
+      ocrLines: parseOcrLines(body && body.ocrLines)
+    }
+  };
+}
+
 function parseGradingOptions(body) {
   const opts = {};
   if (!body) return opts;
@@ -113,7 +141,49 @@ function parseGradingOptions(body) {
   const tilt = scanLevel.parseCaptureTilt(body);
   if (tilt) opts.captureTilt = tilt;
   if (scanLevel.parseAlignmentCrop(body)) opts.alignmentCrop = true;
+  const scanId = grading.normalizeScanId(body.scanId);
+  if (scanId) opts.scanId = scanId;
+  if (body.cardQuad) opts.cardQuad = body.cardQuad;
+  if (body.quadImageWidth) opts.quadImageWidth = Number(body.quadImageWidth);
+  if (body.quadImageHeight) opts.quadImageHeight = Number(body.quadImageHeight);
+  if (body.quadConfidence) opts.quadConfidence = Number(body.quadConfidence);
   return opts;
+}
+
+/**
+ * Append one line per rejected scan to data/failed_scans.jsonl. Card-not-found
+ * scans are never written to inventory, so this is the only trace of them.
+ */
+function logFailedScan(entry) {
+  try {
+    const dir = path.dirname(FAILED_SCANS_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(FAILED_SCANS_PATH, JSON.stringify(entry) + '\n', 'utf8');
+  } catch (e) {
+    console.error('Failed to append failed_scans.jsonl', e);
+  }
+}
+
+function respondCardNotFound(res, args) {
+  const report = args.report;
+  const reason = report.cardNotFoundReason || 'card not found';
+  logFailedScan({
+    scanId: args.scanId,
+    timestamp: new Date().toISOString(),
+    route: args.route,
+    reason: reason,
+    imagePath: args.imagePath || null,
+    captureTilt: report.captureTilt || null,
+    diagnostics: report.cardDetection || null
+  });
+  console.log('[grade] scanId=' + args.scanId + ' card not found: ' + reason);
+  return res.status(422).json({
+    ok: false,
+    error: 'card not found',
+    reason: reason,
+    scanId: args.scanId,
+    report: report
+  });
 }
 
 /**
@@ -140,7 +210,9 @@ function persistGradedItem(item, classification) {
    Simple JSON "DB" helpers (data/database.json)
    Maintains db.inventory and db.categoryCounts { SPORTS, TCG, UNKNOWN }
    ========================= */
-const DB_PATH = path.join(__dirname, 'data', 'database.json');
+const DATA_DIR = process.env.JUDGE_DATA_DIR || path.join(__dirname, 'data');
+const DB_PATH = path.join(DATA_DIR, 'database.json');
+const FAILED_SCANS_PATH = path.join(DATA_DIR, 'failed_scans.jsonl');
 function loadDatabase() {
   try {
     const raw = fs.readFileSync(DB_PATH, 'utf8');
@@ -286,40 +358,82 @@ app.get('/api/stats', (req, res) => {
  *
  * Body (multipart/form-data):
  *   image     file buffer (required)
- *   name      optional display name
+ *   scanId    optional client UUID (echoed on item.scanId and logged)
+ *   cardQuad  optional JSON {tl,tr,br,bl} card corners in image pixels
+ *             (quadImageWidth / quadImageHeight / quadConfidence alongside)
+ *   name      ignored for identity (title is Unidentified until family match)
  *   cardType  optional SPORTS | TCG (reserved for Phase 3 corner templates)
  *   debug     optional "true" to attach metrology dumps
  *
  * Response: { ok: true, item } where item.gradingReport is the Judge payload
  * from services/grading_engine.js (10-point finalScore + 0–100 projections).
+ * No card found: HTTP 422 { ok: false, error: 'card not found', reason,
+ * scanId, report } — nothing is saved to inventory; the attempt is appended
+ * to data/failed_scans.jsonl.
  */
-app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
+const gradeUpload = memoryUpload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'sweep', maxCount: 8 }
+]);
+
+app.post('/api/grade', gradeUpload, async (req, res) => {
   try {
-    if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'image buffer required' });
+    const imageFile = req.files && req.files.image && req.files.image[0];
+    if (!imageFile || !imageFile.buffer) return res.status(400).json({ error: 'image buffer required' });
     const opts = parseGradingOptions(req.body);
+    const scanId = resolveScanId(req.body);
+    opts.scanId = scanId;
 
     const ts = Date.now();
-    const orig = req.file.originalname || 'upload';
+    const orig = imageFile.originalname || 'upload';
     const safe = String(orig).replace(/\s+/g, '_').replace(/[^\w.-]/g, '');
     const filename = `${ts}_${safe}`;
     const filePath = path.join(uploadsDir, filename);
-    await fs.promises.writeFile(filePath, req.file.buffer);
+    await fs.promises.writeFile(filePath, imageFile.buffer);
 
     // 1) Classify the card (SPORTS | TCG | UNKNOWN)
-    const classification = await classifier.classifyBuffer(req.file.buffer, { filename: orig });
+    const classification = await classifier.classifyBuffer(imageFile.buffer, { filename: orig });
 
     // 2) Strict 4-phase Judge pipeline (centering / surface / edges / corners + 0.5 ceiling)
-    const report = await grading.gradeBuffer(req.file.buffer, opts);
+    const report = await grading.gradeBuffer(imageFile.buffer, opts);
+    report.scanId = scanId;
+    if (report.cardNotFound) {
+      return respondCardNotFound(res, {
+        report: report, scanId: scanId, route: '/api/grade', imagePath: `/uploads/${filename}`
+      });
+    }
 
+    const sweepFiles = (req.files && req.files.sweep) || [];
+    const sweepMeta = scanLevel.parseSweepMeta(req.body);
+    const extraFrames = sweepFiles.map(function (file, i) {
+      const meta = sweepMeta[i] || {};
+      return {
+        buffer: file.buffer,
+        bin: meta.bin || null,
+        pitch: meta.pitch,
+        roll: meta.roll
+      };
+    });
+    await grading.applySurfaceSweep(report, extraFrames, {
+      alignmentCrop: Boolean(opts.alignmentCrop),
+      levelTilt: opts.captureTilt
+    });
+
+    const identity = honestCardIdentity(req.body);
+    report.scanId = scanId;
     const item = {
-      id: String(Date.now()),
-      name: req.body.name || safe || 'Untitled Card',
+      id: scanId,
+      scanId: scanId,
+      name: identity.name,
+      setName: identity.setName,
+      cardIdentity: identity.cardIdentity,
       imagePath: `/uploads/${filename}`,
       category: classification,
       gradingReport: report,
       createdAt: new Date().toISOString()
     };
 
+    console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
     persistGradedItem(item, classification);
     return res.json({ ok: true, item });
   } catch (err) {
@@ -338,20 +452,39 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'image file is required' });
     const opts = parseGradingOptions(req.body);
+    const scanId = resolveScanId(req.body);
+    opts.scanId = scanId;
     const buffer = await fs.promises.readFile(req.file.path);
     const orig = req.file.originalname || path.basename(req.file.path);
     const classification = await classifier.classifyBuffer(buffer, { filename: orig });
     const report = await grading.gradeBuffer(buffer, opts);
+    report.scanId = scanId;
+    if (report.cardNotFound) {
+      return respondCardNotFound(res, {
+        report: report, scanId: scanId, route: '/api/grade/upload',
+        imagePath: `/uploads/${path.basename(req.file.path)}`
+      });
+    }
+    await grading.applySurfaceSweep(report, [], {
+      alignmentCrop: Boolean(opts.alignmentCrop),
+      levelTilt: opts.captureTilt
+    });
 
+    const identity = honestCardIdentity(req.body);
+    report.scanId = scanId;
     const item = {
-      id: String(Date.now()),
-      name: req.body.name || 'Untitled Card',
+      id: scanId,
+      scanId: scanId,
+      name: identity.name,
+      setName: identity.setName,
+      cardIdentity: identity.cardIdentity,
       imagePath: `/uploads/${path.basename(req.file.path)}`,
       category: classification,
       gradingReport: report,
       createdAt: new Date().toISOString()
     };
 
+    console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
     persistGradedItem(item, classification);
     return res.json({ ok: true, item });
   } catch (err) {
@@ -402,17 +535,32 @@ function logHttpsReady() {
   console.log('then Settings → General → About → Certificate Trust Settings → enable The Judge LAN.');
 }
 
-if (LAN_HTTPS) {
-  let tls;
-  try {
-    tls = lanHttps.ensureLanCertificate(lanAddress.ip);
-  } catch (err) {
-    console.error('Failed to mint the LAN HTTPS certificate:', err && err.message ? err.message : err);
-    process.exit(1);
-  }
-  https.createServer({ key: tls.key, cert: tls.cert }, app).listen(PORT, '0.0.0.0', () => {
-    logHttpsReady();
-  });
-} else {
-  app.listen(PORT, '0.0.0.0', logHttpReady);
+function ensureDatabaseFile() {
+  if (fs.existsSync(DB_PATH)) return;
+  saveDatabase({ inventory: [], categoryCounts: { SPORTS: 0, TCG: 0, UNKNOWN: 0 } });
+  console.log('Created empty ' + DB_PATH);
 }
+
+function startServer() {
+  ensureDatabaseFile();
+  if (LAN_HTTPS) {
+    let tls;
+    try {
+      tls = lanHttps.ensureLanCertificate(lanAddress.ip);
+    } catch (err) {
+      console.error('Failed to mint the LAN HTTPS certificate:', err && err.message ? err.message : err);
+      process.exit(1);
+    }
+    https.createServer({ key: tls.key, cert: tls.cert }, app).listen(PORT, '0.0.0.0', () => {
+      logHttpsReady();
+    });
+  } else {
+    app.listen(PORT, '0.0.0.0', logHttpReady);
+  }
+}
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, DB_PATH, FAILED_SCANS_PATH, ensureDatabaseFile };

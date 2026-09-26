@@ -61,6 +61,24 @@ let scanLevelState = {
 let orientationHandler = null;
 let pendingCaptureMeta = null;
 let captureInFlight = false;
+let sweepSession = {
+  active: false,
+  frames: [],
+  grabbed: {},
+  targetBin: null,
+  inBinSince: 0
+};
+
+function resetSweepSession() {
+  sweepSession = {
+    active: false,
+    frames: [],
+    grabbed: {},
+    targetBin: null,
+    inBinSince: 0
+  };
+  updateSweepHud();
+}
 
 /**
  * Wallet/report field shim. Server historically used imagePath / gradingReport;
@@ -250,7 +268,7 @@ function renderScanView() {
   appRoot.innerHTML = `
     <section class="panel">
       <h2>Scan New Card</h2>
-      <p class="muted">Sit the card inside the neon 2.5×3.5 frame with a small gap on all four sides — do not push the edges flush against the guide. Hold the phone level until the center bubble turns green (it sits on the crosshair). Capture stays locked until then, and auto-capture fires after a short hold. Lighting should be even — glare fools the surface pass.</p>
+      <p class="muted">Keep the whole card inside the frame with a little background showing. The server locates the card's edges in that margin and grades only the card — a photo with no visible card edge is rejected as "card not found". Hold level until the center bubble turns green, then follow the four tick marks for a diagnostic surface sweep. Capture stays locked until the phone is level.</p>
       <div style="margin-top:12px;">
         <input id="scanName" placeholder="Card name (optional)" style="padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inherit; min-width:200px;" />
       </div>
@@ -288,6 +306,8 @@ function wireScanViewport() {
   if (captureBtn) {
     captureBtn.addEventListener('click', function () { captureFromCamera('manual'); });
   }
+  const skipSweepBtn = document.getElementById('skipSweepBtn');
+  if (skipSweepBtn) skipSweepBtn.addEventListener('click', skipRemainingSweep);
   if (uploadBtn) uploadBtn.addEventListener('click', () => cameraInput.click());
   if (stopBtn) stopBtn.addEventListener('click', stopScanCamera);
   // Paint the 2.5×3.5 overlay immediately so L-brackets / crosshair are
@@ -298,7 +318,7 @@ function wireScanViewport() {
   requestAnimationFrame(function () { sizeGuideCanvas(); });
   window.addEventListener('resize', sizeGuideCanvas);
   updateLevelHud();
-  setScanStatus('Tap Start Camera, then sit the card inside the neon frame with a small gap on every side.');
+  setScanStatus('Tap Start Camera. Keep the whole card inside the frame with a little background showing.');
 }
 
 function setScanStatus(msg) {
@@ -362,18 +382,125 @@ function updateLevelHud() {
     dot.style.transform = 'translate(-50%, -50%)';
   }
   updateCaptureGate();
+  updateSweepHud();
+}
+
+function updateSweepHud() {
+  const ticks = document.querySelectorAll('.sweep-tick');
+  if (!ticks.length) return;
+  const target = sweepSession.active ? sweepSession.targetBin : null;
+  for (let i = 0; i < ticks.length; i++) {
+    const bin = ticks[i].getAttribute('data-bin');
+    ticks[i].classList.toggle('is-target', Boolean(target && bin === target));
+    ticks[i].classList.toggle('is-done', Boolean(sweepSession.grabbed[bin]));
+  }
 }
 
 function maybeAutoCapture(now) {
   const SL = window.ScanLevel;
   if (!SL || !scanCameraStream || captureInFlight) return;
+  if (sweepSession.active) {
+    maybeSweepGrab(now);
+    return;
+  }
   const held = scanLevelState.levelSince ? now - scanLevelState.levelSince : 0;
   if (!SL.shouldAutoCapture(scanLevelState.isLevel, held, scanLevelState.autoCaptureFired, SL.AUTO_CAPTURE_HOLD_MS)) {
     return;
   }
   scanLevelState.autoCaptureFired = true;
-  setScanStatus('Held level — auto-capturing…');
+  setScanStatus('Held level — capturing first still…');
   captureFromCamera('auto');
+}
+
+function maybeSweepGrab(now) {
+  const SL = window.ScanLevel;
+  if (!SL || !sweepSession.active || !sweepSession.targetBin) return;
+  if (scanLevelState.pitch == null || scanLevelState.roll == null) return;
+  const matched = SL.matchSweepBin(scanLevelState.pitch, scanLevelState.roll);
+  const inTarget = matched === sweepSession.targetBin;
+  if (inTarget) {
+    if (!sweepSession.inBinSince) sweepSession.inBinSince = now;
+  } else {
+    sweepSession.inBinSince = 0;
+  }
+  const held = sweepSession.inBinSince ? now - sweepSession.inBinSince : 0;
+  if (!SL.shouldGrabSweepBin(inTarget, held, Boolean(sweepSession.grabbed[sweepSession.targetBin]), SL.SWEEP_HOLD_MS)) {
+    return;
+  }
+  grabCroppedStill('sweep-' + sweepSession.targetBin, true, function (file, meta) {
+    if (!file) return;
+    onSweepFrame(sweepSession.targetBin, file, meta);
+  });
+}
+
+function onSweepFrame(bin, file, meta) {
+  sweepSession.grabbed[bin] = true;
+  sweepSession.frames.push({
+    bin: bin,
+    file: file,
+    pitch: meta && meta.pitch,
+    roll: meta && meta.roll
+  });
+  const captured = Object.keys(sweepSession.grabbed).filter(function (id) {
+    return sweepSession.grabbed[id];
+  });
+  const SL = window.ScanLevel;
+  const next = SL && SL.nextSweepBin(captured);
+  if (!next) {
+    finishSweepAndPreview();
+    return;
+  }
+  sweepSession.targetBin = next.id;
+  sweepSession.inBinSince = 0;
+  updateSweepHud();
+  setScanStatus(next.prompt + ' (' + captured.length + '/5)');
+}
+
+function beginSweepAfterLevel(file, meta) {
+  sweepSession.active = true;
+  sweepSession.frames = [{
+    bin: 'level',
+    file: file,
+    pitch: meta && meta.pitch,
+    roll: meta && meta.roll
+  }];
+  sweepSession.grabbed = { level: true };
+  const SL = window.ScanLevel;
+  const next = SL && SL.nextSweepBin(['level']);
+  if (!next) {
+    finishSweepAndPreview();
+    return;
+  }
+  sweepSession.targetBin = next.id;
+  sweepSession.inBinSince = 0;
+  updateSweepHud();
+  setScanStatus(next.prompt + ' (1/5)');
+}
+
+function finishSweepAndPreview() {
+  sweepSession.active = false;
+  scanLevelState.autoCaptureFired = true;
+  const levelFrame = sweepSession.frames[0];
+  if (!levelFrame || !levelFrame.file) {
+    setScanStatus('Sweep failed — no level still.');
+    resetSweepSession();
+    return;
+  }
+  pendingCaptureMeta = {
+    pitch: levelFrame.pitch,
+    roll: levelFrame.roll,
+    isLevel: true,
+    mode: 'sweep',
+    alignmentCrop: true,
+    sweepFrames: sweepSession.frames.slice(1)
+  };
+  updateSweepHud();
+  previewAndOfferUpload(levelFrame.file);
+}
+
+function skipRemainingSweep() {
+  if (!sweepSession.active || !sweepSession.frames.length) return;
+  finishSweepAndPreview();
 }
 
 function onDeviceOrientation(event) {
@@ -498,6 +625,7 @@ window.__judgeSimulateOrientation = function (pitch, roll) {
   onDeviceOrientation({ beta: pitch, gamma: roll });
 };
 window.__judgeLevelState = function () { return scanLevelState; };
+window.__judgeSweepSession = function () { return sweepSession; };
 
 /**
  * Open the environment-facing camera, size the overlay canvas to the video
@@ -525,7 +653,7 @@ function startScanCamera() {
     const kick = function () { sizeGuideCanvas(); loopGuideOverlay(); };
     if (video.readyState >= 2) kick();
     else video.onloadedmetadata = kick;
-    setScanStatus('Camera live. Leave a gap around the card, then hold level (center bubble on the crosshair) to capture.');
+    setScanStatus('Camera live. Keep the whole card in the neon window, then hold level to start the surface sweep.');
   }).catch(function (err) {
     setScanStatus('Camera blocked (' + (err && err.message ? err.message : 'permission') + '). Use Upload Photo.');
   });
@@ -542,6 +670,7 @@ function stopScanCamera() {
   }
   const video = document.getElementById('scanVideo');
   if (video) video.srcObject = null;
+  resetSweepSession();
 }
 
 function sizeGuideCanvas() {
@@ -676,9 +805,9 @@ function cardFrameRect(canvasW, canvasH) {
  * grading pipeline as a file upload, with alignmentCrop=true so the crop
  * edges are treated as the cut.
  */
-function captureFromCamera(mode) {
+function grabCroppedStill(mode, allowUnlevel, done) {
   if (captureInFlight) return;
-  if (!captureIsAllowed()) {
+  if (!allowUnlevel && !captureIsAllowed()) {
     setScanStatus('Hold the phone level (green bubble) to capture.');
     return;
   }
@@ -688,7 +817,7 @@ function captureFromCamera(mode) {
     return;
   }
   captureInFlight = true;
-  pendingCaptureMeta = snapshotCaptureTilt(mode || 'manual');
+  const meta = snapshotCaptureTilt(mode || 'manual');
   const videoW = video.videoWidth || 1280;
   const videoH = video.videoHeight || 1720;
   const viewW = video.clientWidth || videoW;
@@ -703,21 +832,24 @@ function captureFromCamera(mode) {
     snap.width = Math.max(1, Math.round(crop.w));
     snap.height = Math.max(1, Math.round(crop.h));
     ctx.drawImage(video, crop.x, crop.y, crop.w, crop.h, 0, 0, snap.width, snap.height);
-    pendingCaptureMeta.alignmentCrop = true;
+    meta.alignmentCrop = true;
   } else {
     snap.width = videoW;
     snap.height = videoH;
     ctx.drawImage(video, 0, 0, snap.width, snap.height);
   }
-  setScanStatus(mode === 'auto' ? 'Held level — captured.' : 'Capturing…');
   const onBlob = function (blob) {
     captureInFlight = false;
     if (!blob) {
-      setScanStatus('Capture failed. Try Upload Photo.');
+      if (done) done(null, meta);
+      else setScanStatus('Capture failed. Try Upload Photo.');
       return;
     }
-    const file = new File([blob], 'scan-capture.jpg', { type: 'image/jpeg' });
-    previewAndOfferUpload(file);
+    const name = (mode && String(mode).indexOf('sweep-') === 0)
+      ? mode + '.jpg'
+      : 'scan-capture.jpg';
+    const file = new File([blob], name, { type: 'image/jpeg' });
+    if (done) done(file, meta);
   };
   if (snap.toBlob) snap.toBlob(onBlob, 'image/jpeg', 0.92);
   else {
@@ -729,6 +861,22 @@ function captureFromCamera(mode) {
   }
 }
 
+function captureFromCamera(mode) {
+  if (sweepSession.active) {
+    setScanStatus('Sweep in progress — hold the highlighted tick.');
+    return;
+  }
+  grabCroppedStill(mode || 'manual', false, function (file, meta) {
+    if (!file) return;
+    if (scanLevelState.sensorActive && window.ScanLevel) {
+      beginSweepAfterLevel(file, meta);
+      return;
+    }
+    pendingCaptureMeta = meta;
+    previewAndOfferUpload(file);
+  });
+}
+
 /* Modal report — 10-point Judge scale, with 0–100 projections as secondary. */
 function openReportModal(item) {
   const report = itemReport(item);
@@ -736,24 +884,49 @@ function openReportModal(item) {
   modal.className = 'modal';
   const scoreLine = report && typeof report.finalScore === 'number'
     ? report.finalScore.toFixed(1) + ' ' + (report.label || '')
-    : (report ? report.label : 'Unscanned');
+    : '—';
+  const scanId = item.scanId || (report && report.scanId) || '';
+  const scanStamp = item.createdAt
+    ? new Date(item.createdAt).toLocaleString()
+    : '—';
   const sub = report && report.subGrades ? report.subGrades : null;
   const ceiling = report && report.conditionCeilingApplied
     ? '<p class="ceiling-flag">0.5-point condition ceiling applied (final cannot exceed worst sub-grade + 0.5).</p>'
     : '';
   const diag = report && report.centeringDiagnostics ? report.centeringDiagnostics : null;
+  const cardDet = report && report.cardDetection ? report.cardDetection : null;
+  function dash(v) { return v == null ? '—' : v; }
   const diagBox = diag && diag.box
     ? diag.box.width + '×' + diag.box.height +
       ' at (' + diag.box.left + ',' + diag.box.top + ')'
-    : '—';
-  const diagFill = diag && typeof diag.boxFillRatio === 'number'
-    ? Math.round(diag.boxFillRatio * 100) + '%'
     : '—';
   const w = diag && diag.printBorderWidths ? diag.printBorderWidths : {};
   const diagWidths = diag
     ? 'L ' + fmtPx(w.left) + ' · R ' + fmtPx(w.right) +
       ' · T ' + fmtPx(w.top) + ' · B ' + fmtPx(w.bottom)
     : '—';
+  const sweep = report && Array.isArray(report.surfaceSweep) ? report.surfaceSweep : [];
+  const capturedBins = report && Array.isArray(report.capturedBins) ? report.capturedBins : [];
+  const sweepComplete = report && report.surfaceSweepComplete === true;
+  const sweepHtml = sweep.length ? (
+    '<p class="muted">Surface sweep (diagnostic, SUR still from the level still): ' +
+    (sweepComplete ? 'complete' : 'partial') +
+    ' · capturedBins ' +
+    escapeHtml(capturedBins.length ? capturedBins.join(', ') : '—') +
+    '</p><ul>' +
+    sweep.map(function (row) {
+      return '<li>' +
+        escapeHtml(String(row.bin || 'frame')) +
+        ' · P ' + (row.pitch != null ? Number(row.pitch).toFixed(1) + '°' : '—') +
+        ' · R ' + (row.roll != null ? Number(row.roll).toFixed(1) + '°' : '—') +
+        ' · scratch ' + (row.scratchCount != null ? row.scratchCount : '—') +
+        ' · dimple ' + (row.dimpleCount != null ? row.dimpleCount : '—') +
+        ' · crease ' + (row.creaseSeverity != null ? row.creaseSeverity : '—') +
+        ' · glare ' + (row.glareFrac != null ? Number(row.glareFrac).toFixed(2) : '—') +
+        '</li>';
+    }).join('') +
+    '</ul>'
+  ) : '';
   const tilt = report && report.captureTilt ? report.captureTilt : null;
   const tiltHtml = tilt ? (
     '<p class="muted">Capture tilt: P ' +
@@ -771,12 +944,13 @@ function openReportModal(item) {
       <p class="muted">${escapeHtml(diag.summary || '')}</p>
       <ul>
         <li>Photo: ${diag.imageWidth || '—'}×${diag.imageHeight || '—'}</li>
-        <li>Card box: ${escapeHtml(diagBox)} — ${escapeHtml(diagFill)} of photo</li>
+        <li>Card box: quad source ${escapeHtml(cardDet ? cardDet.quadSource : '—')} — ${escapeHtml(cardDet && cardDet.cardBoxPctOfPhoto != null ? cardDet.cardBoxPctOfPhoto + '%' : '—')} of photo (graded on the ${escapeHtml(diagBox)} warp)</li>
         <li>Print borders (px): ${escapeHtml(diagWidths)}</li>
         <li>L/R sample spread: ${fmtPx(diag.leftRightSampleSpreadPx)} · T/B sample spread: ${fmtPx(diag.topBottomSampleSpreadPx)}</li>
       </ul>
       ${diag.axisSpreadNote ? '<p class="muted">' + escapeHtml(diag.axisSpreadNote) + '</p>' : ''}
       ${tiltHtml}
+      ${sweepHtml}
     </div>
   ` : (tiltHtml ? '<div class="centering-diag">' + tiltHtml + '</div>' : '');
   const subLine = report && report.subGradesLabel
@@ -792,20 +966,21 @@ function openReportModal(item) {
   modal.innerHTML = `
     <div class="panel" role="dialog" aria-modal="true" aria-label="Grading Report">
       <button id="closeModal" style="float:right" class="small">Close</button>
-      <h3>${escapeHtml(item.name)}</h3>
+      <h3>${escapeHtml(item.name || 'Unidentified')}</h3>
+      <p class="muted">scan ${escapeHtml(String(scanId).slice(0, 8) || '—')} · ${escapeHtml(scanStamp)}</p>
       <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
-        <img src="${itemImage(item)}" alt="${escapeHtml(item.name)}" style="width:180px; height:220px; object-fit:cover; border-radius:8px; flex-shrink:0;" />
+        <img src="${itemImage(item)}" alt="${escapeHtml(item.name || 'Unidentified')}" style="width:180px; height:220px; object-fit:cover; border-radius:8px; flex-shrink:0;" />
         <div>
           <h4 style="margin:0 0 8px 0;">Judge Grade: <span style="color:var(--accent)">${escapeHtml(scoreLine)}</span></h4>
           ${subLine}
           ${ceiling}
           ${report ? `
             <ul>
-              <li>Centering (0–100 projection): ${report.centering}</li>
-              <li>Corners (0–100 projection): ${report.corners}</li>
-              <li>Edges (0–100 projection): ${report.edges}</li>
-              <li>Surface (0–100 projection): ${report.surface}</li>
-              <li><strong>Weighted projection: ${report.weighted}</strong></li>
+              <li>Centering (0–100 projection): ${dash(report.centering)}</li>
+              <li>Corners: ${dash(report.corners)}</li>
+              <li>Edges (0–100 projection): ${dash(report.edges)}</li>
+              <li>Surface (0–100 projection): ${dash(report.surface)}</li>
+              <li><strong>Weighted projection: ${dash(report.weighted)}</strong></li>
             </ul>
             <p class="muted">${escapeHtml(report.primaryFlawDescription || report.notes || '')}</p>
             ${diagHtml}
@@ -867,13 +1042,18 @@ function previewAndOfferUpload(file) {
     previewArea.innerHTML = '';
     scanLevelState.autoCaptureFired = false;
     scanLevelState.levelSince = 0;
+    resetSweepSession();
   });
 
   document.getElementById('uploadBtn').addEventListener('click', async () => {
     const fname = (nameInput && nameInput.value) || file.name || 'Scanned Card';
+    const scanId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : ('scan-' + Date.now() + '-' + Math.random().toString(16).slice(2, 10));
     const fd = new FormData();
     fd.append('image', file, file.name);
     fd.append('name', fname);
+    fd.append('scanId', scanId);
     // Always request metrology dumps while we settle printed-frame vs backdrop
     // and L/R vs T/B drift. The report modal reads centeringDiagnostics even
     // if this flag is later turned off.
@@ -887,13 +1067,29 @@ function previewAndOfferUpload(file) {
     if (captureMeta && captureMeta.alignmentCrop) {
       fd.append('alignmentCrop', 'true');
     }
+    if (captureMeta && captureMeta.sweepFrames && captureMeta.sweepFrames.length) {
+      const meta = captureMeta.sweepFrames.map(function (frame) {
+        return { bin: frame.bin, pitch: frame.pitch, roll: frame.roll };
+      });
+      fd.append('sweepMeta', JSON.stringify(meta));
+      captureMeta.sweepFrames.forEach(function (frame) {
+        if (frame && frame.file) {
+          fd.append('sweep', frame.file, frame.file.name || ((frame.bin || 'sweep') + '.jpg'));
+        }
+      });
+    }
 
     const status = document.getElementById('uploadStatus');
     status.innerHTML = 'Uploading to The Judge…';
 
     try {
       const res = await api.uploadImage(fd);
-      if (!res.ok) throw new Error(res.error || 'Upload failed');
+      if (!res.ok) {
+        if (res.error === 'card not found') {
+          throw new Error('Card not found — retake. ' + (res.reason || ''));
+        }
+        throw new Error(res.error || 'Upload failed');
+      }
       state.inventory.unshift(res.item);
       status.innerHTML = 'Grade complete.';
       try {

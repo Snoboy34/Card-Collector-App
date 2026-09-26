@@ -74,6 +74,27 @@ const oneEdge = g.evaluateMultiPhaseCondition(pristineCentering, cleanSurface, 1
 assertEq('1-edge finalScore (ceiling 9.5)', oneEdge.finalScore, 9.5);
 assertEq('1-edge edges sub', oneEdge.subGrades.edges, 9.0);
 
+assertEq('normalizeScanId uuid', g.normalizeScanId('550e8400-e29b-41d4-a716-446655440000'), '550e8400-e29b-41d4-a716-446655440000');
+assertEq('normalizeScanId reject short', g.normalizeScanId('abc'), null);
+
+const unmeasured = g.evaluateMultiPhaseCondition(pristineCentering, cleanSurface, 0, null);
+assertEq('unmeasured CRN is null', unmeasured.subGrades.corners, null);
+assertEq('unmeasured cornersMeasured false', unmeasured.cornersMeasured, false);
+assertEq('unmeasured still 10 from CEN/SUR/EDG', unmeasured.finalScore, 10);
+assert('unmeasured label shows CRN —', unmeasured.subGradesLabel.indexOf('CRN: —') !== -1);
+
+// CEN 8 (56/44), SUR 8 (4 scratches), EDG 8 (2 sites). A fake CRN 10 would
+// lift the 4-way mean to 8.5; excluded, the 3-way mean is 8.0.
+const threeWay = g.evaluateMultiPhaseCondition(
+  { leftRightRatio: { left: 56, right: 44 }, topBottomRatio: { top: 50, bottom: 50 } },
+  Object.assign({}, cleanSurface, { scratchCount: 4 }),
+  2,
+  null
+);
+assertEq('3-sub mean is 8.0 (not 8.5 with a fake CRN 10)', threeWay.finalScore, 8.0);
+assertEq('3-sub mean value', threeWay.overallMathematicalAverage, 8.0);
+assertEq('3-sub lowest excludes CRN', threeWay.lowestIsolatedSubGrade, 8.0);
+
 function assert(label, cond) {
   if (!cond) {
     console.error('FAIL', label);
@@ -106,6 +127,11 @@ async function makeTinyUniformPng() {
 }
 
 async function runGradeBufferUndetectedCheck() {
+  const fallback = await g.gradeBuffer(Buffer.from('not-an-image'), {
+    scanId: '550e8400-e29b-41d4-a716-446655440000'
+  });
+  assertEq('gradeBuffer echoes scanId', fallback.scanId, '550e8400-e29b-41d4-a716-446655440000');
+
   const buf = await makeTinyUniformPng();
   if (!buf) {
     console.log('SKIP gradeBuffer undetected check (sharp not installed)');
@@ -121,16 +147,45 @@ async function runGradeBufferUndetectedCheck() {
     process.exitCode = 1;
     return;
   }
-  assert('gradeBuffer centeringUndetected', report.centeringUndetected === true);
-  assert('gradeBuffer incomplete', report.incomplete === true);
-  assert('gradeBuffer centering is null', report.centering === null);
-  assert('gradeBuffer subGrades.centering is null', report.subGrades && report.subGrades.centering === null);
-  assert('gradeBuffer finalScore is not 10', report.finalScore !== 10 && report.finalScore !== 10.0);
-  assert('gradeBuffer finalScore is not a number', typeof report.finalScore !== 'number');
-  assert('gradeBuffer weighted is not a number', typeof report.weighted !== 'number');
-  assert('gradeBuffer still reports surface', typeof report.subGrades.surface === 'number');
-  assert('gradeBuffer still reports edges', typeof report.subGrades.edges === 'number');
-  assert('gradeBuffer still reports corners', typeof report.subGrades.corners === 'number');
+  assert('no-card photo is card not found', report.cardNotFound === true);
+  assert('no-card incomplete', report.incomplete === true);
+  assert('no-card centering is null', report.centering === null);
+  assert('no-card finalScore is not a number', typeof report.finalScore !== 'number');
+  assert('no-card weighted is not a number', typeof report.weighted !== 'number');
+  assert('no-card CEN/SUR/EDG/CRN all null',
+    report.subGrades.centering === null && report.subGrades.surface === null &&
+    report.subGrades.edges === null && report.subGrades.corners === null);
+  assertEq('no-card quadSource', report.cardDetection.quadSource, 'none');
+  assert('no-card names the server rejection',
+    report.cardNotFoundReason.indexOf('server detector rejected') !== -1);
+}
+
+/** Pad a full-frame synthetic card onto a pink mat and return the exact card
+ *  corners, the way the native Vision quad arrives with a Capture still. */
+async function padWithNativeQuad(png, pad) {
+  const sharpLib = require('sharp');
+  const margin = pad || 60;
+  const meta = await sharpLib(png).metadata();
+  const buf = await sharpLib(png).extend({
+    top: margin, bottom: margin, left: margin, right: margin,
+    background: { r: 236, g: 72, b: 153 }
+  }).png().toBuffer();
+  const quad = {
+    tl: [margin, margin],
+    tr: [margin + meta.width - 1, margin],
+    br: [margin + meta.width - 1, margin + meta.height - 1],
+    bl: [margin, margin + meta.height - 1]
+  };
+  return { buf: buf, cardQuad: JSON.stringify(quad) };
+}
+
+function assertCenteringOnlyReport(label, report) {
+  assert(label + ' centering detected', report.printCenteringDetected === true);
+  assert(label + ' has CEN', typeof report.subGrades.centering === 'number');
+  assert(label + ' SUR not measured', report.subGrades.surface === null);
+  assert(label + ' EDG not measured', report.subGrades.edges === null);
+  assert(label + ' CRN not measured', report.subGrades.corners === null);
+  assert(label + ' no final grade without SUR/EDG', report.finalScore === null && report.incomplete === true);
 }
 
 function assertHint(label, actual, expected) {
@@ -932,6 +987,40 @@ assert('auto-capture rejects 100ms pass-through', scanLevel.shouldAutoCapture(tr
 assert('auto-capture fires at 400ms hold', scanLevel.shouldAutoCapture(true, 400, false) === true);
 assert('auto-capture does not re-fire', scanLevel.shouldAutoCapture(true, 800, true) === false);
 
+assert('sweep: level matches near 0/0', scanLevel.matchSweepBin(0.2, -0.4) === 'level');
+assert('sweep: +12 pitch is pitchPlus', scanLevel.matchSweepBin(12, 0.5) === 'pitchPlus');
+assert('sweep: -12 pitch is pitchMinus', scanLevel.matchSweepBin(-12, 0) === 'pitchMinus');
+assert('sweep: +12 roll is rollPlus', scanLevel.matchSweepBin(0.3, 12) === 'rollPlus');
+assert('sweep: -12 roll is rollMinus', scanLevel.matchSweepBin(1, -12) === 'rollMinus');
+assert('sweep: diagonal is not a bin', scanLevel.matchSweepBin(12, 12) === null);
+assert('sweep: 6° is between bins', scanLevel.matchSweepBin(6, 0) === null);
+assert('sweep hold 100ms is not enough', scanLevel.shouldGrabSweepBin(true, 100, false) === false);
+assert('sweep hold 250ms grabs', scanLevel.shouldGrabSweepBin(true, 250, false) === true);
+assert('sweep does not re-grab', scanLevel.shouldGrabSweepBin(true, 400, true) === false);
+assert('next after level is pitchPlus', scanLevel.nextSweepBin(['level']).id === 'pitchPlus');
+assert('next after four angled is null', scanLevel.nextSweepBin(['level', 'pitchPlus', 'pitchMinus', 'rollPlus', 'rollMinus']) === null);
+assert('parseSweepMeta json', scanLevel.parseSweepMeta({
+  sweepMeta: JSON.stringify([{ bin: 'pitchPlus', pitch: 11.8, roll: 0.2 }])
+})[0].bin === 'pitchPlus');
+
+const partialSummary = scanLevel.summarizeSweepBins([
+  { bin: 'level' },
+  { bin: 'pitchPlus' },
+  { bin: 'unknown' }
+]);
+assert('summarize partial is not complete', partialSummary.surfaceSweepComplete === false);
+assert('summarize partial capturedBins', partialSummary.capturedBins.join(',') === 'level,pitchPlus');
+const fullSummary = scanLevel.summarizeSweepBins([
+  { bin: 'rollMinus' },
+  { bin: 'level' },
+  { bin: 'pitchPlus' },
+  { bin: 'rollPlus' },
+  { bin: 'pitchMinus' }
+]);
+assert('summarize full is complete', fullSummary.surfaceSweepComplete === true);
+assert('summarize full canonical order', fullSummary.capturedBins.join(',') === 'level,pitchPlus,pitchMinus,rollPlus,rollMinus');
+assert('summarize empty is not complete', scanLevel.summarizeSweepBins([]).surfaceSweepComplete === false);
+
 const parsedTilt = scanLevel.parseCaptureTilt({
   capturePitch: '0.42',
   captureRoll: '-1.08',
@@ -1086,7 +1175,9 @@ async function runBorderedCardDiagnosticsCheck() {
   if (report.printCenteringDetected) {
     assert('bordered-card hint is printed-frame', report.centeringDiagnostics.hint === 'likely-printed-frame');
     assert('bordered-card avgWidthPx is tens of pixels', report.centeringDiagnostics.avgWidthPx >= 12);
-    assert('bordered-card box is inset', report.centeringDiagnostics.boxFillRatio < 0.85);
+    assertEq('bordered-card quadSource', report.cardDetection.quadSource, 'server');
+    assert('bordered-card card box is inset in the photo', report.cardDetection.cardBoxPctOfPhoto < 85);
+    assertCenteringOnlyReport('bordered-card', report);
     assert('bordered-card reliability accepted',
       report.centeringDiagnostics.borderReliability &&
       report.centeringDiagnostics.borderReliability.accepted === true);
@@ -1112,11 +1203,9 @@ async function runEdgeTouchBleedCheck() {
     process.exitCode = 1;
     return;
   }
-  assertUndetectedNoFrameHint('full-bleed', report);
-  const box = report.debug && report.debug.box;
-  assert('full-bleed box touches a photo edge',
-    box && (box.left <= 0 || box.right >= (report.debug.width - 1) ||
-      box.top <= 0 || box.bottom >= (report.debug.height - 1)));
+  assert('full-bleed letterbox is card not found (never graded as the photo)', report.cardNotFound === true);
+  assert('full-bleed all sub-grades null',
+    report.subGrades.centering === null && report.subGrades.surface === null && report.subGrades.edges === null);
 }
 
 /** Full-frame white-border card (no mat). BBox often eats the white T/B
@@ -1188,7 +1277,9 @@ async function makeWhiteBorderNameplatePng() {
   const channels = 3;
   const buf = Buffer.alloc(width * height * channels);
   const border = 28;
-  const nameplateInner = 17;
+  // 7px bite at 400 wide ≈ 11px on the 643×900 grading warp (the 12px
+  // consensus threshold is tuned at that raster).
+  const nameplateInner = 21;
   const nameplateLeft = 140;
   const nameplateRight = 260;
   for (let y = 0; y < height; y++) {
@@ -1242,7 +1333,10 @@ async function runFlatNavyInsetCheck() {
     console.log('SKIP flat-navy inset check (sharp not installed)');
     return;
   }
-  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const report = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
   if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
     console.log('SKIP flat-navy inset check (sharp not installed)');
     return;
@@ -1271,7 +1365,10 @@ async function runBusyInsetBorderlessCheck() {
     console.log('SKIP busy-inset borderless check (sharp not installed)');
     return;
   }
-  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const report = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
   if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
     console.log('SKIP busy-inset borderless check (sharp not installed)');
     return;
@@ -1297,7 +1394,10 @@ async function runWhiteBorderNameplateCheck() {
     console.log('SKIP white-border nameplate check (sharp not installed)');
     return;
   }
-  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const report = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
   if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
     console.log('SKIP white-border nameplate check (sharp not installed)');
     return;
@@ -1307,9 +1407,7 @@ async function runWhiteBorderNameplateCheck() {
     process.exitCode = 1;
     return;
   }
-  assert('nameplate white-border detected', report.printCenteringDetected === true);
-  assert('nameplate white-border complete', report.incomplete === false);
-  assert('nameplate white-border has CEN', typeof report.subGrades.centering === 'number');
+  assertCenteringOnlyReport('nameplate white-border', report);
   assertHint('nameplate white-border hint is printed-frame', report.centeringDiagnostics.hint, 'likely-printed-frame');
   const npBvi = report.centeringDiagnostics.bandVsInterior;
   assert('nameplate diagnostic ratio exists', Boolean(npBvi && npBvi.min != null));
@@ -1380,7 +1478,10 @@ async function runCompoundWhiteOrangeCheck() {
     console.log('SKIP compound white/orange check (sharp not installed)');
     return;
   }
-  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const report = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
   if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
     console.log('SKIP compound white/orange check (sharp not installed)');
     return;
@@ -1402,7 +1503,10 @@ async function runFullBleedHoloCheck() {
     console.log('SKIP full-bleed holo check (sharp not installed)');
     return;
   }
-  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const report = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
   if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
     console.log('SKIP full-bleed holo check (sharp not installed)');
     return;
@@ -1428,7 +1532,11 @@ async function runFullFrameWhiteBorderCropCheck() {
     console.log('SKIP full-frame white-border crop check (sharp not installed)');
     return;
   }
-  const cropped = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const cropped = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
+  assertEq('white-border quadSource', cropped.cardDetection && cropped.cardDetection.quadSource, 'native');
   if (cropped.notes && String(cropped.notes).indexOf('sharp') !== -1) {
     console.log('SKIP full-frame white-border crop check (sharp not installed)');
     return;
@@ -1443,9 +1551,7 @@ async function runFullFrameWhiteBorderCropCheck() {
     box && box.left === 0 && box.top === 0 &&
     box.right === cropped.debug.width - 1 &&
     box.bottom === cropped.debug.height - 1);
-  assert('alignment-crop white-border detected', cropped.printCenteringDetected === true);
-  assert('alignment-crop white-border complete', cropped.incomplete === false);
-  assert('alignment-crop white-border has CEN', typeof cropped.subGrades.centering === 'number');
+  assertCenteringOnlyReport('white-border', cropped);
   const topW = cropped.centeringDiagnostics && cropped.centeringDiagnostics.printBorderWidths
     ? cropped.centeringDiagnostics.printBorderWidths.top
     : 0;
@@ -1454,7 +1560,8 @@ async function runFullFrameWhiteBorderCropCheck() {
   const whiteBvi = cropped.centeringDiagnostics.bandVsInterior;
   assert('white-border diagnostic ratio exists', Boolean(whiteBvi && whiteBvi.min != null));
   assert('white-border band is brighter than interior', whiteBvi.min > 1.2);
-  assert('white-border still accepted (diagnostic is not a gate)', cropped.incomplete === false);
+  assert('white-border centering accepted (diagnostic is not a gate)',
+    cropped.centeringDiagnostics.borderReliability.accepted === true);
 }
 
 async function runHighSpreadInsetCheck() {
@@ -1494,6 +1601,37 @@ runGradeBufferUndetectedCheck().then(function () {
   return runCompoundWhiteOrangeCheck();
 }).then(function () {
   return runFullBleedHoloCheck();
+}).then(async function () {
+  const buf = await makeBorderedCardPng();
+  if (!buf) {
+    console.log('SKIP surfaceSweep diagnostic (no sharp / no synthetic)');
+    return;
+  }
+  const graded = await g.gradeBuffer(buf, { debug: true, alignmentCrop: true });
+  const surfaceBefore = graded.subGrades && graded.subGrades.surface;
+  const sweep = await g.buildSurfaceSweep(graded, [
+    { buffer: buf, bin: 'pitchPlus', pitch: 12, roll: 0 }
+  ], { alignmentCrop: true, levelTilt: { pitchDeg: 0, rollDeg: 0 } });
+  await g.applySurfaceSweep(graded, [
+    { buffer: buf, bin: 'pitchPlus', pitch: 12, roll: 0 }
+  ], { alignmentCrop: true, levelTilt: { pitchDeg: 0, rollDeg: 0 } });
+  assert('surfaceSweep does not change SUR', graded.subGrades.surface === surfaceBefore);
+  assert('surfaceSweep has level + extra', sweep.length === 2);
+  assert('surfaceSweep[0] is level', sweep[0].bin === 'level');
+  assert('surfaceSweep extra keeps bin', sweep[1].bin === 'pitchPlus');
+  assert('surfaceSweep extra has scratchCount', typeof sweep[1].scratchCount === 'number');
+  assert('partial apply is not complete', graded.surfaceSweepComplete === false);
+  assert('partial capturedBins', graded.capturedBins.join(',') === 'level,pitchPlus');
+  await g.applySurfaceSweep(graded, [
+    { buffer: buf, bin: 'pitchPlus', pitch: 12, roll: 0 },
+    { buffer: buf, bin: 'pitchMinus', pitch: -12, roll: 0 },
+    { buffer: buf, bin: 'rollPlus', pitch: 0, roll: 12 },
+    { buffer: buf, bin: 'rollMinus', pitch: 0, roll: -12 }
+  ], { alignmentCrop: true, levelTilt: { pitchDeg: 0, rollDeg: 0 } });
+  assert('full apply is complete', graded.surfaceSweepComplete === true);
+  assert('full capturedBins has five', graded.capturedBins.join(',') === 'level,pitchPlus,pitchMinus,rollPlus,rollMinus');
+  assert('full apply still does not change SUR', graded.subGrades.surface === surfaceBefore);
+  console.log('PASS surfaceSweep is diagnostic-only (SUR unchanged)');
 }).then(function () {
   if (process.exitCode) {
     console.error('Judge math regression failed.');
