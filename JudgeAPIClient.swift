@@ -21,6 +21,17 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var rollDeg: Double
     }
 
+    /// Card corners on the uploaded still, in that JPEG's pixels (top-left origin).
+    struct CardQuad {
+        var tl: [Double]
+        var tr: [Double]
+        var br: [Double]
+        var bl: [Double]
+        var imageWidth: Int
+        var imageHeight: Int
+        var confidence: Double
+    }
+
     struct SurfaceSweepRow {
         var bin: String?
         var pitch: Double?
@@ -54,15 +65,16 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var surfaceSweep: [SurfaceSweepRow]
         var surfaceSweepComplete: Bool?
         var capturedBins: [String]
+        var cornersGrade: Double?
         var rawJSON: String
         var summaryText: String
     }
 
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 90
-        config.timeoutIntervalForResource = 120
-        config.waitsForConnectivity = true
+        config.timeoutIntervalForRequest = 25
+        config.timeoutIntervalForResource = 25
+        config.waitsForConnectivity = false
         return URLSession(configuration: config, delegate: self, delegateQueue: nil)
     }()
 
@@ -74,7 +86,25 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         guard !trimmed.isEmpty, let url = URL(string: trimmed), url.scheme == "http" || url.scheme == "https" else {
             return nil
         }
+        guard let host = url.host, isValidJudgeHost(host), url.port != nil else {
+            return nil
+        }
         return url
+    }
+
+    /// IPv4 (four 0–255 octets), `localhost`, or a `.local` Bonjour name.
+    static func isValidJudgeHost(_ host: String) -> Bool {
+        let lower = host.lowercased()
+        if lower == "localhost" { return true }
+        if lower.hasSuffix(".local") { return lower.count > ".local".count }
+        let parts = lower.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return false }
+        return parts.allSatisfy { part in
+            guard !part.isEmpty, part.count <= 3,
+                  part.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  let value = Int(part) else { return false }
+            return (0...255).contains(value)
+        }
     }
 
     func grade(
@@ -85,6 +115,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         tilt: TiltSnapshot?,
         ocrLines: [String] = [],
         sweepFrames: [SweepFrame] = [],
+        cardQuad: CardQuad? = nil,
         scanId: String
     ) async throws -> RemoteReport {
         guard let root = Self.normalizedBaseURL(baseURL) else {
@@ -104,12 +135,24 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             tilt: tilt,
             ocrLines: ocrLines,
             sweepFrames: sweepFrames,
+            cardQuad: cardQuad,
             scanId: scanId
         )
 
-        let (data, response) = try await session.data(for: request)
-        let http = response as? HTTPURLResponse
+        let result: (Data, URLResponse)
+        do {
+            result = try await session.data(for: request)
+        } catch let error as URLError {
+            throw Self.transportError(error)
+        }
+        let data = result.0
+        let http = result.1 as? HTTPURLResponse
         let status = http?.statusCode ?? -1
+        if status == 422 {
+            let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let reason = (body?["reason"] as? String) ?? (body?["error"] as? String) ?? "no card edge visible"
+            throw APIError.cardNotFound(reason)
+        }
         guard (200...299).contains(status) else {
             let snippet = String(data: data, encoding: .utf8) ?? "HTTP \(status)"
             throw APIError.httpFailure(status, snippet)
@@ -117,15 +160,31 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         return try Self.parseReport(data)
     }
 
+    static func transportError(_ error: URLError) -> Error {
+        switch error.code {
+        case .timedOut, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
+             .networkConnectionLost, .notConnectedToInternet, .badURL, .unsupportedURL:
+            return APIError.unreachable
+        default:
+            return error
+        }
+    }
+
     enum APIError: LocalizedError {
         case invalidServerURL
+        case unreachable
+        case cardNotFound(String)
         case httpFailure(Int, String)
         case undecodableResponse
 
         var errorDescription: String? {
             switch self {
             case .invalidServerURL:
-                return "Set the Mac Judge URL first (https://<lan-ip>:5000)."
+                return "Server URL must be https://<IPv4, name.local, or localhost>:<port> — e.g. https://192.168.1.20:5000."
+            case .unreachable:
+                return "Can't reach server — check URL / Mac awake."
+            case .cardNotFound(let reason):
+                return "Card not found — retake. \(reason)"
             case .httpFailure(let code, let body):
                 return "Grade request failed (\(code)): \(body)"
             case .undecodableResponse:
@@ -169,6 +228,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         tilt: TiltSnapshot?,
         ocrLines: [String],
         sweepFrames: [SweepFrame],
+        cardQuad: CardQuad?,
         scanId: String
     ) -> Data {
         var body = Data()
@@ -220,6 +280,18 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
            let json = String(data: payload, encoding: .utf8) {
             appendField("ocrLines", json)
         }
+        if let cardQuad {
+            let quad: [String: [Double]] = [
+                "tl": cardQuad.tl, "tr": cardQuad.tr, "br": cardQuad.br, "bl": cardQuad.bl
+            ]
+            if let payload = try? JSONSerialization.data(withJSONObject: quad),
+               let json = String(data: payload, encoding: .utf8) {
+                appendField("cardQuad", json)
+                appendField("quadImageWidth", String(cardQuad.imageWidth))
+                appendField("quadImageHeight", String(cardQuad.imageHeight))
+                appendField("quadConfidence", String(format: "%.3f", cardQuad.confidence))
+            }
+        }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         return body
     }
@@ -259,6 +331,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let surfaceSweep = parseSurfaceSweep(report?["surfaceSweep"])
         let capturedBins = (report?["capturedBins"] as? [String]) ?? []
         let surfaceSweepComplete = boolValue(report?["surfaceSweepComplete"])
+        let subGrades = report?["subGrades"] as? [String: Any]
+        let cornersGrade = doubleValue(subGrades?["corners"])
+        let cardDetection = report?["cardDetection"] as? [String: Any]
         let scanId = (item?["scanId"] as? String) ?? (root["scanId"] as? String) ?? (report?["scanId"] as? String)
         let marketValue = doubleValue(item?["marketValue"])
             ?? doubleValue(report?["marketValue"])
@@ -297,6 +372,11 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 lines.append(formatSweepRow(row))
             }
         }
+        if let cardDetection {
+            let source = (cardDetection["quadSource"] as? String) ?? "none"
+            let pct = doubleValue(cardDetection["cardBoxPctOfPhoto"]).map { String(format: "%.1f%% of photo", $0) } ?? "—"
+            lines.append("quadSource  \(source) · card box \(pct)")
+        }
         if lines.isEmpty { lines.append(raw) }
 
         return RemoteReport(
@@ -322,6 +402,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             surfaceSweep: surfaceSweep,
             surfaceSweepComplete: surfaceSweepComplete,
             capturedBins: capturedBins,
+            cornersGrade: cornersGrade,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )
@@ -369,7 +450,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             familyId: familyId,
             subGradesLabel: report.subGradesLabel ?? "",
             primaryFlaw: report.primaryFlaw ?? "",
-            incomplete: report.incomplete ?? false
+            incomplete: report.incomplete ?? false,
+            cornersGrade: report.cornersGrade
         )
     }
 

@@ -20,6 +20,12 @@ public struct ScanLedger: Equatable {
     public let subGradesLabel: String
     public let primaryFlaw: String
     public let incomplete: Bool
+    public let cornersGrade: Double?
+
+    public var displayCorners: String {
+        guard let cornersGrade else { return Self.absent }
+        return String(format: "%.1f", cornersGrade)
+    }
 
     public var displayGrade: String {
         guard let grade else { return Self.absent }
@@ -64,6 +70,7 @@ public struct SavedCard: Identifiable, Codable {
     public let calculatedValue: Double?
     public let familyId: String?
     public let subGradesLabel: String
+    public let cornersGrade: Double?
     public var targetBatchId: UUID?
 
     public init(
@@ -78,6 +85,7 @@ public struct SavedCard: Identifiable, Codable {
         marketValue: Double?,
         familyId: String? = nil,
         subGradesLabel: String = "",
+        cornersGrade: Double? = nil,
         batchId: UUID? = nil
     ) {
         self.id = id
@@ -91,6 +99,7 @@ public struct SavedCard: Identifiable, Codable {
         self.calculatedValue = marketValue
         self.familyId = familyId
         self.subGradesLabel = subGradesLabel
+        self.cornersGrade = cornersGrade
         self.targetBatchId = batchId
     }
 
@@ -107,6 +116,7 @@ public struct SavedCard: Identifiable, Codable {
             marketValue: ledger.value,
             familyId: ledger.familyId,
             subGradesLabel: ledger.subGradesLabel,
+            cornersGrade: ledger.cornersGrade,
             batchId: batchId
         )
     }
@@ -143,14 +153,15 @@ public struct SavedCard: Identifiable, Codable {
             familyId: familyId,
             subGradesLabel: subGradesLabel,
             primaryFlaw: "",
-            incomplete: predictedGradePSA == nil
+            incomplete: predictedGradePSA == nil,
+            cornersGrade: cornersGrade
         )
     }
 
     enum CodingKeys: String, CodingKey {
         case id, scanId, committedAt, name, setName
         case lrCenteringResult, tbCenteringResult
-        case predictedGradePSA, calculatedValue, familyId, subGradesLabel, targetBatchId
+        case predictedGradePSA, calculatedValue, familyId, subGradesLabel, cornersGrade, targetBatchId
     }
 
     public init(from decoder: Decoder) throws {
@@ -172,6 +183,7 @@ public struct SavedCard: Identifiable, Codable {
         committedAt = try container.decodeIfPresent(Date.self, forKey: .committedAt) ?? .distantPast
         familyId = try container.decodeIfPresent(String.self, forKey: .familyId)
         subGradesLabel = try container.decodeIfPresent(String.self, forKey: .subGradesLabel) ?? ""
+        cornersGrade = try container.decodeIfPresent(Double.self, forKey: .cornersGrade)
         targetBatchId = try container.decodeIfPresent(UUID.self, forKey: .targetBatchId)
     }
 
@@ -188,6 +200,7 @@ public struct SavedCard: Identifiable, Codable {
         try container.encodeIfPresent(calculatedValue, forKey: .calculatedValue)
         try container.encodeIfPresent(familyId, forKey: .familyId)
         try container.encode(subGradesLabel, forKey: .subGradesLabel)
+        try container.encodeIfPresent(cornersGrade, forKey: .cornersGrade)
         try container.encodeIfPresent(targetBatchId, forKey: .targetBatchId)
     }
 }
@@ -359,6 +372,7 @@ public class PortfolioState: ObservableObject {
                 marketValue: oldCard.calculatedValue,
                 familyId: oldCard.familyId,
                 subGradesLabel: oldCard.subGradesLabel,
+                cornersGrade: oldCard.cornersGrade,
                 batchId: batchId
             )
             saveDataToPersistentDisk()

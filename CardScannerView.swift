@@ -125,6 +125,7 @@ struct CardScannerView: View {
     @State private var sweepUploadStarted = false
     @State private var sweepStatus = ""
     @State private var pendingLevelOCR: [String] = []
+    @State private var pendingLevelQuad: JudgeAPIClient.CardQuad?
     private let sweepClock = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     private var filteredVaultRecords: [SavedCard] {
@@ -294,9 +295,9 @@ struct CardScannerView: View {
 
     private var primaryInstructionText: String {
         if sweepActive {
-            return "Hold the highlighted tick. Keep the whole card in the neon frame."
+            return "Hold the highlighted tick. Keep the whole card inside the frame with a little background showing."
         }
-        return "Keep the whole card in the neon frame. Crop edges are the cut."
+        return "Keep the whole card inside the frame with a little background showing."
     }
 
     private var compactActions: some View {
@@ -436,7 +437,7 @@ struct CardScannerView: View {
             } else {
                 VStack {
                     Image(systemName: "viewfinder").font(.title2)
-                    Text("FILL NEON 2.5×3.5").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4)
+                    Text("CARD INSIDE · BACKGROUND SHOWING").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4)
                 }
                 .foregroundColor(.white)
             }
@@ -789,6 +790,7 @@ struct CardScannerView: View {
         sweepUploadStarted = false
         sweepStatus = ""
         pendingLevelOCR = []
+        pendingLevelQuad = nil
     }
 
     private func handleStillCapture(_ result: Result<LiveCameraView.StillCapture, Error>) {
@@ -810,6 +812,7 @@ struct CardScannerView: View {
                     let ocrLines = (try? CardStillOCR.recognizeLines(from: cropped)) ?? []
                     storeSweepFrame(bin: .level, jpeg: cropped, pitch: pitch, roll: roll)
                     pendingLevelOCR = ocrLines
+                    pendingLevelQuad = CardStillQuad.detect(in: cropped)
                     beginSweepAfterFirstStill()
                 } else if let target = sweepTarget {
                     storeSweepFrame(bin: target, jpeg: cropped, pitch: pitch, roll: roll)
@@ -918,6 +921,7 @@ struct CardScannerView: View {
             )
         }
         let ocrLines = pendingLevelOCR
+        let cardQuad = pendingLevelQuad
         let cardType = selectedCategory == .sports ? "SPORTS" : "TCG"
         Task {
             do {
@@ -929,6 +933,7 @@ struct CardScannerView: View {
                     tilt: tilt,
                     ocrLines: ocrLines,
                     sweepFrames: sweepPayload,
+                    cardQuad: cardQuad,
                     scanId: pendingScanId
                 )
                 await MainActor.run {
@@ -948,6 +953,7 @@ struct CardScannerView: View {
             } catch {
                 await MainActor.run {
                     isRemoteGrading = false
+                    sweepStatus = ""
                     lastRemoteError = error.localizedDescription
                 }
             }
@@ -1099,6 +1105,12 @@ struct ScanLedgerRows: View {
                     .font(.system(.footnote, design: .monospaced))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+            }
+            HStack {
+                Text("Corners")
+                Spacer()
+                Text(ledger.displayCorners)
+                    .font(.system(.footnote, design: .monospaced))
             }
             Divider()
             HStack {
