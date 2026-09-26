@@ -1,14 +1,13 @@
 import SwiftUI
 import AVFoundation
 import CoreImage
-import Vision
 
 /// Live viewfinder + session-once AE/WB lock + high-quality stills.
 ///
-/// `AVCaptureVideoDataOutput` stays on for the preview / Vision overlay.
-/// `AVCapturePhotoOutput` is a separate still path — one JPEG per tap, not a
-/// video-frame grab. Exposure and white balance lock after `isAdjusting*`
-/// settles at session start (empty mat), then stay locked for the session.
+/// `AVCaptureVideoDataOutput` stays on for the preview / still-path OCR hook.
+/// Framing is the SwiftUI neon 2.5×3.5 — no live Vision quad (it flickered).
+/// The hosting UIView does not take hits so ScrollView and tab bar stay tappable.
+/// `AVCapturePhotoOutput` is a separate still path — one JPEG per tap.
 public struct LiveCameraView: UIViewRepresentable {
 
     public struct StillCapture {
@@ -37,6 +36,8 @@ public struct LiveCameraView: UIViewRepresentable {
     public func makeUIView(context: Context) -> UIView {
         let captureContainerView = UIView(frame: .zero)
         captureContainerView.backgroundColor = .black
+        captureContainerView.clipsToBounds = true
+        captureContainerView.isUserInteractionEnabled = false
         context.coordinator.onFrameReceivedClosure = onFrameCaptured
         context.coordinator.onStillCaptured = onStillCaptured
         context.coordinator.onExposureLockStatus = { exposureLockStatus = $0 }
@@ -66,7 +67,6 @@ public struct LiveCameraView: UIViewRepresentable {
 
     public class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate {
         var previewLayerAnchor: AVCaptureVideoPreviewLayer?
-        var visualMaskOverlayLayer: CAShapeLayer?
         var onFrameReceivedClosure: ((CGImage) -> Void)?
         var onStillCaptured: ((Result<StillCapture, Error>) -> Void)?
         var onExposureLockStatus: ((String) -> Void)?
@@ -80,6 +80,8 @@ public struct LiveCameraView: UIViewRepresentable {
         private var didStartSession = false
         private var didLockExposure = false
         private var captureInFlight = false
+        private var lastFrameEmit = Date.distantPast
+        private let frameEmitInterval: TimeInterval = 0.3
 
         func attachPreview(to container: UIView) {
             let liveVideoPreviewLayer = AVCaptureVideoPreviewLayer(session: recordingSession)
@@ -87,21 +89,13 @@ public struct LiveCameraView: UIViewRepresentable {
             liveVideoPreviewLayer.frame = container.bounds
             container.layer.addSublayer(liveVideoPreviewLayer)
 
-            let maskOverlayShapeLayer = CAShapeLayer()
-            maskOverlayShapeLayer.frame = container.bounds
-            maskOverlayShapeLayer.strokeColor = UIColor.systemGreen.cgColor
-            maskOverlayShapeLayer.lineWidth = 3.0
-            maskOverlayShapeLayer.fillColor = UIColor.systemGreen.withAlphaComponent(0.12).cgColor
-            maskOverlayShapeLayer.lineJoin = .round
-            container.layer.addSublayer(maskOverlayShapeLayer)
-
+            // Neon 2.5×3.5 + crosshair are drawn in SwiftUI. A live Vision quad
+            // here flicker-fights that guide and is not the crop contract.
             previewLayerAnchor = liveVideoPreviewLayer
-            visualMaskOverlayLayer = maskOverlayShapeLayer
         }
 
         func layoutPreview(in view: UIView) {
             previewLayerAnchor?.frame = view.bounds
-            visualMaskOverlayLayer?.frame = view.bounds
         }
 
         func startSessionIfNeeded() {
@@ -264,50 +258,12 @@ public struct LiveCameraView: UIViewRepresentable {
             let maximumViewportDimensions = sourceImage.extent
             guard let isolatedCGImage = sharedCIContext.createCGImage(sourceImage, from: maximumViewportDimensions) else { return }
 
-            performLiveCardBoundaryTracing(on: isolatedCGImage)
-
+            let now = Date()
+            guard now.timeIntervalSince(lastFrameEmit) >= frameEmitInterval else { return }
+            lastFrameEmit = now
             DispatchQueue.main.async {
                 closureAnchor(isolatedCGImage)
             }
-        }
-
-        private func performLiveCardBoundaryTracing(on cgImage: CGImage) {
-            let imageRequestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-            let rectangleRequest = VNDetectRectanglesRequest { [weak self] request, error in
-                guard let self = self,
-                      error == nil,
-                      let findings = request.results as? [VNRectangleObservation],
-                      let localizedCard = findings.first,
-                      let overlayLayer = self.visualMaskOverlayLayer,
-                      let visualPreview = self.previewLayerAnchor else {
-                    DispatchQueue.main.async {
-                        self?.visualMaskOverlayLayer?.path = nil
-                    }
-                    return
-                }
-
-                DispatchQueue.main.async {
-                    let convertedTopLeft = visualPreview.layerPointConverted(fromCaptureDevicePoint: localizedCard.topLeft)
-                    let convertedTopRight = visualPreview.layerPointConverted(fromCaptureDevicePoint: localizedCard.topRight)
-                    let convertedBottomLeft = visualPreview.layerPointConverted(fromCaptureDevicePoint: localizedCard.bottomLeft)
-                    let convertedBottomRight = visualPreview.layerPointConverted(fromCaptureDevicePoint: localizedCard.bottomRight)
-
-                    let adaptivePath = UIBezierPath()
-                    adaptivePath.move(to: convertedTopLeft)
-                    adaptivePath.addLine(to: convertedTopRight)
-                    adaptivePath.addLine(to: convertedBottomRight)
-                    adaptivePath.addLine(to: convertedBottomLeft)
-                    adaptivePath.close()
-
-                    overlayLayer.path = adaptivePath.cgPath
-                }
-            }
-
-            rectangleRequest.minimumAspectRatio = 0.55
-            rectangleRequest.maximumAspectRatio = 0.85
-            rectangleRequest.minimumConfidence = 0.85
-
-            try? imageRequestHandler.perform([rectangleRequest])
         }
 
         private func failStill(_ error: Error) {
