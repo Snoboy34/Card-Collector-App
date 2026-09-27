@@ -70,6 +70,7 @@
 // -----------------------------------------------------------------------------
 const scanLevel = require('../public/scan_level');
 const cardQuad = require('./card_quad');
+const scanDebug = require('./scan_debug');
 
 let sharp = null;
 try {
@@ -2110,6 +2111,27 @@ async function gradeBuffer(buffer, options) {
     return gradeResult;
   }
 
+  // Stage B: scans/<scanId>/debug.json (+ oriented.jpg when a card was warped).
+  async function attachScanDebug(gradeResult, ctx) {
+    if (!options.scansRoot || !options.scanId) return gradeResult;
+    const c = ctx || {};
+    try {
+      gradeResult.debugArtifacts = await scanDebug.persist({
+        scansRoot: options.scansRoot,
+        scanId: options.scanId,
+        report: Object.assign({ captureTilt: options.captureTilt || null }, gradeResult),
+        warped: c.warped || null,
+        centeringBox: c.centeringBox || null,
+        measurement: c.measurement || null,
+        borderReliability: c.borderReliability || null
+      });
+    } catch (err) {
+      console.error('[scan-debug] persist failed', options.scanId, err && err.message);
+      gradeResult.debugArtifacts = { error: err && err.message ? err.message : String(err) };
+    }
+    return gradeResult;
+  }
+
   if (!sharp) {
     return returnGrade(fallbackReport('grading skipped: optional dependency `sharp` not installed'));
   }
@@ -2123,7 +2145,7 @@ async function gradeBuffer(buffer, options) {
     // is never used as the card box (that graded pink backdrop paper).
     const located = await locateCard(buffer, options);
     if (!located.found) {
-      return returnGrade(cardNotFoundReport(located.detection));
+      return returnGrade(await attachScanDebug(cardNotFoundReport(located.detection), null));
     }
     const cardDetection = located.detection;
     const shouldRotate = cardDetection.rotatedToPortrait;
@@ -2300,7 +2322,10 @@ async function gradeBuffer(buffer, options) {
           edgesWhiteningCount
         };
       }
-      return returnGrade(applyDetectorTrust(report));
+      return returnGrade(await attachScanDebug(applyDetectorTrust(report), {
+        warped: warped, centeringBox: centeringBox,
+        measurement: centeringMeasurement, borderReliability: borderReliability
+      }));
     }
 
     const judged = evaluateMultiPhaseCondition(
@@ -2377,7 +2402,10 @@ async function gradeBuffer(buffer, options) {
       };
     }
 
-    return returnGrade(applyDetectorTrust(report));
+    return returnGrade(await attachScanDebug(applyDetectorTrust(report), {
+      warped: warped, centeringBox: centeringBox,
+      measurement: centeringMeasurement, borderReliability: borderReliability
+    }));
   } catch (err) {
     return returnGrade(fallbackReport('grading engine error: ' + (err && err.message ? err.message : String(err))));
   }

@@ -210,6 +210,7 @@ async function run() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'judge-cardbox-'));
   process.env.JUDGE_DATA_DIR = path.join(tmp, 'data');
   process.env.JUDGE_UPLOADS_DIR = path.join(tmp, 'uploads');
+  process.env.JUDGE_SCANS_DIR = path.join(tmp, 'scans');
   const g = require('../services/grading_engine');
   const silence = console.log;
 
@@ -343,6 +344,34 @@ async function run() {
     assert('dump_scans prints raw + tight quads and per-line top samples',
       dump.indexOf('  raw   tl(') !== -1 && dump.indexOf('  tight tl(') !== -1 && /top\s+@\d+ /.test(dump));
     console.log('\n' + dump + '\n');
+
+    // Stage B artifacts come from the same server analysis as the saved ratios.
+    const scansDir = process.env.JUDGE_SCANS_DIR;
+    const failDir = path.join(scansDir, failScanId);
+    const okDir = path.join(scansDir, okScanId);
+    assert('422 writes scans/<scanId>/debug.json', fs.existsSync(path.join(failDir, 'debug.json')));
+    assert('422 writes no oriented.jpg (nothing was warped)', !fs.existsSync(path.join(failDir, 'oriented.jpg')));
+    const failDebug = JSON.parse(fs.readFileSync(path.join(failDir, 'debug.json'), 'utf8'));
+    assert('422 debug.json records card not found + quadSource none',
+      failDebug.cardNotFound === true && failDebug.cardDetection.quadSource === 'none');
+    assert('failed-scans log points at the debug dir', logged.debugDir === path.join('scans', failScanId), logged.debugDir);
+    assert('200 writes debug.json and oriented.jpg',
+      fs.existsSync(path.join(okDir, 'debug.json')) && fs.existsSync(path.join(okDir, 'oriented.jpg')));
+    const okDebug = JSON.parse(fs.readFileSync(path.join(okDir, 'debug.json'), 'utf8'));
+    assert('debug.json has raw + tightened quad', okDebug.cardDetection.rawQuad && okDebug.cardDetection.quad);
+    assert('debug.json has 7 per-line samples per edge',
+      ['top', 'bottom', 'left', 'right'].every(function (e) { return okDebug.sampleLines[e].length === 7; }));
+    assert('debug.json ratios match the saved report',
+      okDebug.topBottomRatio.top === rep.centeringMetrics.topBottomRatio.top &&
+      okDebug.leftRightRatio.left === rep.centeringMetrics.leftRightRatio.left);
+    const oriented = await sharp(path.join(okDir, 'oriented.jpg')).raw().toBuffer({ resolveWithObject: true });
+    assert('oriented.jpg is the 643×900 warp', oriented.info.width === 643 && oriented.info.height === 900);
+    const topY = Math.round(okDebug.innerBorderLinesPx.topY);
+    const px = (topY * 643 + 300) * oriented.info.channels;
+    const cyan = oriented.data[px] < 90 && oriented.data[px + 1] > 170 && oriented.data[px + 2] > 190;
+    assert('oriented.jpg draws the cyan inner top line at the measured width', cyan,
+      [oriented.data[px], oriented.data[px + 1], oriented.data[px + 2]]);
+    assert('report points at the debug dir', rep.debugArtifacts && rep.debugArtifacts.dir === path.join('scans', okScanId));
   } finally {
     await new Promise(function (resolve) { server.close(resolve); });
   }

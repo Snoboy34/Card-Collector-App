@@ -173,6 +173,7 @@ function respondCardNotFound(res, args) {
     route: args.route,
     reason: reason,
     imagePath: args.imagePath || null,
+    debugDir: report.debugArtifacts && report.debugArtifacts.dir ? report.debugArtifacts.dir : null,
     captureTilt: report.captureTilt || null,
     diagnostics: report.cardDetection || null
   });
@@ -213,6 +214,7 @@ function persistGradedItem(item, classification) {
 const DATA_DIR = process.env.JUDGE_DATA_DIR || path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'database.json');
 const FAILED_SCANS_PATH = path.join(DATA_DIR, 'failed_scans.jsonl');
+const SCANS_DIR = process.env.JUDGE_SCANS_DIR || path.join(__dirname, 'scans');
 function loadDatabase() {
   try {
     const raw = fs.readFileSync(DB_PATH, 'utf8');
@@ -383,6 +385,7 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
     const opts = parseGradingOptions(req.body);
     const scanId = resolveScanId(req.body);
     opts.scanId = scanId;
+    opts.scansRoot = SCANS_DIR;
 
     const ts = Date.now();
     const orig = imageFile.originalname || 'upload';
@@ -454,6 +457,7 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     const opts = parseGradingOptions(req.body);
     const scanId = resolveScanId(req.body);
     opts.scanId = scanId;
+    opts.scansRoot = SCANS_DIR;
     const buffer = await fs.promises.readFile(req.file.path);
     const orig = req.file.originalname || path.basename(req.file.path);
     const classification = await classifier.classifyBuffer(buffer, { filename: orig });
@@ -563,4 +567,4 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { app, DB_PATH, FAILED_SCANS_PATH, ensureDatabaseFile };
+module.exports = { app, DB_PATH, FAILED_SCANS_PATH, SCANS_DIR, ensureDatabaseFile };
