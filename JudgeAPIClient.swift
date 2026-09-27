@@ -66,6 +66,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var surfaceSweepComplete: Bool?
         var capturedBins: [String]
         var cornersGrade: Double?
+        var debugPath: String?
         var rawJSON: String
         var summaryText: String
     }
@@ -334,6 +335,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let subGrades = report?["subGrades"] as? [String: Any]
         let cornersGrade = doubleValue(subGrades?["corners"])
         let cardDetection = report?["cardDetection"] as? [String: Any]
+        let debugArtifacts = report?["debugArtifacts"] as? [String: Any]
+        let debugPath = debugArtifacts?["dir"] as? String
         let scanId = (item?["scanId"] as? String) ?? (root["scanId"] as? String) ?? (report?["scanId"] as? String)
         let marketValue = doubleValue(item?["marketValue"])
             ?? doubleValue(report?["marketValue"])
@@ -408,6 +411,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             surfaceSweepComplete: surfaceSweepComplete,
             capturedBins: capturedBins,
             cornersGrade: cornersGrade,
+            debugPath: debugPath,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )
@@ -456,7 +460,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             subGradesLabel: report.subGradesLabel ?? "",
             primaryFlaw: report.primaryFlaw ?? "",
             incomplete: report.incomplete ?? false,
-            cornersGrade: report.cornersGrade
+            cornersGrade: report.cornersGrade,
+            debugPath: report.debugPath
         )
     }
 

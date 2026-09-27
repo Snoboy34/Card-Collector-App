@@ -21,6 +21,7 @@ public struct ScanLedger: Equatable {
     public let primaryFlaw: String
     public let incomplete: Bool
     public let cornersGrade: Double?
+    public let debugPath: String?
 
     public var displayCorners: String {
         guard let cornersGrade else { return Self.absent }
@@ -71,6 +72,7 @@ public struct SavedCard: Identifiable, Codable {
     public let familyId: String?
     public let subGradesLabel: String
     public let cornersGrade: Double?
+    public let debugPath: String?
     public var targetBatchId: UUID?
 
     public init(
@@ -86,6 +88,7 @@ public struct SavedCard: Identifiable, Codable {
         familyId: String? = nil,
         subGradesLabel: String = "",
         cornersGrade: Double? = nil,
+        debugPath: String? = nil,
         batchId: UUID? = nil
     ) {
         self.id = id
@@ -100,6 +103,7 @@ public struct SavedCard: Identifiable, Codable {
         self.familyId = familyId
         self.subGradesLabel = subGradesLabel
         self.cornersGrade = cornersGrade
+        self.debugPath = debugPath
         self.targetBatchId = batchId
     }
 
@@ -117,6 +121,7 @@ public struct SavedCard: Identifiable, Codable {
             familyId: ledger.familyId,
             subGradesLabel: ledger.subGradesLabel,
             cornersGrade: ledger.cornersGrade,
+            debugPath: ledger.debugPath,
             batchId: batchId
         )
     }
@@ -154,14 +159,15 @@ public struct SavedCard: Identifiable, Codable {
             subGradesLabel: subGradesLabel,
             primaryFlaw: "",
             incomplete: predictedGradePSA == nil,
-            cornersGrade: cornersGrade
+            cornersGrade: cornersGrade,
+            debugPath: debugPath
         )
     }
 
     enum CodingKeys: String, CodingKey {
         case id, scanId, committedAt, name, setName
         case lrCenteringResult, tbCenteringResult
-        case predictedGradePSA, calculatedValue, familyId, subGradesLabel, cornersGrade, targetBatchId
+        case predictedGradePSA, calculatedValue, familyId, subGradesLabel, cornersGrade, debugPath, targetBatchId
     }
 
     public init(from decoder: Decoder) throws {
@@ -184,6 +190,7 @@ public struct SavedCard: Identifiable, Codable {
         familyId = try container.decodeIfPresent(String.self, forKey: .familyId)
         subGradesLabel = try container.decodeIfPresent(String.self, forKey: .subGradesLabel) ?? ""
         cornersGrade = try container.decodeIfPresent(Double.self, forKey: .cornersGrade)
+        debugPath = try container.decodeIfPresent(String.self, forKey: .debugPath)
         targetBatchId = try container.decodeIfPresent(UUID.self, forKey: .targetBatchId)
     }
 
@@ -201,6 +208,7 @@ public struct SavedCard: Identifiable, Codable {
         try container.encodeIfPresent(familyId, forKey: .familyId)
         try container.encode(subGradesLabel, forKey: .subGradesLabel)
         try container.encodeIfPresent(cornersGrade, forKey: .cornersGrade)
+        try container.encodeIfPresent(debugPath, forKey: .debugPath)
         try container.encodeIfPresent(targetBatchId, forKey: .targetBatchId)
     }
 }
@@ -373,6 +381,7 @@ public class PortfolioState: ObservableObject {
                 familyId: oldCard.familyId,
                 subGradesLabel: oldCard.subGradesLabel,
                 cornersGrade: oldCard.cornersGrade,
+                debugPath: oldCard.debugPath,
                 batchId: batchId
             )
             saveDataToPersistentDisk()
