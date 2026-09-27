@@ -942,6 +942,12 @@ struct ScanLedgerRows: View {
                 Text(ledger.displayCorners)
                     .font(.system(.footnote, design: .monospaced))
             }
+            if let debugPath = ledger.debugPath, !debugPath.isEmpty {
+                Text("Debug: \(debugPath)/ on the Mac")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Divider()
             HStack {
                 Text("Value")
