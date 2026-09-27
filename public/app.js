@@ -158,7 +158,7 @@ function renderDashboard() {
             <p class="muted">Pre-grade scans & quick wallet overview</p>
           </div>
           <div class="metrics">
-            <div class="metric"><div id="totalCardsValue" class="value">${state.inventory.length}</div><div class="label">Total Cards</div></div>
+            <div class="metric"><div id="totalCardsValue" class="value">—</div><div class="label">Graded Cards</div><div id="savedScansValue" class="label muted"></div></div>
             <div class="metric"><div id="walletValue" class="value">—</div><div class="label">Wallet Value (USD)</div></div>
             <div class="metric"><div id="pendingUploadsValue" class="value">0</div><div class="label">Pending Uploads</div></div>
           </div>
@@ -236,7 +236,7 @@ function renderWallet() {
   // also show wallet totals if available
   if (state.stats && state.stats.stats && state.stats.stats.wallet) {
     const totalElem = document.getElementById('walletValue');
-    if (totalElem) totalElem.textContent = `$${(state.stats.stats.wallet.totalValue || 0).toFixed(2)}`;
+    if (totalElem) totalElem.textContent = formatMoney(state.stats.stats.wallet.totalValue);
   }
 }
 
@@ -971,6 +971,10 @@ function openReportModal(item) {
       ${report && report.debugArtifacts && report.debugArtifacts.dir
         ? '<p class="muted">Debug: ' + escapeHtml(report.debugArtifacts.dir) + '/ (debug.json, oriented.jpg)</p>'
         : ''}
+      ${scanId ? '<p><button id="copyDiagnostics" class="small">Copy diagnostics</button> <span id="copyStatus" class="muted"></span></p><pre id="diagnosticsText" class="muted" style="display:none; white-space:pre-wrap; word-break:break-word; font-size:11px;"></pre>' : ''}
+      ${report && report.debugArtifacts && report.debugArtifacts.orientedJpg
+        ? '<figure style="margin:8px 0;"><img src="/scans/' + encodeURIComponent(scanId) + '/oriented.jpg" alt="Warped card with detected border lines" style="width:100%; max-width:420px; border-radius:6px;" /><figcaption class="muted">Cyan: inner border lines used for L/R and T/B · yellow: each sample line hit · red: line found no border</figcaption></figure>'
+        : ''}
       <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
         <img src="${itemImage(item)}" alt="${escapeHtml(item.name || 'Unidentified')}" style="width:180px; height:220px; object-fit:cover; border-radius:8px; flex-shrink:0;" />
         <div>
@@ -994,6 +998,22 @@ function openReportModal(item) {
   `;
   document.body.appendChild(modal);
   modal.querySelector('#closeModal').addEventListener('click', () => modal.remove());
+  const copyBtn = modal.querySelector('#copyDiagnostics');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      const status = modal.querySelector('#copyStatus');
+      const pre = modal.querySelector('#diagnosticsText');
+      try {
+        const res = await fetch('/api/debug/scan/' + encodeURIComponent(scanId)).then(r => r.json());
+        if (!res.ok) throw new Error(res.error || 'not found');
+        pre.textContent = res.text;
+        pre.style.display = 'block';
+        status.textContent = (await copyText(res.text)) ? 'Copied.' : 'Select the text below and copy.';
+      } catch (err) {
+        status.textContent = 'Diagnostics unavailable: ' + err.message;
+      }
+    });
+  }
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
 
@@ -1181,16 +1201,37 @@ function fmtPx(value) {
   return (Math.round(n * 10) / 10) + 'px';
 }
 
+/** Clipboard API needs a secure context; plain-http LAN falls back to execCommand. */
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* fall through */ }
+  }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
+}
+
+function formatMoney(value) {
+  return typeof value === 'number' && isFinite(value) ? '$' + value.toFixed(2) : '—';
+}
+
 function updateStatsUI() {
   // state.stats structure: { ok: true, stats: { inventorySize, categoryCounts, wallet } }
   if (!state.stats || !state.stats.stats) return;
   const stats = state.stats.stats;
   // inventory size
   const totalEl = document.getElementById('totalCardsValue');
-  if (totalEl) totalEl.textContent = stats.inventorySize != null ? String(stats.inventorySize) : String(state.inventory.length);
-  // wallet total
+  if (totalEl) totalEl.textContent = stats.inventorySize != null ? String(stats.inventorySize) : '—';
+  const savedEl = document.getElementById('savedScansValue');
+  if (savedEl) savedEl.textContent = stats.savedScans != null ? stats.savedScans + ' scans saved' : '';
+  // wallet total: no price source yet, so this stays —
   const walletEl = document.getElementById('walletValue');
-  if (walletEl) walletEl.textContent = `$${(stats.wallet && stats.wallet.totalValue ? stats.wallet.totalValue.toFixed(2) : 0.00)}`;
+  if (walletEl) walletEl.textContent = formatMoney(stats.wallet && stats.wallet.totalValue);
   // category badges
   const badges = document.getElementById('categoryBadges');
   if (badges) {

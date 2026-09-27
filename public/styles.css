@@ -142,9 +142,10 @@ body{
 
 /* Modal / report */
 .modal{
-  position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(rgba(2,6,23,0.6), rgba(2,6,23,0.6));
+  position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; background:rgba(2,6,23,0.88);
 }
-.modal .panel{ width:min(720px,calc(100% - 32px)); max-height:90vh; overflow:auto; }
+/* Opaque: the base .panel is a 2%-white wash that lets dashboard text bleed through. */
+.modal .panel{ width:min(720px,calc(100% - 32px)); max-height:90vh; overflow:auto; background:var(--panel); border:1px solid rgba(255,255,255,0.12); }
 
 /* Tiny utilities */
 .row{ display:flex; gap:var(--space-sm); align-items:center; }

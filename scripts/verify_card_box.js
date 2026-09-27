@@ -372,6 +372,54 @@ async function run() {
     assert('oriented.jpg draws the cyan inner top line at the measured width', cyan,
       [oriented.data[px], oriented.data[px + 1], oriented.data[px + 2]]);
     assert('report points at the debug dir', rep.debugArtifacts && rep.debugArtifacts.dir === path.join('scans', okScanId));
+
+    // Dashboard: no invented prices, count only fully graded cards.
+    const statsRes = await fetch(base + '/api/stats');
+    const stats = (await statsRes.json()).stats;
+    assert('wallet total is null (no price source)', stats.wallet.totalValue === null, stats.wallet);
+    assert('graded count excludes an incomplete scan', stats.inventorySize === 0, stats.inventorySize);
+    assert('saved scan count is reported separately', stats.savedScans === 1, stats.savedScans);
+    const wallet = require('../services/wallet_engine');
+    const fake = wallet.portfolioStats([
+      { category: 'SPORTS', gradingReport: { finalScore: 9, incomplete: false } },
+      { category: 'SPORTS', gradingReport: { finalScore: null, incomplete: true } },
+      { category: 'TCG', gradingReport: { finalScore: 0, incomplete: true, label: 'Unknown' } }
+    ]);
+    assert('portfolioStats counts only complete graded items', fake.gradedCount === 1, fake);
+    assert('portfolioStats never prices an item', fake.totalValue === null && wallet.valueForItem({}) === null);
+
+    // Debug views: oriented.jpg inline, per-scan copy text, /debug/recent.
+    const img = await fetch(base + '/scans/' + okScanId + '/oriented.jpg');
+    const imgBytes = Buffer.from(await img.arrayBuffer());
+    assert('GET /scans/<id>/oriented.jpg serves the JPEG',
+      img.status === 200 && /image\/jpeg/.test(img.headers.get('content-type')) &&
+      imgBytes[0] === 0xff && imgBytes[1] === 0xd8, img.status);
+    const other = await fetch(base + '/scans/' + okScanId + '/server.js');
+    assert('only oriented.jpg / debug.json are served from scans/', other.status === 404, other.status);
+    const oneScan = await (await fetch(base + '/api/debug/scan/' + okScanId)).json();
+    assert('GET /api/debug/scan/<id> returns that scan block',
+      oneScan.ok && oneScan.text.indexOf(okScanId.slice(0, 8).toUpperCase()) !== -1 &&
+      oneScan.text.indexOf(failScanId.slice(0, 8).toUpperCase()) === -1);
+    const oneFailed = await (await fetch(base + '/api/debug/scan/' + failScanId)).json();
+    assert('GET /api/debug/scan/<id> works for a card-not-found scan',
+      oneFailed.ok && oneFailed.text.indexOf('CARD NOT FOUND') !== -1);
+    const missing = await fetch(base + '/api/debug/scan/00000000-0000-4000-8000-000000000000');
+    assert('unknown scanId → 404', missing.status === 404);
+    const recent = await fetch(base + '/debug/recent?n=5');
+    const recentHtml = await recent.text();
+    assert('GET /debug/recent?n=5 shows both scans with a copy button',
+      recent.status === 200 && recentHtml.indexOf('Copy all') !== -1 &&
+      recentHtml.indexOf(okScanId.slice(0, 8).toUpperCase()) !== -1 &&
+      recentHtml.indexOf(failScanId.slice(0, 8).toUpperCase()) !== -1);
+    const recentText = await fetch(base + '/debug/recent?n=5&format=text');
+    assert('GET /debug/recent?format=text is plain text',
+      /text\/plain/.test(recentText.headers.get('content-type')) &&
+      (await recentText.text()).indexOf('── ') === 0);
+    const local = require('../server').isLocalNetworkAddress;
+    assert('local-network check allows loopback / RFC1918 / link-local',
+      ['127.0.0.1', '::1', '::ffff:192.168.1.20', '10.0.0.4', '172.20.1.1', '169.254.3.3', 'fe80::1'].every(local));
+    assert('local-network check rejects public and CGNAT addresses',
+      !['8.8.8.8', '172.32.0.1', '100.64.0.1', '::ffff:52.1.2.3', ''].some(local));
   } finally {
     await new Promise(function (resolve) { server.close(resolve); });
   }
