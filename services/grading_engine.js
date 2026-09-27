@@ -72,6 +72,10 @@ const scanLevel = require('../public/scan_level');
 const cardQuad = require('./card_quad');
 const scanDebug = require('./scan_debug');
 
+// Bump on any change that can move a saved number. Stamped on every report
+// so the deck report and re-grades can tell engines apart.
+const ENGINE_VERSION = '2026.09.27-native-centering';
+
 let sharp = null;
 try {
   sharp = require('sharp');
@@ -2293,6 +2297,7 @@ async function gradeBuffer(buffer, options) {
 
   // TEMP: dump every gradeBuffer payload to the server log (remove after LAN testing).
   function returnGrade(gradeResult) {
+    gradeResult.engineVersion = ENGINE_VERSION;
     if (options.scanId) gradeResult.scanId = options.scanId;
     if (options.captureTilt) {
       gradeResult.captureTilt = options.captureTilt;
@@ -2615,6 +2620,7 @@ async function gradeBuffer(buffer, options) {
 }
 
 module.exports = {
+  ENGINE_VERSION,
   gradeBuffer,
   evaluateMultiPhaseCondition,
   GRADE_SCALE,

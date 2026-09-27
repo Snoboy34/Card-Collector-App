@@ -109,6 +109,8 @@ function formatGraded(item) {
   const tilt = r.captureTilt;
   const out = [];
   out.push('── ' + id.slice(0, 8).toUpperCase() + '  ' + localTime(item.createdAt) + '  graded  ' + id +
+    (item.deckId ? '  deck ' + item.deckId : '') +
+    (item.engine ? '  engine ' + item.engine.version + (item.engine.commit ? ' (' + item.engine.commit + ')' : '') : '') +
     (tilt ? '  tilt P ' + num(tilt.pitchDeg) + '° R ' + num(tilt.rollDeg) + '°' : ''));
   detectionBlock(r.cardDetection).forEach(function (l) { out.push(l); });
   out.push('borders L ' + num(w.left) + '  R ' + num(w.right) + '  T ' + num(w.top) + '  B ' + num(w.bottom) +

@@ -100,6 +100,15 @@ tightened with sub-pixel precision at that resolution. Pass
 `node scripts/verify_centering_precision.js` compares both on 12 synthetic
 phone-like captures.
 
+Test deck: a fixed benchmark deck (`TD-01`…) registered on `/deck`
+(`data/test_deck.json`) with per-scan labels in `data/scan_labels.json`
+(deck card, pre-submission, PSA grade). `/api/grade` accepts `deckId` and
+`preSubmission`. `/deck/report` and `node scripts/deck_report.js
+[--candidate <checkout>]` show the latest result per deck card vs the latest
+from a different engine, per-category pass rates, and PSA ground truth. Every
+saved grade is stamped with `engine` (`ENGINE_VERSION` + git commit). See
+`docs/test-deck-protocol.md`.
+
 Scan dump: `node scripts/dump_scans.js [N] [scanIdPrefix]` prints the last N
 graded scans (`data/database.json`) and card-not-found attempts
 (`data/failed_scans.jsonl`): quad source, card box %, raw and tightened quad

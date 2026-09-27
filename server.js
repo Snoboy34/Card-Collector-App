@@ -43,6 +43,9 @@ const wallet = require('./services/wallet_engine');
 const lanHttps = require('./scripts/lan_https');
 const scanLevel = require('./public/scan_level');
 const dumpScans = require('./scripts/dump_scans');
+const testDeck = require('./services/test_deck');
+const deckReport = require('./scripts/deck_report');
+const childProcess = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -168,9 +171,12 @@ function logFailedScan(entry) {
 function respondCardNotFound(res, args) {
   const report = args.report;
   const reason = report.cardNotFoundReason || 'card not found';
+  const label = labelFromCapture(args.scanId, args.body);
   logFailedScan({
     scanId: args.scanId,
     timestamp: new Date().toISOString(),
+    engine: ENGINE,
+    deckId: label && label.deckId ? label.deckId : null,
     route: args.route,
     reason: reason,
     imagePath: args.imagePath || null,
@@ -221,6 +227,36 @@ const DATA_DIR = process.env.JUDGE_DATA_DIR || path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'database.json');
 const FAILED_SCANS_PATH = path.join(DATA_DIR, 'failed_scans.jsonl');
 const SCANS_DIR = process.env.JUDGE_SCANS_DIR || path.join(__dirname, 'scans');
+const deckStore = testDeck.createStore(DATA_DIR);
+
+/** Engine identity stamped on every saved grade and failed attempt. */
+const ENGINE = (function () {
+  let commit = process.env.JUDGE_ENGINE_COMMIT || null;
+  if (!commit) {
+    try {
+      commit = childProcess.execSync('git rev-parse --short HEAD', {
+        cwd: __dirname, stdio: ['ignore', 'pipe', 'ignore']
+      }).toString().trim() || null;
+    } catch (e) { commit = null; }
+  }
+  return { version: grading.ENGINE_VERSION, commit: commit };
+})();
+
+/** Deck / pre-submission fields sent with a Capture. */
+function captureLabelFields(body) {
+  const fields = {};
+  if (body && body.deckId) fields.deckId = body.deckId;
+  if (body && body.preSubmission != null && body.preSubmission !== '') fields.preSubmission = body.preSubmission;
+  return fields;
+}
+
+function labelFromCapture(scanId, body) {
+  const fields = captureLabelFields(body);
+  if (!Object.keys(fields).length) return null;
+  const res = deckStore.labelScan(scanId, fields, 'capture');
+  if (!res.ok) console.warn('[deck] label ignored for ' + scanId + ': ' + res.error);
+  return res.ok ? res.label : null;
+}
 function loadDatabase() {
   try {
     const raw = fs.readFileSync(DB_PATH, 'utf8');
@@ -421,7 +457,7 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
     report.scanId = scanId;
     if (report.cardNotFound) {
       return respondCardNotFound(res, {
-        report: report, scanId: scanId, route: '/api/grade', imagePath: `/uploads/${filename}`
+        report: report, scanId: scanId, route: '/api/grade', imagePath: `/uploads/${filename}`, body: req.body
       });
     }
 
@@ -452,10 +488,13 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
       imagePath: `/uploads/${filename}`,
       category: classification,
       gradingReport: report,
+      engine: ENGINE,
       createdAt: new Date().toISOString()
     };
 
     console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
+    const label = labelFromCapture(scanId, req.body);
+    if (label && label.deckId) item.deckId = label.deckId;
     persistGradedItem(item, classification);
     return res.json({ ok: true, item });
   } catch (err) {
@@ -485,7 +524,7 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     if (report.cardNotFound) {
       return respondCardNotFound(res, {
         report: report, scanId: scanId, route: '/api/grade/upload',
-        imagePath: `/uploads/${path.basename(req.file.path)}`
+        imagePath: `/uploads/${path.basename(req.file.path)}`, body: req.body
       });
     }
     await grading.applySurfaceSweep(report, [], {
@@ -504,10 +543,13 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
       imagePath: `/uploads/${path.basename(req.file.path)}`,
       category: classification,
       gradingReport: report,
+      engine: ENGINE,
       createdAt: new Date().toISOString()
     };
 
     console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
+    const label = labelFromCapture(scanId, req.body);
+    if (label && label.deckId) item.deckId = label.deckId;
     persistGradedItem(item, classification);
     return res.json({ ok: true, item });
   } catch (err) {
@@ -593,6 +635,155 @@ document.getElementById('copy').addEventListener('click', function () {
   } else { fallback(); }
 });
 </script></body></html>`);
+});
+
+/* =========================
+   Test deck + PSA ground truth (local network only)
+   ========================= */
+
+function scanExists(scanId) {
+  return Boolean(dumpScans.formatScanById(DATA_DIR, scanId));
+}
+
+app.get('/api/deck', localNetworkOnly, (req, res) => {
+  return res.json({
+    ok: true,
+    categories: testDeck.DECK_CATEGORIES,
+    cards: deckStore.loadDeck().cards,
+    labels: deckStore.loadLabels().scans,
+    engine: ENGINE
+  });
+});
+
+app.put('/api/deck/cards/:deckId', localNetworkOnly, (req, res) => {
+  const out = deckStore.upsertCard(req.params.deckId, req.body || {});
+  return out.ok ? res.json(out) : res.status(400).json(out);
+});
+
+app.put('/api/scans/:scanId/label', localNetworkOnly, (req, res) => {
+  const scanId = grading.normalizeScanId(req.params.scanId);
+  if (!scanId || !scanExists(scanId)) return res.status(404).json({ ok: false, error: 'scan not found' });
+  const out = deckStore.labelScan(scanId, req.body || {}, 'web');
+  return out.ok ? res.json(out) : res.status(400).json(out);
+});
+
+function copyablePage(title, text, extraHtml) {
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtmlText(title)}</title>
+<style>
+  body { background:#0b1220; color:#e6edf3; font-family:-apple-system,system-ui,sans-serif; margin:12px; }
+  pre { white-space:pre-wrap; word-break:break-word; font:12px/1.4 ui-monospace,Menlo,monospace; background:#050a14; padding:10px; border-radius:8px; }
+  button { font-size:15px; padding:8px 12px; border-radius:8px; border:0; background:#00d4ff; color:#001; }
+  a { color:#7dd3fc; } input, select { font-size:14px; padding:4px; background:#050a14; color:#e6edf3; border:1px solid #334; border-radius:6px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; } td, th { border-bottom:1px solid #223; padding:4px; text-align:left; vertical-align:top; }
+</style></head><body>
+${extraHtml || ''}
+${text != null ? `<p><button id="copy">Copy all</button> <span id="status"></span></p><pre id="dump">${escapeHtmlText(text)}</pre>
+<script>
+document.getElementById('copy').addEventListener('click', function () {
+  var text = document.getElementById('dump').textContent, status = document.getElementById('status');
+  function fallback() { var ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {} document.body.removeChild(ta);
+    status.textContent = ok ? 'Copied.' : 'Select the text below and copy.'; }
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(function () { status.textContent = 'Copied.'; }, fallback);
+  else fallback();
+});
+</script>` : ''}
+</body></html>`;
+}
+
+app.get('/deck/report', localNetworkOnly, async (req, res) => {
+  try {
+    const out = await deckReport.buildDeckReport({ dataDir: DATA_DIR, uploadsDir: uploadsDir });
+    if (req.query.format === 'text') return res.type('text/plain').send(out.text);
+    return res.type('html').send(copyablePage('The Judge — test deck report', out.text,
+      '<p><a href="/deck">Deck registry &amp; scan labels</a> · <a href="/deck/report?format=text">plain text</a></p>'));
+  } catch (err) {
+    return res.status(500).type('text/plain').send('deck report failed: ' + (err && err.message));
+  }
+});
+
+app.get('/deck', localNetworkOnly, (req, res) => {
+  return res.type('html').send(copyablePage('The Judge — test deck', null, `
+<h2>Test deck</h2>
+<p><a href="/deck/report">Deck report</a> · <a href="/debug/recent?n=10">Recent scans dump</a></p>
+<h3>Recent scans — assign deck card / pre-submission / PSA result</h3>
+<table id="scans"><thead><tr><th>Time</th><th>Scan</th><th>Result</th><th>Deck</th><th>Pre-sub</th><th>PSA</th><th>Cert</th><th></th></tr></thead><tbody></tbody></table>
+<h3>Deck cards</h3>
+<table id="cards"><thead><tr><th>ID</th><th>Category</th><th>Title</th><th>Expect</th><th>Ruler mm L R T B</th><th>Known PSA</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table>
+<script>
+(async function () {
+  const deck = await fetch('/api/deck').then(function (r) { return r.json(); });
+  const recent = await fetch('/api/deck/recent-scans').then(function (r) { return r.json(); });
+  const cats = deck.categories;
+  function el(tag, attrs, text) { const e = document.createElement(tag); Object.assign(e, attrs || {}); if (text != null) e.textContent = text; return e; }
+  function input(value, size) { return el('input', { value: value == null ? '' : value, size: size || 6 }); }
+  const sb = document.querySelector('#scans tbody');
+  recent.scans.forEach(function (s) {
+    const l = deck.labels[s.scanId] || {};
+    const tr = el('tr');
+    const deckIn = input(l.deckId, 6); deckIn.placeholder = 'TD-01';
+    const pre = el('input', { type: 'checkbox', checked: Boolean(l.preSubmission) });
+    const psa = input(l.psaGrade, 4); const cert = input(l.psaCert, 10);
+    const status = el('span');
+    const save = el('button', {}, 'Save');
+    save.addEventListener('click', async function () {
+      const body = { deckId: deckIn.value || null, preSubmission: pre.checked, psaGrade: psa.value || null, psaCert: cert.value || null };
+      const r = await fetch('/api/scans/' + encodeURIComponent(s.scanId) + '/label', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (x) { return x.json(); });
+      status.textContent = r.ok ? ' saved' : ' ' + r.error;
+    });
+    [s.time, s.scanId.slice(0, 8).toUpperCase(), s.summary].forEach(function (t) { tr.appendChild(el('td', {}, t)); });
+    [deckIn, pre, psa, cert].forEach(function (c) { const td = el('td'); td.appendChild(c); tr.appendChild(td); });
+    const td = el('td'); td.appendChild(save); td.appendChild(status); tr.appendChild(td);
+    sb.appendChild(tr);
+  });
+  const cb = document.querySelector('#cards tbody');
+  function cardRow(id, c) {
+    c = c || {};
+    const tr = el('tr');
+    const idIn = input(id, 6); idIn.placeholder = 'TD-01';
+    const cat = el('select'); cat.appendChild(el('option', { value: '' }, '—'));
+    cats.forEach(function (k) { cat.appendChild(el('option', { value: k.id, selected: c.category === k.id }, k.label)); });
+    const title = input(c.title, 22);
+    const exp = el('select'); ['', 'measured', 'undetectable', 'offcenter'].forEach(function (v) { exp.appendChild(el('option', { value: v, selected: (c.expect || '') === v }, v || 'category default')); });
+    const mm = c.physicalMm || {};
+    const L = input(mm.left, 3), R = input(mm.right, 3), T = input(mm.top, 3), B = input(mm.bottom, 3);
+    const known = input(c.knownPsaGrade, 3); const notes = input(c.notes, 22);
+    const status = el('span'); const save = el('button', {}, 'Save');
+    save.addEventListener('click', async function () {
+      const body = { category: cat.value || null, title: title.value || null, expect: exp.value || null,
+        physicalMm: { left: L.value, right: R.value, top: T.value, bottom: B.value }, knownPsaGrade: known.value || null, notes: notes.value || null };
+      const r = await fetch('/api/deck/cards/' + encodeURIComponent(idIn.value), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (x) { return x.json(); });
+      status.textContent = r.ok ? ' saved' : ' ' + r.error;
+    });
+    const mmTd = el('td'); [L, R, T, B].forEach(function (x) { mmTd.appendChild(x); });
+    [idIn, cat, title, exp].forEach(function (x) { const td = el('td'); td.appendChild(x); tr.appendChild(td); });
+    tr.appendChild(mmTd);
+    [known, notes].forEach(function (x) { const td = el('td'); td.appendChild(x); tr.appendChild(td); });
+    const td = el('td'); td.appendChild(save); td.appendChild(status); tr.appendChild(td);
+    cb.appendChild(tr);
+  }
+  Object.keys(deck.cards).sort(function (a, b) { return Number(a.slice(3)) - Number(b.slice(3)); }).forEach(function (id) { cardRow(id, deck.cards[id]); });
+  cardRow('', {});
+})();
+</script>`));
+});
+
+app.get('/api/deck/recent-scans', localNetworkOnly, (req, res) => {
+  const n = Math.max(1, Math.min(100, Number(req.query.n) || 30));
+  const graded = dumpScans.loadGradedItems(DATA_DIR).map(function (item) {
+    const r = deckReport.resultFromReport(item.gradingReport);
+    return {
+      scanId: String(item.scanId || item.id), time: item.createdAt,
+      summary: r.measured ? 'L/R ' + r.lr.toFixed(1) + ' T/B ' + r.tb.toFixed(1) + ' CEN ' + (r.cen == null ? '—' : r.cen) : r.status
+    };
+  });
+  const failed = dumpScans.loadFailedEntries(DATA_DIR).map(function (e) {
+    return { scanId: String(e.scanId), time: e.timestamp, summary: 'card not found' };
+  });
+  const all = graded.concat(failed).sort(function (a, b) { return Date.parse(b.time) - Date.parse(a.time); }).slice(0, n);
+  return res.json({ ok: true, scans: all });
 });
 
 /* Serve uploaded images statically. In production, serve from secure storage/CDN. */
