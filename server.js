@@ -259,13 +259,26 @@ function sendSse(res, eventName, data) {
   }
 }
 
+/**
+ * Dashboard stats. inventorySize counts graded cards only (a final grade on a
+ * located card); savedScans counts every saved scan.
+ */
+function statsFor(inventoryArray, categoryCounts, walletStats) {
+  return {
+    inventorySize: walletStats.gradedCount,
+    savedScans: inventoryArray.length,
+    categoryCounts: categoryCounts,
+    wallet: walletStats
+  };
+}
+
 function broadcastStats() {
   try {
     const db = loadDatabase();
     const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
     const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
     const walletStats = wallet.portfolioStats(inventoryArray);
-    const payload = { ok: true, stats: { inventorySize: inventoryArray.length, categoryCounts, wallet: walletStats } };
+    const payload = { ok: true, stats: statsFor(inventoryArray, categoryCounts, walletStats) };
     for (const client of sseClients) {
       sendSse(client, 'stats', payload);
     }
@@ -288,7 +301,7 @@ app.get('/api/events', (req, res) => {
     const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
     const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
     const walletStats = wallet.portfolioStats(inventoryArray);
-    const payload = { ok: true, stats: { inventorySize: inventoryArray.length, categoryCounts, wallet: walletStats } };
+    const payload = { ok: true, stats: statsFor(inventoryArray, categoryCounts, walletStats) };
     sendSse(res, 'stats', payload);
   } catch (e) { /* ignore */ }
 
@@ -347,7 +360,7 @@ app.get('/api/stats', (req, res) => {
     const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
     const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
     const walletStats = wallet.portfolioStats(inventoryArray);
-    return res.json({ ok: true, stats: { inventorySize: inventoryArray.length, categoryCounts, wallet: walletStats } });
+    return res.json({ ok: true, stats: statsFor(inventoryArray, categoryCounts, walletStats) });
   } catch (e) {
     console.error('Failed to compute unified stats', e);
     return res.status(500).json({ error: 'failed to compute stats' });

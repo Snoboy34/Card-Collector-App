@@ -372,6 +372,21 @@ async function run() {
     assert('oriented.jpg draws the cyan inner top line at the measured width', cyan,
       [oriented.data[px], oriented.data[px + 1], oriented.data[px + 2]]);
     assert('report points at the debug dir', rep.debugArtifacts && rep.debugArtifacts.dir === path.join('scans', okScanId));
+
+    // Dashboard: no invented prices, count only fully graded cards.
+    const statsRes = await fetch(base + '/api/stats');
+    const stats = (await statsRes.json()).stats;
+    assert('wallet total is null (no price source)', stats.wallet.totalValue === null, stats.wallet);
+    assert('graded count excludes an incomplete scan', stats.inventorySize === 0, stats.inventorySize);
+    assert('saved scan count is reported separately', stats.savedScans === 1, stats.savedScans);
+    const wallet = require('../services/wallet_engine');
+    const fake = wallet.portfolioStats([
+      { category: 'SPORTS', gradingReport: { finalScore: 9, incomplete: false } },
+      { category: 'SPORTS', gradingReport: { finalScore: null, incomplete: true } },
+      { category: 'TCG', gradingReport: { finalScore: 0, incomplete: true, label: 'Unknown' } }
+    ]);
+    assert('portfolioStats counts only complete graded items', fake.gradedCount === 1, fake);
+    assert('portfolioStats never prices an item', fake.totalValue === null && wallet.valueForItem({}) === null);
   } finally {
     await new Promise(function (resolve) { server.close(resolve); });
   }
