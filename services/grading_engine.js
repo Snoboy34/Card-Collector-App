@@ -710,13 +710,15 @@ function scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight, ge
           bandStddev: bandStddev(profile, pos),
           baseline: baseline,
           paperBandMean: paperBandMean,
-          paperBaseline: paperBaseline
+          paperBaseline: paperBaseline,
+          threshold: adaptiveThreshold,
+          localRange: localRange
         };
       }
     }
     i += 1;
   }
-  return null;
+  return { pos: null, baseline: baseline, threshold: adaptiveThreshold, localRange: localRange };
 }
 
 function bandMean(profile, widthPx) {
@@ -763,11 +765,19 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
   const baselines = [];
   const paperMeans = [];
   const paperBaselines = [];
+  const lines = [];
 
   for (let sample = 0; sample < sampleCount; sample++) {
     const span = dimension - 2 * margin;
     const lineOffset = margin + Math.round(sample * span / (sampleCount - 1));
-    const hit = scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight, getPaperPixel);
+    const scan = scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight, getPaperPixel);
+    lines.push({
+      at: lineOffset,
+      pos: scan && scan.pos != null ? round2(scan.pos) : null,
+      threshold: scan ? scan.threshold : null,
+      localRange: scan ? round2(scan.localRange) : null
+    });
+    const hit = scan && scan.pos != null ? scan : null;
     if (hit != null) {
       positions.push(hit.pos);
       if (hit.bandStddev != null) stddevs.push(hit.bandStddev);
@@ -779,7 +789,7 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
 
   if (!positions.length) {
     return {
-      width: null, samples: [], bandStddev: null, baseline: null,
+      width: null, samples: [], lines: lines, bandStddev: null, baseline: null,
       paperBandMean: null, paperBaseline: null, attempted: sampleCount
     };
   }
@@ -787,6 +797,7 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
   return {
     width: median(positions),
     samples: positions,
+    lines: lines,
     bandStddev: stddevs.length ? median(stddevs) : null,
     baseline: baselines.length ? median(baselines) : null,
     paperBandMean: paperMeans.length ? median(paperMeans) : null,
@@ -823,6 +834,12 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
     top: topScan.samples,
     bottom: bottomScan.samples
   };
+  const sampleLines = {
+    left: leftScan.lines,
+    right: rightScan.lines,
+    top: topScan.lines,
+    bottom: bottomScan.lines
+  };
   const bandStddev = {
     left: leftScan.bandStddev,
     right: rightScan.bandStddev,
@@ -857,6 +874,7 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
       detected: false,
       widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
       samples: samples,
+      sampleLines: sampleLines,
       bandStddev: bandStddev,
       baselines: baselines,
       paperBandMean: paperBandMean,
@@ -877,6 +895,7 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
     detected: true,
     widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
     samples: samples,
+    sampleLines: sampleLines,
     bandStddev: bandStddev,
     baselines: baselines,
     paperBandMean: paperBandMean,
@@ -1202,6 +1221,9 @@ function describeBorderSource(args) {
   const widths = args.widths || { left: null, right: null, top: null, bottom: null };
   const samples = args.samples || {};
   const detected = Boolean(args.detected);
+  // Graded on the perspective-warped card: the raster IS the card, so a
+  // "box fills the photo" signal says nothing about backdrop vs frame.
+  const warped = Boolean(args.warped);
 
   const imageArea = Math.max(1, imageWidth * imageHeight);
   const boxArea = Math.max(0, (Number(box.width) || 0) * (Number(box.height) || 0));
@@ -1241,12 +1263,15 @@ function describeBorderSource(args) {
     summary = reliability.reasons.length
       ? ('Print border not usable: ' + reliability.reasons.join('; ') + '. Treat as unknown, not 50/50.')
       : 'No sustained print border on at least one edge. Treat as unknown, not 50/50.';
-  } else if (thin && uniform && boxFillRatio >= 0.88) {
+  } else if (!warped && thin && uniform && boxFillRatio >= 0.88) {
     hint = 'likely-backdrop';
     summary = 'Border of only a few pixels, nearly uniform, and the card box fills the photo. Likely measuring backdrop/mat (or cut-edge anti-alias), not a printed frame.';
   } else if (thin && uniform) {
     hint = 'thin-ambiguous';
     summary = 'Border of only a few pixels on all sides. Could be cut-edge anti-alias or a very thin printed line — not a typical sports-card frame.';
+  } else if (substantial && warped) {
+    hint = 'likely-printed-frame';
+    summary = 'Tens of pixels of border on the warped card and the sample lines agree. This matches a printed white/colored frame measured inward from the located card edge.';
   } else if (substantial) {
     hint = 'likely-printed-frame';
     summary = boxFillRatio >= 0.90
@@ -1254,7 +1279,9 @@ function describeBorderSource(args) {
       : 'Tens of pixels of border with the card box inset from the photo edge. This pattern matches a real printed frame. Uneven left vs right strengthens that reading.';
   } else {
     hint = 'needs-review';
-    summary = 'Border widths sit between "thin mat-bleed" and "clear printed frame." Compare L/R vs T/B sample spreads and reshoot with the card filling the neon frame.';
+    summary = warped
+      ? 'Border widths sit between "thin cut-edge line" and "clear printed frame." Compare L/R vs T/B sample spreads and reshoot.'
+      : 'Border widths sit between "thin mat-bleed" and "clear printed frame." Compare L/R vs T/B sample spreads and reshoot with the card filling the neon frame.';
   }
 
   let axisSpreadNote = null;
@@ -1300,7 +1327,8 @@ function describeBorderSource(args) {
       right: (samples.right || []).map(round2),
       top: (samples.top || []).map(round2),
       bottom: (samples.bottom || []).map(round2)
-    }
+    },
+    sampleLines: args.sampleLines || null
   };
 }
 
@@ -1319,6 +1347,8 @@ function buildCenteringDiagnostics(width, height, box, centeringMeasurement, ext
     interiorGrey: extra.interiorGrey || centeringMeasurement.interiorGrey,
     bandVsInterior: extra.bandVsInterior || centeringMeasurement.bandVsInterior,
     alignmentCrop: Boolean(extra.alignmentCrop),
+    warped: Boolean(extra.warped),
+    sampleLines: centeringMeasurement.sampleLines || null,
     detected: centeringMeasurement.detected
   });
 }
@@ -1913,6 +1943,23 @@ async function locateCard(buffer, options) {
   };
   const toPhotoX = decoded.photoWidth / decoded.width;
   const toPhotoY = decoded.photoHeight / decoded.height;
+  function toPhoto(q) {
+    return cardQuad.quadToJSON({
+      tl: [q.tl[0] * toPhotoX, q.tl[1] * toPhotoY],
+      tr: [q.tr[0] * toPhotoX, q.tr[1] * toPhotoY],
+      br: [q.br[0] * toPhotoX, q.br[1] * toPhotoY],
+      bl: [q.bl[0] * toPhotoX, q.bl[1] * toPhotoY]
+    });
+  }
+  function sidesPx(q) {
+    const d = function (a, b) { return Math.hypot((a[0] - b[0]) * toPhotoX, (a[1] - b[1]) * toPhotoY); };
+    return {
+      widthPx: Math.round((d(q.tl, q.tr) + d(q.bl, q.br)) / 2),
+      heightPx: Math.round((d(q.tl, q.bl) + d(q.tr, q.br)) / 2)
+    };
+  }
+  detection.nativeQuadRaw = null;
+  detection.serverQuadRaw = null;
 
   let accepted = null;
   if (detection.nativeQuadSent) {
@@ -1925,6 +1972,7 @@ async function locateCard(buffer, options) {
       const ordered = cardQuad.orderQuad(
         cardQuad.scaleQuad(points, decoded.width / quadW, decoded.height / quadH)
       );
+      detection.nativeQuadRaw = toPhoto(ordered);
       const check = cardQuad.validateQuad(ordered, decoded.width, decoded.height);
       if (check.ok) accepted = { source: 'native', quad: ordered, check: check };
       else detection.nativeQuadRejected = check.reasons;
@@ -1932,6 +1980,7 @@ async function locateCard(buffer, options) {
   }
   if (!accepted) {
     const ordered = cardQuad.orderQuad(await serverDetectQuad(decoded));
+    detection.serverQuadRaw = toPhoto(ordered);
     const check = cardQuad.validateQuad(ordered, decoded.width, decoded.height);
     if (check.ok) accepted = { source: 'server', quad: ordered, check: check };
     else detection.serverQuadRejected = check.reasons;
@@ -1957,12 +2006,10 @@ async function locateCard(buffer, options) {
     detection.edgeRefinementPx = null;
   }
   detection.quadSource = accepted.source;
-  detection.quad = cardQuad.quadToJSON({
-    tl: [q.tl[0] * toPhotoX, q.tl[1] * toPhotoY],
-    tr: [q.tr[0] * toPhotoX, q.tr[1] * toPhotoY],
-    br: [q.br[0] * toPhotoX, q.br[1] * toPhotoY],
-    bl: [q.bl[0] * toPhotoX, q.bl[1] * toPhotoY]
-  });
+  // quad = tightened corners actually warped; rawQuad = detector output.
+  detection.rawQuad = accepted.source === 'native' ? detection.nativeQuadRaw : detection.serverQuadRaw;
+  detection.quad = toPhoto(q);
+  detection.cardSizePx = sidesPx(q);
   detection.cardBoxPctOfPhoto = accepted.check.areaPct;
   detection.aspect = accepted.check.aspect;
   detection.rotatedToPortrait = q.rotatedToPortrait;
@@ -2215,6 +2262,7 @@ async function gradeBuffer(buffer, options) {
         cardDetection: cardDetection,
         centeringDiagnostics: buildCenteringDiagnostics(width, height, centeringBox, centeringMeasurement, {
           alignmentCrop: true,
+          warped: true,
           interiorGrey: interiorGrey,
           bandVsInterior: bandVsInterior
         })
@@ -2290,6 +2338,7 @@ async function gradeBuffer(buffer, options) {
       incomplete: false,
       centeringDiagnostics: buildCenteringDiagnostics(width, height, centeringBox, centeringMeasurement, {
         alignmentCrop: true,
+        warped: true,
         interiorGrey: interiorGrey,
         bandVsInterior: bandVsInterior
       })
