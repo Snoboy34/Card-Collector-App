@@ -89,6 +89,17 @@ located at half the step height. An opposite-border share past 75/25 is a
 flag only. `node scripts/verify_top_edge.js` covers the pale-strip,
 corner-logo, glare, miscut, and depth-cap cases.
 
+Centering resolution: borders are measured on a second warp at the card's
+own decoded resolution (up to 2400 px tall, ≈20+ px/mm on a 12 MP neon
+crop); every other detector stays on 643×900. Finder constants scale with
+the warp so they keep the same physical size, widths are reported in
+643×900-equivalent px (for thresholds) and in mm
+(`centeringMetrics.borderWidthsMm`, card = 63.5 × 88.9 mm), and the cut is
+tightened with sub-pixel precision at that resolution. Pass
+`centeringResolution: 'standard'` to force the 643×900 path.
+`node scripts/verify_centering_precision.js` compares both on 12 synthetic
+phone-like captures.
+
 Scan dump: `node scripts/dump_scans.js [N] [scanIdPrefix]` prints the last N
 graded scans (`data/database.json`) and card-not-found attempts
 (`data/failed_scans.jsonl`): quad source, card box %, raw and tightened quad

@@ -685,6 +685,23 @@ const EDGE_SUSTAIN_PX = 3;
 const EDGE_LINE_HALF_WIDTH = 2;
 const EDGE_OPPOSITE_FLAG_SHARE = 75;
 
+/**
+ * Pixel constants above are tuned on the 643×900 warp (≈10.1 px/mm). A
+ * finer centering warp scales them so each keeps the same physical size.
+ */
+function edgeParams(scale) {
+  const s = scale > 0 ? scale : 1;
+  return {
+    scale: s,
+    minInward: Math.round(EDGE_MIN_INWARD_PX * s),
+    baselinePx: Math.max(EDGE_BASELINE_PX, Math.round(EDGE_BASELINE_PX * s)),
+    sustainPx: Math.max(EDGE_SUSTAIN_PX, Math.round(EDGE_SUSTAIN_PX * s)),
+    lineHalfWidth: Math.max(EDGE_LINE_HALF_WIDTH, Math.round(EDGE_LINE_HALF_WIDTH * s)),
+    groupGap: EDGE_GROUP_GAP_PX * s,
+    profileAgree: EDGE_PROFILE_AGREE_PX * s
+  };
+}
+
 function edgeSampler(getPixel, edge, cardWidth, cardHeight) {
   return function (along, depth) {
     switch (edge) {
@@ -701,20 +718,21 @@ function edgeSampler(getPixel, edge, cardWidth, cardHeight) {
  * half the step height (not at the trigger), within maxDepth. Returns the
  * border width in pixels (crossing + 0.5, i.e. count of border pixels).
  */
-function detectBorderStep(profile, trigger, maxDepth) {
-  const b0 = EDGE_MIN_INWARD_PX;
-  const b1 = EDGE_MIN_INWARD_PX + EDGE_BASELINE_PX;
-  if (profile.length < b1 + EDGE_SUSTAIN_PX + 3) return null;
+function detectBorderStep(profile, trigger, maxDepth, params) {
+  const pr = params || edgeParams(1);
+  const b0 = pr.minInward;
+  const b1 = pr.minInward + pr.baselinePx;
+  if (profile.length < b1 + pr.sustainPx + 3) return null;
   let baseline = 0;
   for (let i = b0; i < b1; i++) baseline += profile[i];
   baseline /= (b1 - b0);
-  const last = Math.min(maxDepth, profile.length - EDGE_SUSTAIN_PX - 3);
+  const last = Math.min(maxDepth, profile.length - pr.sustainPx - 3);
   for (let i = b1; i <= last; i++) {
     const d = profile[i] - baseline;
     if (Math.abs(d) <= trigger) continue;
     const sign = d > 0 ? 1 : -1;
     let sustained = true;
-    for (let k = 1; k <= EDGE_SUSTAIN_PX; k++) {
+    for (let k = 1; k <= pr.sustainPx; k++) {
       if ((profile[i + k] - baseline) * sign <= trigger) { sustained = false; break; }
     }
     if (!sustained) continue;
@@ -722,7 +740,7 @@ function detectBorderStep(profile, trigger, maxDepth) {
     // pixels right after the trigger, which are still on the blurred slope
     // and pull the half-step crossing toward the cut.
     const flatStep = Math.max(1, trigger / 4);
-    const flatLimit = Math.min(profile.length - 3, i + 4 * EDGE_SUSTAIN_PX);
+    const flatLimit = Math.min(profile.length - 3, i + 4 * pr.sustainPx);
     let k0 = i;
     while (k0 < flatLimit && Math.abs(profile[k0 + 1] - profile[k0]) > flatStep) k0 += 1;
     const plateau = (profile[k0] + profile[k0 + 1] + profile[k0 + 2]) / 3;
@@ -771,12 +789,33 @@ function linearProfile(sample, along, halfWidth, alongMax, length) {
  *      and nothing within 6px of the cut does either.
  * Returns null width if no group qualifies — never a fake 50/50.
  */
-function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
+/**
+ * Border width for one edge, reported in 643×900-equivalent pixels whatever
+ * raster it was measured on (so reliability thresholds, dumps, and
+ * oriented.jpg keep one unit). `scale` = measured raster height / 900.
+ */
+function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel, scale) {
+  const s = scale > 0 ? scale : 1;
+  const r = findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperPixel, s);
+  if (s === 1) return r;
+  const div = function (v) { return v == null ? v : v / s; };
+  r.width = div(r.width);
+  r.samples = (r.samples || []).map(div);
+  r.lines = (r.lines || []).map(function (l) {
+    return Object.assign({}, l, { at: Math.round(l.at / s), pos: l.pos == null ? null : round2(l.pos / s) });
+  });
+  r.profileWidth = r.profileWidth == null ? null : round2(r.profileWidth / s);
+  r.maxDepthPx = Math.round(r.maxDepthPx / s);
+  return r;
+}
+
+function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperPixel, scale) {
+  const pr = edgeParams(scale);
   const horizontalScan = edge === 'left' || edge === 'right';
   const alongMax = horizontalScan ? cardHeight : cardWidth;
   const depthDim = horizontalScan ? cardWidth : cardHeight;
   const maxDepth = Math.round(depthDim * EDGE_MAX_DEPTH_FRAC);
-  const length = Math.min(Math.floor(depthDim / 2), maxDepth + EDGE_SUSTAIN_PX + 6);
+  const length = Math.min(Math.floor(depthDim / 2), maxDepth + pr.sustainPx + 6);
   const sample = edgeSampler(getPixel, edge, cardWidth, cardHeight);
   const paperSample = typeof getPaperPixel === 'function'
     ? edgeSampler(getPaperPixel, edge, cardWidth, cardHeight)
@@ -787,7 +826,7 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
   // Border noise → trigger.
   const noise = [];
   for (let a = a0; a < a1; a++) {
-    for (let d = EDGE_MIN_INWARD_PX; d < EDGE_MIN_INWARD_PX + EDGE_BASELINE_PX; d++) noise.push(sample(a, d));
+    for (let d = pr.minInward; d < pr.minInward + pr.baselinePx; d++) noise.push(sample(a, d));
   }
   const sigma = stddev(noise) || 0;
   const trigger = Math.max(EDGE_TRIGGER_MIN, Math.min(EDGE_TRIGGER_MAX, EDGE_TRIGGER_SIGMA * sigma));
@@ -800,7 +839,7 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
     const sorted = Array.from(column).sort(function (x, y) { return x - y; });
     medianProfile[d] = sorted[Math.floor(sorted.length / 2)];
   }
-  const profileHit = detectBorderStep(medianProfile, trigger, maxDepth);
+  const profileHit = detectBorderStep(medianProfile, trigger, maxDepth, pr);
   const profileWidth = profileHit ? profileHit.width : null;
 
   // 15 voting lines.
@@ -808,8 +847,8 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
   const hits = [];
   for (let k = 0; k < EDGE_LINE_COUNT; k++) {
     const along = a0 + Math.round(k * (a1 - 1 - a0) / (EDGE_LINE_COUNT - 1));
-    const lineProfile = linearProfile(sample, along, EDGE_LINE_HALF_WIDTH, alongMax, length);
-    const hit = detectBorderStep(lineProfile, trigger, maxDepth);
+    const lineProfile = linearProfile(sample, along, pr.lineHalfWidth, alongMax, length);
+    const hit = detectBorderStep(lineProfile, trigger, maxDepth, pr);
     const line = { at: along, pos: hit ? round2(hit.width) : null, threshold: round2(trigger), inGroup: false };
     lines.push(line);
     if (hit) hits.push({ width: hit.width, baseline: hit.baseline, line: line, along: along, profile: lineProfile });
@@ -821,7 +860,7 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
   let group = null;
   let start = 0;
   for (let i = 1; i <= sortedHits.length; i++) {
-    if (i === sortedHits.length || sortedHits[i].width - sortedHits[i - 1].width > EDGE_GROUP_GAP_PX) {
+    if (i === sortedHits.length || sortedHits[i].width - sortedHits[i - 1].width > pr.groupGap) {
       if (i - start >= minGroup) { group = sortedHits.slice(start, i); break; }
       start = i;
     }
@@ -848,8 +887,9 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
   const width = median(widths);
   const outliers = hits.length - group.length;
   if (outliers > 0) flags.push(edge + ': ' + outliers + ' line(s) outside the agreeing group');
-  if (profileWidth != null && Math.abs(profileWidth - width) > EDGE_PROFILE_AGREE_PX) {
-    flags.push(edge + ': straight-edge profile ' + round2(profileWidth) + 'px disagrees with voted ' + round2(width) + 'px');
+  if (profileWidth != null && Math.abs(profileWidth - width) > pr.profileAgree) {
+    flags.push(edge + ': straight-edge profile ' + round2(profileWidth / pr.scale) + 'px disagrees with voted ' +
+      round2(width / pr.scale) + 'px');
   }
 
   const stddevs = [];
@@ -861,12 +901,12 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
     const sd = bandStddev(h.profile, h.width);
     if (sd != null) stddevs.push(sd);
     if (paperSample) {
-      const paperProfile = linearProfile(paperSample, h.along, EDGE_LINE_HALF_WIDTH, alongMax, length);
+      const paperProfile = linearProfile(paperSample, h.along, pr.lineHalfWidth, alongMax, length);
       const pm = bandMean(paperProfile, h.width);
       if (pm != null) paperMeans.push(pm);
       let pb = 0;
-      for (let d = EDGE_MIN_INWARD_PX; d < EDGE_MIN_INWARD_PX + EDGE_BASELINE_PX; d++) pb += paperProfile[d];
-      paperBaselines.push(pb / EDGE_BASELINE_PX);
+      for (let d = pr.minInward; d < pr.minInward + pr.baselinePx; d++) pb += paperProfile[d];
+      paperBaselines.push(pb / pr.baselinePx);
     }
   });
   const sortNum = function (arr) { return arr.slice().sort(function (x, y) { return x - y; }); };
@@ -892,11 +932,12 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
  *
  * @returns {{ leftRightRatio: {left:number, right:number}|null, topBottomRatio: {top:number, bottom:number}|null, detected: boolean, widths: object, samples: object }}
  */
-function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
-  const leftScan = findBorderWidth(getPixel, 'left', cardWidth, cardHeight, getPaperPixel);
-  const rightScan = findBorderWidth(getPixel, 'right', cardWidth, cardHeight, getPaperPixel);
-  const topScan = findBorderWidth(getPixel, 'top', cardWidth, cardHeight, getPaperPixel);
-  const bottomScan = findBorderWidth(getPixel, 'bottom', cardWidth, cardHeight, getPaperPixel);
+function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel, options) {
+  const scale = options && options.scale > 0 ? options.scale : 1;
+  const leftScan = findBorderWidth(getPixel, 'left', cardWidth, cardHeight, getPaperPixel, scale);
+  const rightScan = findBorderWidth(getPixel, 'right', cardWidth, cardHeight, getPaperPixel, scale);
+  const topScan = findBorderWidth(getPixel, 'top', cardWidth, cardHeight, getPaperPixel, scale);
+  const bottomScan = findBorderWidth(getPixel, 'bottom', cardWidth, cardHeight, getPaperPixel, scale);
 
   const leftW = leftScan.width;
   const rightW = rightScan.width;
@@ -1953,6 +1994,15 @@ function applyDetectorTrust(report) {
 /** Longest side decoded before the warp. Keeps detail well above the 643×900
  *  grading raster without holding a 12–48 MP RGB buffer in memory. */
 const MAX_DECODE_DIM = 2400;
+
+// Card size (ISO/IEC 7810 ID-1 trading card) for physical units.
+const CARD_WIDTH_MM = 63.5;
+const CARD_HEIGHT_MM = 88.9;
+// Centering is measured on a warp at the card's own decoded resolution
+// (≈20+ px/mm on a 12 MP neon crop) instead of the 643×900 grading raster
+// (≈10.1 px/mm). Other detectors keep 643×900: their thresholds are tuned there.
+const CENTERING_WARP_MIN_HEIGHT = 900;
+const CENTERING_WARP_MAX_HEIGHT = 2400;
 const SERVER_DETECT_DIM = 900;
 
 async function decodeUprightRgb(buffer) {
@@ -2097,12 +2147,26 @@ async function locateCard(buffer, options) {
   }
 
   let q = accepted.quad;
-  const refined = cardQuad.refineQuadToCut(decoded, q, cardQuad.WARP_WIDTH, cardQuad.WARP_HEIGHT);
+  const nativeRes = opts.centeringResolution !== 'standard';
+  const cardHeightDecodePx = sidesPx(q).heightPx / toPhotoY;
+  const centerH = nativeRes
+    ? Math.max(CENTERING_WARP_MIN_HEIGHT, Math.min(CENTERING_WARP_MAX_HEIGHT, Math.round(cardHeightDecodePx)))
+    : cardQuad.WARP_HEIGHT;
+  const centerW = Math.round(centerH * cardQuad.WARP_WIDTH / cardQuad.WARP_HEIGHT);
+  const centerScale = centerH / cardQuad.WARP_HEIGHT;
+  // Tighten at the centering resolution so the cut is located as finely as
+  // the borders are measured from it.
+  const refined = cardQuad.refineQuadToCut(decoded, q, centerW, centerH);
   const refinedCheck = cardQuad.validateQuad(refined.quad, decoded.width, decoded.height);
   if (refinedCheck.ok) {
     q = refined.quad;
     accepted.check = refinedCheck;
-    detection.edgeRefinementPx = refined.shiftPx;
+    detection.edgeRefinementPx = {
+      left: round2(refined.shiftPx.left / centerScale),
+      right: round2(refined.shiftPx.right / centerScale),
+      top: round2(refined.shiftPx.top / centerScale),
+      bottom: round2(refined.shiftPx.bottom / centerScale)
+    };
   } else {
     detection.edgeRefinementPx = null;
   }
@@ -2115,7 +2179,56 @@ async function locateCard(buffer, options) {
   detection.aspect = accepted.check.aspect;
   detection.rotatedToPortrait = q.rotatedToPortrait;
   const warped = cardQuad.warpPerspective(decoded, q, cardQuad.WARP_WIDTH, cardQuad.WARP_HEIGHT);
-  return { found: true, detection: detection, warped: warped };
+  const centeringWarped = centerH === cardQuad.WARP_HEIGHT
+    ? warped
+    : cardQuad.warpPerspective(decoded, q, centerW, centerH);
+  detection.centeringWarp = {
+    mode: nativeRes ? 'native' : 'standard',
+    width: centerW,
+    height: centerH,
+    pxPerMm: round2(centerH / CARD_HEIGHT_MM),
+    scale: Math.round(centerScale * 10000) / 10000
+  };
+  return { found: true, detection: detection, warped: warped, centeringWarped: centeringWarped };
+}
+
+/**
+ * Print-border centering on the centering warp. Widths come back in
+ * 643×900-equivalent px (same unit as every other detector and threshold);
+ * ratios are unit-free; borderWidthsMm uses the known card size.
+ */
+async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, getPaper643, box643) {
+  let measurement;
+  if (!warpInfo || warpInfo.height === box643.height) {
+    measurement = measurePrintCentering(getPixel643, box643.width, box643.height, getPaper643);
+  } else {
+    const scale = warpInfo.height / box643.height;
+    const pipeline = sharp(centeringWarped.data, {
+      raw: { width: centeringWarped.width, height: centeringWarped.height, channels: centeringWarped.channels }
+    });
+    const paper = await pipeline.clone().greyscale().raw().toBuffer({ resolveWithObject: true });
+    const norm = await pipeline.greyscale().normalize().blur(Math.max(1, scale)).raw()
+      .toBuffer({ resolveWithObject: true });
+    const w = norm.info.width;
+    const h = norm.info.height;
+    const px = new Uint8Array(norm.data);
+    const pp = new Uint8Array(paper.data);
+    const getHi = function (x, y) { return (x < 0 || y < 0 || x >= w || y >= h) ? 0 : px[y * w + x]; };
+    const getPaperHi = function (x, y) { return (x < 0 || y < 0 || x >= w || y >= h) ? 0 : pp[y * w + x]; };
+    measurement = measurePrintCentering(getHi, w, h, getPaperHi, { scale: scale });
+  }
+  const pxPerMmX = box643.width / CARD_WIDTH_MM;
+  const pxPerMmY = box643.height / CARD_HEIGHT_MM;
+  const wd = measurement.widths || {};
+  const mm = function (v, k) { return v == null ? null : Math.round((v / k) * 1000) / 1000; };
+  measurement.widthsMm = {
+    left: mm(wd.left, pxPerMmX),
+    right: mm(wd.right, pxPerMmX),
+    top: mm(wd.top, pxPerMmY),
+    bottom: mm(wd.bottom, pxPerMmY)
+  };
+  measurement.centeringWarp = warpInfo || null;
+  return measurement;
 }
 
 /** 422 payload: no sub-grade is scored when the card box is invalid. */
@@ -2290,8 +2403,8 @@ async function gradeBuffer(buffer, options) {
       return paperPixels[y * width + x];
     };
 
-    const centeringMeasurement = measurePrintCentering(
-      getPixel, centeringBox.width, centeringBox.height, getPaperPixel
+    const centeringMeasurement = await measureCenteringOnWarp(
+      located.centeringWarped, cardDetection.centeringWarp, getPixel, getPaperPixel, centeringBox
     );
     const interiorGrey = measureInteriorGrey(
       getPaperPixel, centeringBox.width, centeringBox.height, centeringMeasurement.widths
@@ -2367,7 +2480,9 @@ async function gradeBuffer(buffer, options) {
         centeringMetrics: {
           leftRightRatio: null,
           topBottomRatio: null,
-          detected: false
+          detected: false,
+          borderWidthsMm: centeringMeasurement.widthsMm,
+          centeringWarp: centeringMeasurement.centeringWarp
         },
         surfacePenalties: {
           scratchCount: Number(surface.scratchCount) || 0,
@@ -2450,7 +2565,10 @@ async function gradeBuffer(buffer, options) {
       overallMathematicalAverage: judged.overallMathematicalAverage,
       absoluteConditionCeilingLimit: judged.absoluteConditionCeilingLimit,
       conditionCeilingApplied: judged.conditionCeilingApplied,
-      centeringMetrics: judged.centeringMetrics,
+      centeringMetrics: Object.assign({}, judged.centeringMetrics, {
+        borderWidthsMm: centeringMeasurement.widthsMm,
+        centeringWarp: centeringMeasurement.centeringWarp
+      }),
       surfacePenalties: judged.surfacePenalties,
       edgesWhiteningCount: judged.edgesWhiteningCount,
       absoluteMaxCornerFray: judged.absoluteMaxCornerFray,

@@ -93,6 +93,8 @@ function summarizeRun(report) {
     lr: m.leftRightRatio ? m.leftRightRatio.left : null,
     tb: m.topBottomRatio ? m.topBottomRatio.top : null,
     cen: report && report.subGrades ? report.subGrades.centering : null,
+    mm: m.borderWidthsMm || null,
+    warp: m.centeringWarp || null,
     reasons: reasons,
     flags: diag.edgeFlags || []
   };
@@ -104,6 +106,7 @@ function rowText(name, r) {
   const tb = r.tb == null ? '—' : fmt(r.tb) + '/' + fmt(100 - r.tb);
   let line = pad(name, 10) + pad(fmt(w.left), 7) + pad(fmt(w.right), 7) + pad(fmt(w.top), 7) +
     pad(fmt(w.bottom), 7) + pad(lr, 12) + pad(tb, 12) + pad(fmt(r.cen), 5);
+  if (r.warp) line += pad(r.warp.width + '×' + r.warp.height, 11);
   if (r.reasons.length) line += 'reject: ' + r.reasons.join('; ');
   else if (r.flags.length) line += 'flags: ' + r.flags.join('; ');
   return line;
@@ -149,7 +152,7 @@ async function compareFinders(options) {
     const a = summarizeRun(await gradeQuietly(current, buffer, q.opts));
     const b = summarizeRun(await gradeQuietly(candidate, buffer, q.opts));
     lines.push('── ' + id.slice(0, 8).toUpperCase() + '  ' + (item.createdAt || '') + '  quad ' + q.label);
-    lines.push(pad('', 10) + pad('L', 7) + pad('R', 7) + pad('T', 7) + pad('B', 7) + pad('L/R', 12) + pad('T/B', 12) + pad('CEN', 5));
+    lines.push(pad('', 10) + pad('L', 7) + pad('R', 7) + pad('T', 7) + pad('B', 7) + pad('L/R', 12) + pad('T/B', 12) + pad('CEN', 5) + 'warp');
     lines.push(rowText('current', a));
     lines.push(rowText('candidate', b));
     results.push({ scanId: id, current: a, candidate: b });

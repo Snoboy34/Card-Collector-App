@@ -331,13 +331,33 @@ function refineQuadToCut(src, quad, outW, outH) {
   function findCut(edge, expand) {
     const length = 2 * expand + 2;
     const p = profile(edge, length);
-    let best = expand;
+    let best = expand - 1;
     let bestStep = -1;
     for (let i = 0; i < length - 1; i++) {
       const step = Math.abs(p[i + 1] - p[i]);
-      if (step > bestStep) { bestStep = step; best = i + 1; }
+      if (step > bestStep) { bestStep = step; best = i; }
     }
-    return best;
+    // Sub-pixel: locate the half-level crossing between the background and
+    // card plateaus around the strongest step, instead of snapping to a
+    // whole warp pixel. Returned value is the first card-side position
+    // (crossing + 0.5), so an exact pixel-boundary edge gives an integer.
+    const lo = Math.max(0, best - 3);
+    const hi = Math.min(length - 1, best + 4);
+    let bg = 0;
+    for (let k = lo; k <= best; k++) bg += p[k];
+    bg /= (best - lo + 1);
+    let card = 0;
+    for (let k = best + 1; k <= hi; k++) card += p[k];
+    card /= Math.max(1, hi - best);
+    const half = (bg + card) / 2;
+    let crossing = best + 0.5;
+    for (let k = lo; k < hi; k++) {
+      if ((p[k] - half) * (p[k + 1] - half) <= 0 && p[k + 1] !== p[k]) {
+        crossing = k + (half - p[k]) / (p[k + 1] - p[k]);
+        break;
+      }
+    }
+    return crossing + 0.5;
   }
   const leftCut = findCut('left', ex);
   const rightCut = findCut('right', ex);
@@ -356,10 +376,10 @@ function refineQuadToCut(src, quad, outW, outH) {
       rotatedToPortrait: quad.rotatedToPortrait
     },
     shiftPx: {
-      left: leftCut - ex,
-      right: rightCut - ex,
-      top: topCut - ey,
-      bottom: bottomCut - ey
+      left: Math.round((leftCut - ex) * 100) / 100,
+      right: Math.round((rightCut - ex) * 100) / 100,
+      top: Math.round((topCut - ey) * 100) / 100,
+      bottom: Math.round((bottomCut - ey) * 100) / 100
     }
   };
 }

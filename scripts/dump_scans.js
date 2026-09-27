@@ -114,6 +114,13 @@ function formatGraded(item) {
   out.push('borders L ' + num(w.left) + '  R ' + num(w.right) + '  T ' + num(w.top) + '  B ' + num(w.bottom) +
     ' px   spread L/R ' + num(diag.leftRightSampleSpreadPx) + '  T/B ' + num(diag.topBottomSampleSpreadPx) +
     '   hint ' + (diag.hint || '—'));
+  const mmW = m.borderWidthsMm;
+  const cw = m.centeringWarp;
+  if (mmW || cw) {
+    out.push('        mm L ' + num(mmW && mmW.left, 2) + '  R ' + num(mmW && mmW.right, 2) + '  T ' +
+      num(mmW && mmW.top, 2) + '  B ' + num(mmW && mmW.bottom, 2) +
+      (cw ? '   centering warp ' + cw.width + '×' + cw.height + ' (' + cw.pxPerMm + ' px/mm, ' + cw.mode + ')' : ''));
+  }
   ['top', 'bottom', 'left', 'right'].forEach(function (edge) {
     out.push('  ' + edge.padEnd(6) + ' ' + edgeLines(diag, edge));
   });
