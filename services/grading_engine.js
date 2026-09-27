@@ -675,7 +675,11 @@ const EDGE_PROFILE_AGREE_PX = 4;
 const EDGE_TRIGGER_SIGMA = 4;
 const EDGE_TRIGGER_MIN = 8;
 const EDGE_TRIGGER_MAX = 40;
-const EDGE_SKIP_PX = 2;
+// Minimum inward distance: nothing within 6px of the tightened cut edge is
+// a border. A cut-edge shadow, glare line, or a tighten a few px outside the
+// card reads as an early step there (5-scan run: hits at 3–8px). The noise
+// window and baseline also start here so a sliver cannot set the trigger.
+const EDGE_MIN_INWARD_PX = 6;
 const EDGE_BASELINE_PX = 4;
 const EDGE_SUSTAIN_PX = 3;
 const EDGE_LINE_HALF_WIDTH = 2;
@@ -698,8 +702,8 @@ function edgeSampler(getPixel, edge, cardWidth, cardHeight) {
  * border width in pixels (crossing + 0.5, i.e. count of border pixels).
  */
 function detectBorderStep(profile, trigger, maxDepth) {
-  const b0 = EDGE_SKIP_PX;
-  const b1 = EDGE_SKIP_PX + EDGE_BASELINE_PX;
+  const b0 = EDGE_MIN_INWARD_PX;
+  const b1 = EDGE_MIN_INWARD_PX + EDGE_BASELINE_PX;
   if (profile.length < b1 + EDGE_SUSTAIN_PX + 3) return null;
   let baseline = 0;
   for (let i = b0; i < b1; i++) baseline += profile[i];
@@ -749,7 +753,8 @@ function linearProfile(sample, along, halfWidth, alongMax, length) {
  *   3. 15 lines vote; the outermost group of hits that agree (≤3px gaps,
  *      ≥40% of lines) is the border. Lines outside it are listed as
  *      outliers instead of failing the whole edge.
- *   4. Nothing deeper than 12% of the card dimension counts as a border.
+ *   4. Nothing deeper than 12% of the card dimension counts as a border,
+ *      and nothing within 6px of the cut does either.
  * Returns null width if no group qualifies — never a fake 50/50.
  */
 function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
@@ -768,7 +773,7 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
   // Border noise → trigger.
   const noise = [];
   for (let a = a0; a < a1; a++) {
-    for (let d = EDGE_SKIP_PX; d < EDGE_SKIP_PX + EDGE_BASELINE_PX; d++) noise.push(sample(a, d));
+    for (let d = EDGE_MIN_INWARD_PX; d < EDGE_MIN_INWARD_PX + EDGE_BASELINE_PX; d++) noise.push(sample(a, d));
   }
   const sigma = stddev(noise) || 0;
   const trigger = Math.max(EDGE_TRIGGER_MIN, Math.min(EDGE_TRIGGER_MAX, EDGE_TRIGGER_SIGMA * sigma));
@@ -846,7 +851,7 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
       const pm = bandMean(paperProfile, h.width);
       if (pm != null) paperMeans.push(pm);
       let pb = 0;
-      for (let d = EDGE_SKIP_PX; d < EDGE_SKIP_PX + EDGE_BASELINE_PX; d++) pb += paperProfile[d];
+      for (let d = EDGE_MIN_INWARD_PX; d < EDGE_MIN_INWARD_PX + EDGE_BASELINE_PX; d++) pb += paperProfile[d];
       paperBaselines.push(pb / EDGE_BASELINE_PX);
     }
   });

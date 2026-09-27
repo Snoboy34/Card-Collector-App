@@ -139,6 +139,41 @@ async function run() {
   assert('top step at 130px (>108px cap) is not accepted as a border',
     deep.widths.top == null && deep.report.printCenteringDetected === false, deep.widths);
 
+  // 9. Pattern A (5-scan run, e.g. 198A60F1 top @375/@429/@483 at 3.0/4.0/8.3px,
+  //    right @375 at 3–4px on every scan): a darker sliver at the cut, left by a
+  //    cut-edge shadow or a tighten that sits a few px outside the card. Here it
+  //    spans 7 of the 15 top lines, enough to form an "outermost group".
+  const sliver = await gradeCard({
+    paint: function (x, y, b, inBorder) {
+      if (y < 4 && x >= 330 && x < 530) return [150, 150, 158];
+      if (x >= W - 4 && y >= 360 && y < 390) return [150, 150, 158];
+      return null;
+    }
+  });
+  assert('pattern A: near-cut sliver on 7 top lines does not become the border (T ≈ 30)',
+    near(sliver.widths.top, 30, 1), { widths: sliver.widths, top: sliver.topLines });
+  assert('pattern A: T/B ≈ 46/54', sliver.tb && near(sliver.tb.top, 46.2, 1), sliver.tb);
+  assert('pattern A: no top line reports a hit inside the 6px guard',
+    sliver.topLines.every(function (l) { return l.pos == null || l.pos >= 6; }), sliver.topLines);
+  assert('pattern A: right sliver line does not move R (R ≈ 30)', near(sliver.widths.right, 30, 1), sliver.widths);
+
+  // 10. Pattern B (late hits with pinned triggers in the old finder):
+  //     bottom nameplate bar 35→47px on the middle lines, a lone top spike to
+  //     78px (@483 on 108B472C), and right @225 ~57px on every scan.
+  const late = await gradeCard({
+    paint: function (x, y, b, inBorder) {
+      if (!inBorder && x >= 250 && x < 420 && y >= H - b.bottom - 12 && y < H - b.bottom) return [226, 228, 232];
+      if (x >= 474 && x < 492 && y >= b.top && y < 78) return [248, 248, 246];
+      if (x >= W - 57 && x < W - b.right && y >= 214 && y < 236) return [248, 248, 246];
+      return null;
+    }
+  });
+  assert('pattern B: nameplate bar is not the bottom border (B ≈ 35)', near(late.widths.bottom, 35, 1), late.widths);
+  assert('pattern B: lone 78px top spike is outvoted (T ≈ 30)', near(late.widths.top, 30, 1), late.widths);
+  assert('pattern B: right ~57px spike near the top is outvoted (R ≈ 30)', near(late.widths.right, 30, 1), late.widths);
+  assert('pattern B: T/B ≈ 46/54 and L/R ≈ 57/43',
+    late.tb && near(late.tb.top, 46.2, 1) && late.lr && near(late.lr.left, 57.1, 1), { tb: late.tb, lr: late.lr });
+
   if (failures) {
     console.error(failures + ' top-edge check(s) failed.');
     process.exit(1);
