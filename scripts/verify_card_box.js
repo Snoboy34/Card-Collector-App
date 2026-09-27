@@ -326,6 +326,23 @@ async function run() {
     assert('200 saves exactly one inventory item', inventoryCount() === 1, inventoryCount());
     const logAfter = fs.readFileSync(FAILED_SCANS_PATH, 'utf8').trim().split('\n').filter(Boolean);
     assert('success does not touch failed-scans log', logAfter.length === 1, logAfter.length);
+
+    const det = rep && rep.cardDetection;
+    assert('cardDetection logs raw and tightened quads', det && det.rawQuad && det.quad);
+    assert('cardDetection logs card size in upload px', det && det.cardSizePx && det.cardSizePx.widthPx > 0);
+    const topLines = rep && rep.centeringDiagnostics.sampleLines && rep.centeringDiagnostics.sampleLines.top;
+    assert('per-line top samples recorded in scan order (7 lines)', Array.isArray(topLines) && topLines.length === 7 &&
+      topLines.every(function (l) { return typeof l.at === 'number' && 'threshold' in l; }), topLines);
+    assert('warped wording does not claim the card fills the frame',
+      rep && rep.centeringDiagnostics.summary.indexOf('filling the frame') === -1, rep && rep.centeringDiagnostics.summary);
+
+    const dump = require('./dump_scans').formatScans(process.env.JUDGE_DATA_DIR, 10);
+    assert('dump_scans prints the graded scan', dump.indexOf(okScanId.slice(0, 8).toUpperCase()) !== -1);
+    assert('dump_scans prints the failed scan', dump.indexOf('CARD NOT FOUND') !== -1 &&
+      dump.indexOf(failScanId.slice(0, 8).toUpperCase()) !== -1);
+    assert('dump_scans prints raw + tight quads and per-line top samples',
+      dump.indexOf('  raw   tl(') !== -1 && dump.indexOf('  tight tl(') !== -1 && /top\s+@\d+ /.test(dump));
+    console.log('\n' + dump + '\n');
   } finally {
     await new Promise(function (resolve) { server.close(resolve); });
   }

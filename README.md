@@ -81,6 +81,12 @@ centeringDiagnostics    always-on box vs photo size, print-border px, printed-fr
 
 `POST /api/grade/upload` is the disk-backed twin of the same pipeline.
 
+Scan dump: `node scripts/dump_scans.js [N] [scanIdPrefix]` prints the last N
+graded scans (`data/database.json`) and card-not-found attempts
+(`data/failed_scans.jsonl`): quad source, card box %, raw and tightened quad
+corners, border widths, per-line samples (`@offset position/threshold`),
+spread, L/R, T/B, sub-grades, and rejection reasons.
+
 ## Alignment viewport
 
 Scan view clones `#scanViewportTemplate` (in `index.html`). `app.js`

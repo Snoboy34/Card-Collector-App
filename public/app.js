@@ -943,8 +943,8 @@ function openReportModal(item) {
       <p class="diag-hint">${escapeHtml(diag.hint || '')}</p>
       <p class="muted">${escapeHtml(diag.summary || '')}</p>
       <ul>
-        <li>Photo: ${diag.imageWidth || '—'}×${diag.imageHeight || '—'}</li>
-        <li>Card box: quad source ${escapeHtml(cardDet ? cardDet.quadSource : '—')} — ${escapeHtml(cardDet && cardDet.cardBoxPctOfPhoto != null ? cardDet.cardBoxPctOfPhoto + '%' : '—')} of photo (graded on the ${escapeHtml(diagBox)} warp)</li>
+        <li>Upload: ${cardDet ? cardDet.photoWidth + '×' + cardDet.photoHeight : '—'} · decoded ${cardDet ? cardDet.decodeWidth + '×' + cardDet.decodeHeight : '—'} · graded on ${diag.imageWidth || '—'}×${diag.imageHeight || '—'} warp</li>
+        <li>Card box: quad source ${escapeHtml(cardDet ? cardDet.quadSource : '—')} — ${escapeHtml(cardDet && cardDet.cardBoxPctOfPhoto != null ? cardDet.cardBoxPctOfPhoto + '%' : '—')} of photo${cardDet && cardDet.cardSizePx ? ' · card ' + cardDet.cardSizePx.widthPx + '×' + cardDet.cardSizePx.heightPx + ' px in upload' : ''}</li>
         <li>Print borders (px): ${escapeHtml(diagWidths)}</li>
         <li>L/R sample spread: ${fmtPx(diag.leftRightSampleSpreadPx)} · T/B sample spread: ${fmtPx(diag.topBottomSampleSpreadPx)}</li>
       </ul>
