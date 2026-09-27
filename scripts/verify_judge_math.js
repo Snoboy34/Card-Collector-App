@@ -83,10 +83,10 @@ assertEq('unmeasured cornersMeasured false', unmeasured.cornersMeasured, false);
 assertEq('unmeasured still 10 from CEN/SUR/EDG', unmeasured.finalScore, 10);
 assert('unmeasured label shows CRN —', unmeasured.subGradesLabel.indexOf('CRN: —') !== -1);
 
-// CEN 8 (56/44), SUR 8 (4 scratches), EDG 8 (2 sites). A fake CRN 10 would
+// CEN 8 (63/37), SUR 8 (4 scratches), EDG 8 (2 sites). A fake CRN 10 would
 // lift the 4-way mean to 8.5; excluded, the 3-way mean is 8.0.
 const threeWay = g.evaluateMultiPhaseCondition(
-  { leftRightRatio: { left: 56, right: 44 }, topBottomRatio: { top: 50, bottom: 50 } },
+  { leftRightRatio: { left: 63, right: 37 }, topBottomRatio: { top: 50, bottom: 50 } },
   Object.assign({}, cleanSurface, { scratchCount: 4 }),
   2,
   null
@@ -94,6 +94,23 @@ const threeWay = g.evaluateMultiPhaseCondition(
 assertEq('3-sub mean is 8.0 (not 8.5 with a fake CRN 10)', threeWay.finalScore, 8.0);
 assertEq('3-sub mean value', threeWay.overallMathematicalAverage, 8.0);
 assertEq('3-sub lowest excludes CRN', threeWay.lowestIsolatedSubGrade, 8.0);
+
+// PSA front table (strict end): worst axis share → CEN.
+function cen(l, t) {
+  return g.scoreCenteringPhase({ left: l, right: 100 - l }, { top: t, bottom: 100 - t }).score;
+}
+assertEq('CEN 50/50 → 10', cen(50, 50), 10);
+assertEq('CEN 55/45 → 10', cen(55, 50), 10);
+assertEq('CEN 55.1/44.9 → 9', cen(55.1, 50), 9);
+assertEq('CEN 60/40 → 9', cen(60, 50), 9);
+assertEq('CEN 65/35 → 8', cen(35, 50), 8);
+assertEq('CEN 70/30 → 7', cen(50, 70), 7);
+assertEq('CEN 80/20 → 6', cen(80, 50), 6);
+assertEq('CEN 85/15 → 5', cen(85, 50), 5);
+assertEq('CEN 90/10 → 3', cen(90, 50), 3);
+assertEq('CEN 91/9 → 1', cen(91, 50), 1);
+assertEq('Karros scan L/R 57.5 T/B 55 → 9 (was 7.0)', cen(57.5, 55), 9);
+assertEq('Karros ruler 4mm/3mm, 3mm/3.5mm → 9', cen(400 / 7, 300 / 6.5), 9);
 
 function assert(label, cond) {
   if (!cond) {

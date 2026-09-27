@@ -168,39 +168,54 @@ function clampLabGrade(value) {
 }
 
 /**
- * PHASE 1 — Centering sub-grade (PSA & BGS tolerances matrix).
+ * PHASE 1 — Centering sub-grade from the PSA front-centering table.
  *
  * Inputs are left/right and top/bottom print-border percentages that each
  * already sum to 100 (e.g. 55/45). The score is driven by the WORST axis
- * deviation, never an average of the two, so a perfect T/B cannot rescue a
- * blown L/R.
+ * (larger share on either axis), never an average, so a perfect T/B cannot
+ * rescue a blown L/R.
  *
- * Thresholds (The Judge.swift lines 42–48):
- *   maxDeviation <=  2.0  → 10.0   Perfect 50/50 tracking
- *   maxDeviation <=  4.0  →  9.5   BGS Pristine threshold
- *   maxDeviation <=  9.0  →  9.0   PSA 10 strict bound (≈ 55.5/44.5)
- *   maxDeviation <= 14.0  →  8.0   Near Mint 8 track
- *   maxDeviation <= 20.0  →  7.0
- *   otherwise             →  5.0
+ * PSA publishes each grade as "approximately X/Y or better on the front";
+ * this uses the strict end of each published range:
+ *   worst share <= 55  → 10   (55/45)
+ *   worst share <= 60  →  9   (60/40)
+ *   worst share <= 65  →  8   (65/35)
+ *   worst share <= 70  →  7   (70/30)
+ *   worst share <= 80  →  6   (80/20)
+ *   worst share <= 85  →  5   (85/15; PSA 4 has the same front bound)
+ *   worst share <= 90  →  3   (90/10; PSA 2 has the same front bound)
+ *   otherwise          →  1
+ * Back centering (PSA 75/25 for a 10) is not measured.
  *
  * @param {{ left: number, right: number }} leftRightRatio
  * @param {{ top: number, bottom: number }} topBottomRatio
- * @returns {{ score: number, maxDeviation: number, lrDiff: number, tbDiff: number }}
+ * @returns {{ score: number, worstSharePct: number, maxDeviation: number, lrDiff: number, tbDiff: number }}
  */
+const PSA_FRONT_CENTERING_TABLE = [
+  { maxShare: 55, score: 10.0 },
+  { maxShare: 60, score: 9.0 },
+  { maxShare: 65, score: 8.0 },
+  { maxShare: 70, score: 7.0 },
+  { maxShare: 80, score: 6.0 },
+  { maxShare: 85, score: 5.0 },
+  { maxShare: 90, score: 3.0 }
+];
+
 function scoreCenteringPhase(leftRightRatio, topBottomRatio) {
   const lrDiff = Math.abs(leftRightRatio.left - leftRightRatio.right);
   const tbDiff = Math.abs(topBottomRatio.top - topBottomRatio.bottom);
   const maxCenteringDeviation = Math.max(lrDiff, tbDiff);
+  const worstSharePct = 50 + maxCenteringDeviation / 2;
 
-  let centeringScore;
-  if (maxCenteringDeviation <= 2.0) centeringScore = 10.0;
-  else if (maxCenteringDeviation <= 4.0) centeringScore = 9.5;
-  else if (maxCenteringDeviation <= 9.0) centeringScore = 9.0;
-  else if (maxCenteringDeviation <= 14.0) centeringScore = 8.0;
-  else if (maxCenteringDeviation <= 20.0) centeringScore = 7.0;
-  else centeringScore = 5.0;
+  let centeringScore = 1.0;
+  for (let i = 0; i < PSA_FRONT_CENTERING_TABLE.length; i++) {
+    if (worstSharePct <= PSA_FRONT_CENTERING_TABLE[i].maxShare + 1e-9) {
+      centeringScore = PSA_FRONT_CENTERING_TABLE[i].score;
+      break;
+    }
+  }
 
-  return { score: centeringScore, maxDeviation: maxCenteringDeviation, lrDiff, tbDiff };
+  return { score: centeringScore, worstSharePct, maxDeviation: maxCenteringDeviation, lrDiff, tbDiff };
 }
 
 /**
@@ -2373,6 +2388,7 @@ module.exports = {
   evaluateMultiPhaseCondition,
   GRADE_SCALE,
   scoreCenteringPhase,
+  PSA_FRONT_CENTERING_TABLE,
   scoreSurfacePhase,
   scoreEdgesPhase,
   scoreCornersPhase,
