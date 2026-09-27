@@ -81,6 +81,14 @@ centeringDiagnostics    always-on box vs photo size, print-border px, printed-fr
 
 `POST /api/grade/upload` is the disk-backed twin of the same pipeline.
 
+Border finder (per edge, on the 643×900 warp): a per-depth median profile
+across the middle 60% of the edge, a trigger of 4σ of the border's own
+pixels (8–40), 15 voting lines where the outermost group of ≥6 agreeing hits
+(≤3px apart) is the border, and a 12% maximum inward depth. The edge is
+located at half the step height. An opposite-border share past 75/25 is a
+flag only. `node scripts/verify_top_edge.js` covers the pale-strip,
+corner-logo, glare, miscut, and depth-cap cases.
+
 Scan dump: `node scripts/dump_scans.js [N] [scanIdPrefix]` prints the last N
 graded scans (`data/database.json`) and card-not-found attempts
 (`data/failed_scans.jsonl`): quad source, card box %, raw and tightened quad

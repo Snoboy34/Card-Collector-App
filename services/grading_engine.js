@@ -637,106 +637,6 @@ function findCardBoundingBox(pixels, width, height) {
   };
 }
 
-/**
- * Inward contrast scan for a single sample line. Port of
- * `CenteringAnalyzer.scanLineForBorder`:
- *   - baseline = mean of the first 4 pixels (the cut-edge border color)
- *   - adaptive threshold from the local 60px brightness range, floored at 12
- *     and capped at 50
- *   - require 5 consecutive pixels past the threshold (sustained run)
- *   - linearly interpolate a sub-pixel crossing
- *
- * @returns {{ pos: number, bandStddev: number|null, baseline: number, paperBandMean: number|null, paperBaseline: number|null }|null}
- */
-function scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight, getPaperPixel) {
-  const scanLength = (edge === 'left' || edge === 'right')
-    ? Math.floor(cardWidth / 2)
-    : Math.floor(cardHeight / 2);
-  if (scanLength <= 12) return null;
-
-  function pixelAt(i) {
-    switch (edge) {
-      case 'left': return getPixel(i, lineOffset);
-      case 'right': return getPixel(cardWidth - 1 - i, lineOffset);
-      case 'top': return getPixel(lineOffset, i);
-      default: return getPixel(lineOffset, cardHeight - 1 - i);
-    }
-  }
-
-  const profile = new Float32Array(scanLength);
-  for (let i = 0; i < scanLength; i++) profile[i] = pixelAt(i);
-
-  const baselineSampleCount = 4;
-  let baselineSum = 0;
-  for (let i = 0; i < baselineSampleCount; i++) baselineSum += profile[i];
-  const baseline = baselineSum / baselineSampleCount;
-
-  const localWindowSize = Math.min(scanLength, 60);
-  let localMin = profile[0];
-  let localMax = profile[0];
-  for (let i = 1; i < localWindowSize; i++) {
-    if (profile[i] < localMin) localMin = profile[i];
-    if (profile[i] > localMax) localMax = profile[i];
-  }
-  const localRange = localMax - localMin;
-  const adaptiveThreshold = Math.max(12, Math.min(50, Math.round(localRange * 0.2)));
-  const sustainedRunRequired = 5;
-
-  let i = baselineSampleCount;
-  while (i < scanLength - sustainedRunRequired) {
-    const signedDiff = profile[i] - baseline;
-    if (Math.abs(signedDiff) > adaptiveThreshold) {
-      let sustained = true;
-      for (let offset = 1; offset <= sustainedRunRequired; offset++) {
-        if (Math.abs(profile[i + offset] - baseline) <= adaptiveThreshold) {
-          sustained = false;
-          break;
-        }
-      }
-      if (sustained) {
-        const target = signedDiff > 0
-          ? baseline + adaptiveThreshold
-          : baseline - adaptiveThreshold;
-        const previous = profile[i - 1];
-        const current = profile[i];
-        const stepDelta = current - previous;
-        const fraction = stepDelta === 0 ? 0 : (target - previous) / stepDelta;
-        const clampedFraction = Math.max(0, Math.min(1, fraction));
-        const pos = (i - 1) + clampedFraction;
-        let paperBaseline = null;
-        let paperBandMean = null;
-        if (typeof getPaperPixel === 'function') {
-          function paperAt(idx) {
-            switch (edge) {
-              case 'left': return getPaperPixel(idx, lineOffset);
-              case 'right': return getPaperPixel(cardWidth - 1 - idx, lineOffset);
-              case 'top': return getPaperPixel(lineOffset, idx);
-              default: return getPaperPixel(lineOffset, cardHeight - 1 - idx);
-            }
-          }
-          const paperProfile = new Float32Array(scanLength);
-          for (let p = 0; p < scanLength; p++) paperProfile[p] = paperAt(p);
-          let paperSum = 0;
-          for (let p = 0; p < baselineSampleCount; p++) paperSum += paperProfile[p];
-          paperBaseline = paperSum / baselineSampleCount;
-          paperBandMean = bandMean(paperProfile, pos);
-        }
-        return {
-          pos: pos,
-          bandStddev: bandStddev(profile, pos),
-          baseline: baseline,
-          paperBandMean: paperBandMean,
-          paperBaseline: paperBaseline,
-          threshold: adaptiveThreshold,
-          localRange: localRange
-        };
-      }
-    }
-    i += 1;
-  }
-  return { pos: null, baseline: baseline, threshold: adaptiveThreshold, localRange: localRange };
-}
-
 function bandMean(profile, widthPx) {
   const start = 4;
   const end = Math.min(profile.length, Math.max(start + 4, Math.floor(widthPx) - 2));
@@ -761,65 +661,204 @@ function bandStddev(profile, widthPx) {
   return Math.sqrt(ss / (end - start));
 }
 
+// Stage C border finder (top-edge hop fix). The old per-line scan took 20%
+// of each line's 60px brightness range as its trigger, so a dark photo
+// area just inside a pale strip raised the trigger past the real
+// white-border→art step and the line stopped on the dark area instead.
+const EDGE_LINE_COUNT = 15;
+const EDGE_SPAN_START = 0.2;
+const EDGE_SPAN_END = 0.8;
+const EDGE_MAX_DEPTH_FRAC = 0.12;
+const EDGE_GROUP_MIN_FRAC = 0.4;
+const EDGE_GROUP_GAP_PX = 3;
+const EDGE_PROFILE_AGREE_PX = 4;
+const EDGE_TRIGGER_SIGMA = 4;
+const EDGE_TRIGGER_MIN = 8;
+const EDGE_TRIGGER_MAX = 40;
+const EDGE_SKIP_PX = 2;
+const EDGE_BASELINE_PX = 4;
+const EDGE_SUSTAIN_PX = 3;
+const EDGE_LINE_HALF_WIDTH = 2;
+const EDGE_OPPOSITE_FLAG_SHARE = 75;
+
+function edgeSampler(getPixel, edge, cardWidth, cardHeight) {
+  return function (along, depth) {
+    switch (edge) {
+      case 'left': return getPixel(depth, along);
+      case 'right': return getPixel(cardWidth - 1 - depth, along);
+      case 'top': return getPixel(along, depth);
+      default: return getPixel(along, cardHeight - 1 - depth);
+    }
+  };
+}
+
 /**
- * Seven-line median border width for one edge. Port of
- * `CenteringAnalyzer.findBorderWidth`. Returns null width if every sample
- * line failed — callers must NOT invent a fake 50/50 from a failed detection.
- *
- * `samples` is the raw hit list (already sorted) so a single still can show
- * whether T/B scan-lines disagree more than L/R (algorithm / keystone) vs.
- * only drifting across separate shots (camera pitch).
- *
- * @returns {{ width: number|null, samples: number[], bandStddev: number|null, baseline: number|null, paperBandMean: number|null, paperBaseline: number|null, attempted: number }}
+ * First sustained step away from the border's own brightness, located at
+ * half the step height (not at the trigger), within maxDepth. Returns the
+ * border width in pixels (crossing + 0.5, i.e. count of border pixels).
+ */
+function detectBorderStep(profile, trigger, maxDepth) {
+  const b0 = EDGE_SKIP_PX;
+  const b1 = EDGE_SKIP_PX + EDGE_BASELINE_PX;
+  if (profile.length < b1 + EDGE_SUSTAIN_PX + 3) return null;
+  let baseline = 0;
+  for (let i = b0; i < b1; i++) baseline += profile[i];
+  baseline /= (b1 - b0);
+  const last = Math.min(maxDepth, profile.length - EDGE_SUSTAIN_PX - 3);
+  for (let i = b1; i <= last; i++) {
+    const d = profile[i] - baseline;
+    if (Math.abs(d) <= trigger) continue;
+    const sign = d > 0 ? 1 : -1;
+    let sustained = true;
+    for (let k = 1; k <= EDGE_SUSTAIN_PX; k++) {
+      if ((profile[i + k] - baseline) * sign <= trigger) { sustained = false; break; }
+    }
+    if (!sustained) continue;
+    const plateau = (profile[i + 1] + profile[i + 2] + profile[i + 3]) / 3;
+    const half = (baseline + plateau) / 2;
+    let j = i;
+    while (j > b0 && (profile[j - 1] - half) * sign > 0) j -= 1;
+    const before = profile[j - 1];
+    const after = profile[j];
+    const step = after - before;
+    const frac = step === 0 ? 0.5 : Math.max(0, Math.min(1, (half - before) / step));
+    return { width: (j - 1) + frac + 0.5, baseline: baseline, plateau: plateau };
+  }
+  return null;
+}
+
+function linearProfile(sample, along, halfWidth, alongMax, length) {
+  const out = new Float32Array(length);
+  const a0 = Math.max(0, along - halfWidth);
+  const a1 = Math.min(alongMax - 1, along + halfWidth);
+  for (let d = 0; d < length; d++) {
+    let sum = 0;
+    for (let a = a0; a <= a1; a++) sum += sample(a, d);
+    out[d] = sum / (a1 - a0 + 1);
+  }
+  return out;
+}
+
+/**
+ * Border width for one edge.
+ *   1. Straight-edge profile: per-depth MEDIAN across the middle 60% of the
+ *      edge. The printed border line is straight across the card, so it
+ *      survives; a logo or glare patch covering <50% of the span does not.
+ *   2. Trigger from the border's own noise (4σ of the first pixels, 8–40),
+ *      never from art deeper inside the card.
+ *   3. 15 lines vote; the outermost group of hits that agree (≤3px gaps,
+ *      ≥40% of lines) is the border. Lines outside it are listed as
+ *      outliers instead of failing the whole edge.
+ *   4. Nothing deeper than 12% of the card dimension counts as a border.
+ * Returns null width if no group qualifies — never a fake 50/50.
  */
 function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
-  const sampleCount = 7;
-  const dimension = (edge === 'left' || edge === 'right') ? cardHeight : cardWidth;
-  const margin = Math.floor(dimension / 4);
-  const positions = [];
-  const stddevs = [];
-  const baselines = [];
-  const paperMeans = [];
-  const paperBaselines = [];
-  const lines = [];
+  const horizontalScan = edge === 'left' || edge === 'right';
+  const alongMax = horizontalScan ? cardHeight : cardWidth;
+  const depthDim = horizontalScan ? cardWidth : cardHeight;
+  const maxDepth = Math.round(depthDim * EDGE_MAX_DEPTH_FRAC);
+  const length = Math.min(Math.floor(depthDim / 2), maxDepth + EDGE_SUSTAIN_PX + 6);
+  const sample = edgeSampler(getPixel, edge, cardWidth, cardHeight);
+  const paperSample = typeof getPaperPixel === 'function'
+    ? edgeSampler(getPaperPixel, edge, cardWidth, cardHeight)
+    : null;
+  const a0 = Math.floor(alongMax * EDGE_SPAN_START);
+  const a1 = Math.floor(alongMax * EDGE_SPAN_END);
 
-  for (let sample = 0; sample < sampleCount; sample++) {
-    const span = dimension - 2 * margin;
-    const lineOffset = margin + Math.round(sample * span / (sampleCount - 1));
-    const scan = scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight, getPaperPixel);
-    lines.push({
-      at: lineOffset,
-      pos: scan && scan.pos != null ? round2(scan.pos) : null,
-      threshold: scan ? scan.threshold : null,
-      localRange: scan ? round2(scan.localRange) : null
-    });
-    const hit = scan && scan.pos != null ? scan : null;
-    if (hit != null) {
-      positions.push(hit.pos);
-      if (hit.bandStddev != null) stddevs.push(hit.bandStddev);
-      if (hit.baseline != null) baselines.push(hit.baseline);
-      if (hit.paperBandMean != null) paperMeans.push(hit.paperBandMean);
-      if (hit.paperBaseline != null) paperBaselines.push(hit.paperBaseline);
+  // Border noise → trigger.
+  const noise = [];
+  for (let a = a0; a < a1; a++) {
+    for (let d = EDGE_SKIP_PX; d < EDGE_SKIP_PX + EDGE_BASELINE_PX; d++) noise.push(sample(a, d));
+  }
+  const sigma = stddev(noise) || 0;
+  const trigger = Math.max(EDGE_TRIGGER_MIN, Math.min(EDGE_TRIGGER_MAX, EDGE_TRIGGER_SIGMA * sigma));
+
+  // Straight-edge median profile.
+  const medianProfile = new Float32Array(length);
+  const column = new Float32Array(a1 - a0);
+  for (let d = 0; d < length; d++) {
+    for (let a = a0; a < a1; a++) column[a - a0] = sample(a, d);
+    const sorted = Array.from(column).sort(function (x, y) { return x - y; });
+    medianProfile[d] = sorted[Math.floor(sorted.length / 2)];
+  }
+  const profileHit = detectBorderStep(medianProfile, trigger, maxDepth);
+  const profileWidth = profileHit ? profileHit.width : null;
+
+  // 15 voting lines.
+  const lines = [];
+  const hits = [];
+  for (let k = 0; k < EDGE_LINE_COUNT; k++) {
+    const along = a0 + Math.round(k * (a1 - 1 - a0) / (EDGE_LINE_COUNT - 1));
+    const lineProfile = linearProfile(sample, along, EDGE_LINE_HALF_WIDTH, alongMax, length);
+    const hit = detectBorderStep(lineProfile, trigger, maxDepth);
+    const line = { at: along, pos: hit ? round2(hit.width) : null, threshold: round2(trigger), inGroup: false };
+    lines.push(line);
+    if (hit) hits.push({ width: hit.width, baseline: hit.baseline, line: line, along: along, profile: lineProfile });
+  }
+
+  const flags = [];
+  const sortedHits = hits.slice().sort(function (x, y) { return x.width - y.width; });
+  const minGroup = Math.ceil(EDGE_LINE_COUNT * EDGE_GROUP_MIN_FRAC);
+  let group = null;
+  let start = 0;
+  for (let i = 1; i <= sortedHits.length; i++) {
+    if (i === sortedHits.length || sortedHits[i].width - sortedHits[i - 1].width > EDGE_GROUP_GAP_PX) {
+      if (i - start >= minGroup) { group = sortedHits.slice(start, i); break; }
+      start = i;
     }
   }
 
-  if (!positions.length) {
-    return {
-      width: null, samples: [], lines: lines, bandStddev: null, baseline: null,
-      paperBandMean: null, paperBaseline: null, attempted: sampleCount
-    };
-  }
-  positions.sort(function (a, b) { return a - b; });
-  return {
-    width: median(positions),
-    samples: positions,
+  const base = {
     lines: lines,
-    bandStddev: stddevs.length ? median(stddevs) : null,
-    baseline: baselines.length ? median(baselines) : null,
-    paperBandMean: paperMeans.length ? median(paperMeans) : null,
-    paperBaseline: paperBaselines.length ? median(paperBaselines) : null,
-    attempted: sampleCount
+    attempted: EDGE_LINE_COUNT,
+    trigger: round2(trigger),
+    profileWidth: profileWidth == null ? null : round2(profileWidth),
+    maxDepthPx: maxDepth,
+    flags: flags
   };
+  if (!group) {
+    flags.push(edge + ': no ' + minGroup + ' of ' + EDGE_LINE_COUNT + ' lines agree within ' +
+      EDGE_GROUP_GAP_PX + 'px (' + hits.length + ' hits)');
+    return Object.assign(base, {
+      width: null, samples: hits.map(function (h) { return h.width; }).sort(function (x, y) { return x - y; }),
+      bandStddev: null, baseline: null, paperBandMean: null, paperBaseline: null
+    });
+  }
+  group.forEach(function (h) { h.line.inGroup = true; });
+  const widths = group.map(function (h) { return h.width; });
+  const width = median(widths);
+  const outliers = hits.length - group.length;
+  if (outliers > 0) flags.push(edge + ': ' + outliers + ' line(s) outside the agreeing group');
+  if (profileWidth != null && Math.abs(profileWidth - width) > EDGE_PROFILE_AGREE_PX) {
+    flags.push(edge + ': straight-edge profile ' + round2(profileWidth) + 'px disagrees with voted ' + round2(width) + 'px');
+  }
+
+  const stddevs = [];
+  const paperMeans = [];
+  const paperBaselines = [];
+  const baselines = [];
+  group.forEach(function (h) {
+    baselines.push(h.baseline);
+    const sd = bandStddev(h.profile, h.width);
+    if (sd != null) stddevs.push(sd);
+    if (paperSample) {
+      const paperProfile = linearProfile(paperSample, h.along, EDGE_LINE_HALF_WIDTH, alongMax, length);
+      const pm = bandMean(paperProfile, h.width);
+      if (pm != null) paperMeans.push(pm);
+      let pb = 0;
+      for (let d = EDGE_SKIP_PX; d < EDGE_SKIP_PX + EDGE_BASELINE_PX; d++) pb += paperProfile[d];
+      paperBaselines.push(pb / EDGE_BASELINE_PX);
+    }
+  });
+  const sortNum = function (arr) { return arr.slice().sort(function (x, y) { return x - y; }); };
+  return Object.assign(base, {
+    width: width,
+    samples: sortNum(widths),
+    bandStddev: stddevs.length ? median(sortNum(stddevs)) : null,
+    baseline: baselines.length ? median(sortNum(baselines)) : null,
+    paperBandMean: paperMeans.length ? median(sortNum(paperMeans)) : null,
+    paperBaseline: paperBaselines.length ? median(sortNum(paperBaselines)) : null
+  });
 }
 
 /**
@@ -883,6 +922,25 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
 
   const detected = leftW != null && rightW != null && topW != null && bottomW != null;
 
+  // Opposite border is a sanity FLAG only: real miscuts go past 70/30.
+  const edgeFlags = [].concat(leftScan.flags || [], rightScan.flags || [], topScan.flags || [], bottomScan.flags || []);
+  function oppositeFlag(axis, aName, a, bName, b) {
+    if (a == null || b == null || a + b <= 0) return;
+    const share = 100 * Math.max(a, b) / (a + b);
+    if (share > EDGE_OPPOSITE_FLAG_SHARE) {
+      edgeFlags.push(axis + ' ' + round2(share) + '/' + round2(100 - share) + ' — check the ' +
+        (a > b ? aName : bName) + ' edge (flag only)');
+    }
+  }
+  oppositeFlag('L/R', 'left', leftW, 'right', rightW);
+  oppositeFlag('T/B', 'top', topW, 'bottom', bottomW);
+  const edgeProfiles = {
+    left: { trigger: leftScan.trigger, profileWidth: leftScan.profileWidth, maxDepthPx: leftScan.maxDepthPx },
+    right: { trigger: rightScan.trigger, profileWidth: rightScan.profileWidth, maxDepthPx: rightScan.maxDepthPx },
+    top: { trigger: topScan.trigger, profileWidth: topScan.profileWidth, maxDepthPx: topScan.maxDepthPx },
+    bottom: { trigger: bottomScan.trigger, profileWidth: bottomScan.profileWidth, maxDepthPx: bottomScan.maxDepthPx }
+  };
+
   if (!detected) {
     return {
       leftRightRatio: null,
@@ -891,6 +949,8 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
       widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
       samples: samples,
       sampleLines: sampleLines,
+      edgeFlags: edgeFlags,
+      edgeProfiles: edgeProfiles,
       bandStddev: bandStddev,
       baselines: baselines,
       paperBandMean: paperBandMean,
@@ -912,6 +972,8 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
     widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
     samples: samples,
     sampleLines: sampleLines,
+    edgeFlags: edgeFlags,
+    edgeProfiles: edgeProfiles,
     bandStddev: bandStddev,
     baselines: baselines,
     paperBandMean: paperBandMean,
@@ -1344,7 +1406,9 @@ function describeBorderSource(args) {
       top: (samples.top || []).map(round2),
       bottom: (samples.bottom || []).map(round2)
     },
-    sampleLines: args.sampleLines || null
+    sampleLines: args.sampleLines || null,
+    edgeFlags: args.edgeFlags || [],
+    edgeProfiles: args.edgeProfiles || null
   };
 }
 
@@ -1365,6 +1429,8 @@ function buildCenteringDiagnostics(width, height, box, centeringMeasurement, ext
     alignmentCrop: Boolean(extra.alignmentCrop),
     warped: Boolean(extra.warped),
     sampleLines: centeringMeasurement.sampleLines || null,
+    edgeFlags: centeringMeasurement.edgeFlags || [],
+    edgeProfiles: centeringMeasurement.edgeProfiles || null,
     detected: centeringMeasurement.detected
   });
 }

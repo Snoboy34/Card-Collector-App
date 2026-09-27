@@ -60,8 +60,10 @@ function localTime(iso) {
 function edgeLines(diag, edge) {
   const lines = diag && diag.sampleLines && diag.sampleLines[edge];
   if (Array.isArray(lines)) {
-    return lines.map(function (l) {
-      const pos = l.pos == null ? 'x' : num(l.pos);
+    const prof = diag.edgeProfiles && diag.edgeProfiles[edge];
+    const head = prof ? 'profile ' + num(prof.profileWidth) + ' trig ' + num(prof.trigger) + ' | ' : '';
+    return head + lines.map(function (l) {
+      const pos = l.pos == null ? 'x' : num(l.pos) + (l.inGroup === false ? '!' : '');
       return '@' + l.at + ' ' + pos + '/t' + (l.threshold == null ? '?' : l.threshold);
     }).join('  ');
   }
@@ -117,6 +119,7 @@ function formatGraded(item) {
     '  T/B ' + ratio(m.topBottomRatio, 'top', 'bottom') +
     '  CEN ' + num(sub.centering) + '  SUR ' + num(sub.surface) + '  EDG ' + num(sub.edges) +
     '  CRN ' + num(sub.corners) + '  final ' + num(r.finalScore));
+  if (diag.edgeFlags && diag.edgeFlags.length) out.push('flags   ' + diag.edgeFlags.join('; '));
   const reasons = diag.borderReliability && diag.borderReliability.reasons;
   if (reasons && reasons.length) out.push('reject  ' + reasons.join('; '));
   return out.join('\n');

@@ -9,6 +9,7 @@
     "dev": "nodemon server.js",
     "test:judge": "node scripts/verify_judge_math.js",
     "test:cardbox": "node scripts/verify_card_box.js",
+    "test:topedge": "node scripts/verify_top_edge.js",
     "dump:scans": "node scripts/dump_scans.js",
     "lint": "echo \"No linter configured\""
   },

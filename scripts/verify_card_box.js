@@ -332,7 +332,7 @@ async function run() {
     assert('cardDetection logs raw and tightened quads', det && det.rawQuad && det.quad);
     assert('cardDetection logs card size in upload px', det && det.cardSizePx && det.cardSizePx.widthPx > 0);
     const topLines = rep && rep.centeringDiagnostics.sampleLines && rep.centeringDiagnostics.sampleLines.top;
-    assert('per-line top samples recorded in scan order (7 lines)', Array.isArray(topLines) && topLines.length === 7 &&
+    assert('per-line top samples recorded in scan order (15 lines)', Array.isArray(topLines) && topLines.length === 15 &&
       topLines.every(function (l) { return typeof l.at === 'number' && 'threshold' in l; }), topLines);
     assert('warped wording does not claim the card fills the frame',
       rep && rep.centeringDiagnostics.summary.indexOf('filling the frame') === -1, rep && rep.centeringDiagnostics.summary);
@@ -342,7 +342,7 @@ async function run() {
     assert('dump_scans prints the failed scan', dump.indexOf('CARD NOT FOUND') !== -1 &&
       dump.indexOf(failScanId.slice(0, 8).toUpperCase()) !== -1);
     assert('dump_scans prints raw + tight quads and per-line top samples',
-      dump.indexOf('  raw   tl(') !== -1 && dump.indexOf('  tight tl(') !== -1 && /top\s+@\d+ /.test(dump));
+      dump.indexOf('  raw   tl(') !== -1 && dump.indexOf('  tight tl(') !== -1 && /top\s+profile [\d.]+ trig [\d.]+ \| @\d+ /.test(dump));
     console.log('\n' + dump + '\n');
 
     // Stage B artifacts come from the same server analysis as the saved ratios.
@@ -359,15 +359,16 @@ async function run() {
       fs.existsSync(path.join(okDir, 'debug.json')) && fs.existsSync(path.join(okDir, 'oriented.jpg')));
     const okDebug = JSON.parse(fs.readFileSync(path.join(okDir, 'debug.json'), 'utf8'));
     assert('debug.json has raw + tightened quad', okDebug.cardDetection.rawQuad && okDebug.cardDetection.quad);
-    assert('debug.json has 7 per-line samples per edge',
-      ['top', 'bottom', 'left', 'right'].every(function (e) { return okDebug.sampleLines[e].length === 7; }));
+    assert('debug.json has 15 per-line samples per edge',
+      ['top', 'bottom', 'left', 'right'].every(function (e) { return okDebug.sampleLines[e].length === 15; }));
     assert('debug.json ratios match the saved report',
       okDebug.topBottomRatio.top === rep.centeringMetrics.topBottomRatio.top &&
       okDebug.leftRightRatio.left === rep.centeringMetrics.leftRightRatio.left);
     const oriented = await sharp(path.join(okDir, 'oriented.jpg')).raw().toBuffer({ resolveWithObject: true });
     assert('oriented.jpg is the 643×900 warp', oriented.info.width === 643 && oriented.info.height === 900);
     const topY = Math.round(okDebug.innerBorderLinesPx.topY);
-    const px = (topY * 643 + 300) * oriented.info.channels;
+    // x=40 is outside the 20–80% sample span, so no yellow tick overlaps the cyan line.
+    const px = (topY * 643 + 40) * oriented.info.channels;
     const cyan = oriented.data[px] < 90 && oriented.data[px + 1] > 170 && oriented.data[px + 2] > 190;
     assert('oriented.jpg draws the cyan inner top line at the measured width', cyan,
       [oriented.data[px], oriented.data[px + 1], oriented.data[px + 2]]);
