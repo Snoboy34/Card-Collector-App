@@ -5,9 +5,11 @@
  * and data/failed_scans.jsonl (card not found), newest N, oldest first.
  *
  * Usage:
- *   node scripts/dump_scans.js            # last 10
+ *   node scripts/dump_scans.js            # last 10, oldest first
  *   node scripts/dump_scans.js 25         # last 25
  *   node scripts/dump_scans.js 10 8260d8  # only scanIds starting with 8260d8
+ *   node scripts/dump_scans.js --audit BF3F8126 DD872A45
+ *                                         # duplicates + where each id lives
  *   JUDGE_DATA_DIR=/other/data node scripts/dump_scans.js
  */
 'use strict';
@@ -134,23 +136,107 @@ function formatFailed(entry) {
   return out.join('\n');
 }
 
-function formatScans(dataDir, count, idPrefix) {
+function timeOf(iso) {
+  const t = Date.parse(iso);
+  return isFinite(t) ? t : 0;
+}
+
+function idOf(entry) {
+  return String((entry && (entry.scanId || entry.id)) || '').toLowerCase();
+}
+
+/**
+ * One record per scanId (the latest if database.json holds repeats), sorted
+ * oldest → newest with scanId as the tie-break so the order is stable.
+ */
+function dedupeSorted(entries, timeKey) {
+  const byId = new Map();
+  entries.forEach(function (e) {
+    const id = idOf(e);
+    const prev = byId.get(id);
+    if (!prev || timeOf(e[timeKey]) >= timeOf(prev[timeKey])) byId.set(id, e);
+  });
+  return Array.from(byId.values()).sort(function (x, y) {
+    const d = timeOf(x[timeKey]) - timeOf(y[timeKey]);
+    return d !== 0 ? d : (idOf(x) < idOf(y) ? -1 : idOf(x) > idOf(y) ? 1 : 0);
+  });
+}
+
+/** Graded inventory records, deduped by scanId, oldest → newest. */
+function loadGradedItems(dataDir) {
   const db = readJson(path.join(dataDir, 'database.json'), { inventory: [] });
-  const graded = (db.inventory || []).map(function (item) {
-    return { time: Date.parse(item.createdAt) || 0, id: String(item.scanId || item.id || ''), text: function () { return formatGraded(item); } };
+  return dedupeSorted(db.inventory || [], 'createdAt');
+}
+
+function loadFailedEntries(dataDir) {
+  return dedupeSorted(readJsonl(path.join(dataDir, 'failed_scans.jsonl')), 'timestamp');
+}
+
+function formatScans(dataDir, count, idPrefix) {
+  const graded = loadGradedItems(dataDir).map(function (item) {
+    return { time: timeOf(item.createdAt), id: idOf(item), text: function () { return formatGraded(item); } };
   });
-  const failed = readJsonl(path.join(dataDir, 'failed_scans.jsonl')).map(function (entry) {
-    return { time: Date.parse(entry.timestamp) || 0, id: String(entry.scanId || ''), text: function () { return formatFailed(entry); } };
-  });
+  const gradedIds = new Set(graded.map(function (g) { return g.id; }));
+  const failed = loadFailedEntries(dataDir)
+    .filter(function (entry) { return !gradedIds.has(idOf(entry)); })
+    .map(function (entry) {
+      return { time: timeOf(entry.timestamp), id: idOf(entry), text: function () { return formatFailed(entry); } };
+    });
   let all = graded.concat(failed);
   if (idPrefix) {
-    const p = idPrefix.toLowerCase();
-    all = all.filter(function (e) { return e.id.toLowerCase().indexOf(p) === 0; });
+    const p = String(idPrefix).toLowerCase();
+    all = all.filter(function (e) { return e.id.indexOf(p) === 0; });
   }
-  all.sort(function (a, b) { return b.time - a.time; });
-  const picked = all.slice(0, count).reverse();
+  all.sort(function (a, b) { return a.time - b.time || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
+  const picked = all.slice(-count);
   if (!picked.length) return 'No scans found in ' + dataDir;
-  return picked.map(function (e) { return e.text(); }).join('\n\n');
+  const header = '# ' + picked.length + ' most recent of ' + all.length + ' scans, oldest first · ' + dataDir;
+  return header + '\n\n' + picked.map(function (e) { return e.text(); }).join('\n\n');
+}
+
+/**
+ * Where does each record live, and does database.json hold repeats?
+ * `ids` are scanId prefixes (8 hex chars from the phone are enough).
+ */
+function auditScans(dataDir, ids, dirs) {
+  const uploadsDir = (dirs && dirs.uploadsDir) || path.join(dataDir, '..', 'uploads');
+  const scansDir = (dirs && dirs.scansDir) || path.join(dataDir, '..', 'scans');
+  const db = readJson(path.join(dataDir, 'database.json'), null);
+  const inv = (db && db.inventory) || [];
+  const failed = readJsonl(path.join(dataDir, 'failed_scans.jsonl'));
+  const out = [];
+  out.push('database.json  ' + path.join(dataDir, 'database.json') + (db ? '' : '  (missing or unreadable)'));
+  const counts = new Map();
+  inv.forEach(function (e) { const id = idOf(e); counts.set(id, (counts.get(id) || 0) + 1); });
+  const dups = Array.from(counts.entries()).filter(function (kv) { return kv[1] > 1; });
+  out.push('records ' + inv.length + ' · unique scanIds ' + counts.size + ' · duplicated ' + dups.length +
+    ' · without scanId ' + inv.filter(function (e) { return !e.scanId; }).length);
+  dups.forEach(function (kv) {
+    const times = inv.filter(function (e) { return idOf(e) === kv[0]; }).map(function (e) { return e.createdAt; });
+    out.push('  duplicate ' + kv[0] + ' ×' + kv[1] + '  ' + times.join(', '));
+  });
+  let lastTime = Infinity;
+  let outOfOrder = 0;
+  inv.forEach(function (e) { const t = timeOf(e.createdAt); if (t > lastTime) outOfOrder += 1; lastTime = t; });
+  out.push('stored order: ' + (outOfOrder ? outOfOrder + ' record(s) newer than the one before them (file is not newest-first)' : 'newest-first as written'));
+  out.push('failed_scans.jsonl lines ' + failed.length);
+  (ids || []).forEach(function (raw) {
+    const p = String(raw).toLowerCase();
+    const inDb = inv.filter(function (e) { return idOf(e).indexOf(p) === 0; });
+    const inFailed = failed.filter(function (e) { return idOf(e).indexOf(p) === 0; });
+    const full = inDb.length ? idOf(inDb[0]) : inFailed.length ? idOf(inFailed[0]) : null;
+    const upload = inDb.length && inDb[0].imagePath ? path.join(uploadsDir, path.basename(inDb[0].imagePath)) : null;
+    out.push('');
+    out.push(String(raw).toUpperCase() + '  scanId ' + (full || 'not found'));
+    out.push('  database.json ×' + inDb.length + (inDb.length ? '  ' + inDb.map(function (e) { return e.createdAt; }).join(', ') : ''));
+    out.push('  failed_scans.jsonl ×' + inFailed.length);
+    out.push('  upload ' + (upload ? upload + (fs.existsSync(upload) ? ' (present)' : ' (MISSING)') : '—'));
+    const scanDirMatch = fs.existsSync(scansDir)
+      ? fs.readdirSync(scansDir).filter(function (d) { return d.toLowerCase().indexOf(p) === 0; })
+      : [];
+    out.push('  scans/ ' + (scanDirMatch.length ? scanDirMatch.join(', ') : '—'));
+  });
+  return out.join('\n');
 }
 
 /** Exact-id block for one scan (graded or card-not-found), or null. */
@@ -158,21 +244,25 @@ function formatScanById(dataDir, scanId) {
   const id = String(scanId || '').toLowerCase();
   if (!id) return null;
   const db = readJson(path.join(dataDir, 'database.json'), { inventory: [] });
-  const item = (db.inventory || []).find(function (it) {
-    return String(it.scanId || it.id || '').toLowerCase() === id;
-  });
+  const matches = dedupeSorted((db.inventory || []).filter(function (it) { return idOf(it) === id; }), 'createdAt');
+  const item = matches[matches.length - 1];
   if (item) return formatGraded(item);
-  const failed = readJsonl(path.join(dataDir, 'failed_scans.jsonl')).filter(function (e) {
-    return String(e.scanId || '').toLowerCase() === id;
-  });
+  const failed = loadFailedEntries(dataDir).filter(function (e) { return idOf(e) === id; });
   return failed.length ? formatFailed(failed[failed.length - 1]) : null;
 }
 
 if (require.main === module) {
-  const count = Number(process.argv[2]) > 0 ? Number(process.argv[2]) : 10;
-  const idPrefix = process.argv[3] || null;
   const dataDir = process.env.JUDGE_DATA_DIR || path.join(__dirname, '..', 'data');
-  console.log(formatScans(dataDir, count, idPrefix));
+  if (process.argv[2] === '--audit') {
+    console.log(auditScans(dataDir, process.argv.slice(3)));
+  } else {
+    const count = Number(process.argv[2]) > 0 ? Number(process.argv[2]) : 10;
+    const idPrefix = process.argv[3] || null;
+    console.log(formatScans(dataDir, count, idPrefix));
+  }
 }
 
-module.exports = { formatScans, formatScanById, formatGraded, formatFailed };
+module.exports = {
+  formatScans, formatScanById, formatGraded, formatFailed,
+  loadGradedItems, loadFailedEntries, auditScans
+};

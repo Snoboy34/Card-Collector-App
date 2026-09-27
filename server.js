@@ -196,15 +196,20 @@ function respondCardNotFound(res, args) {
  * @param {string} classification
  */
 function persistGradedItem(item, classification) {
+  // One record per scanId: a repeated upload replaces, never duplicates.
+  const sameScan = function (other) { return other && item.scanId && other.scanId === item.scanId; };
+  inventory = inventory.filter(function (other) { return !sameScan(other); });
   inventory.unshift(item);
 
   const db = loadDatabase();
   db.inventory = db.inventory || [];
+  const replacing = db.inventory.some(sameScan);
+  db.inventory = db.inventory.filter(function (other) { return !sameScan(other); });
   db.inventory.unshift(item);
   const key = (classification && typeof classification === 'string') ? classification.toUpperCase() : 'UNKNOWN';
   db.categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
   if (!Object.prototype.hasOwnProperty.call(db.categoryCounts, key)) db.categoryCounts[key] = 0;
-  db.categoryCounts[key] = (db.categoryCounts[key] || 0) + 1;
+  if (!replacing) db.categoryCounts[key] = (db.categoryCounts[key] || 0) + 1;
   saveDatabase(db);
 }
 

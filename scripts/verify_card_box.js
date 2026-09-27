@@ -413,9 +413,63 @@ async function run() {
       recentHtml.indexOf(okScanId.slice(0, 8).toUpperCase()) !== -1 &&
       recentHtml.indexOf(failScanId.slice(0, 8).toUpperCase()) !== -1);
     const recentText = await fetch(base + '/debug/recent?n=5&format=text');
-    assert('GET /debug/recent?format=text is plain text',
+    const recentBody = await recentText.text();
+    assert('GET /debug/recent?format=text is plain text with an order header',
       /text\/plain/.test(recentText.headers.get('content-type')) &&
-      (await recentText.text()).indexOf('── ') === 0);
+      recentBody.indexOf('# ') === 0 && recentBody.indexOf('oldest first') !== -1 &&
+      recentBody.indexOf('\n── ') !== -1, recentBody.slice(0, 120));
+    // A repeated upload of the same scanId replaces the record (no duplicate).
+    const again = await post({
+      scanId: okScanId,
+      alignmentCrop: 'true',
+      cardQuad: JSON.stringify(skewQuad),
+      quadImageWidth: String(PHOTO_W),
+      quadImageHeight: String(PHOTO_H)
+    }, skewJpeg);
+    assert('re-posting the same scanId → 200', again.status === 200, again.status);
+    assert('re-posting the same scanId keeps one inventory record', inventoryCount() === 1, inventoryCount());
+
+    // compare_finders: both finders re-grade the stored upload + quad, read-only.
+    const before = {};
+    [process.env.JUDGE_DATA_DIR, process.env.JUDGE_UPLOADS_DIR, process.env.JUDGE_SCANS_DIR].forEach(function (dir) {
+      (function walk(d) {
+        fs.readdirSync(d, { withFileTypes: true }).forEach(function (ent) {
+          const full = path.join(d, ent.name);
+          if (ent.isDirectory()) walk(full);
+          else before[full] = fs.statSync(full).mtimeMs;
+        });
+      })(dir);
+    });
+    const repoRoot = path.join(__dirname, '..');
+    const cmp = await require('./compare_finders').compareFinders({
+      currentDir: repoRoot, candidateDir: repoRoot,
+      dataDir: process.env.JUDGE_DATA_DIR, uploadsDir: process.env.JUDGE_UPLOADS_DIR,
+      n: 5, rulerLr: 50, rulerTb: 50
+    });
+    const one = cmp.results[0] || {};
+    assert('compare_finders re-grades the saved scan with both finders',
+      cmp.results.length === 1 && one.current && one.candidate && one.current.lr != null && one.candidate.lr != null,
+      cmp.text);
+    assert('compare_finders: same engine → same ratios', one.current && one.current.lr === one.candidate.lr &&
+      one.current.tb === one.candidate.tb);
+    assert('compare_finders prints a per-finder summary with ruler error',
+      /current\s+measured 1\/1/.test(cmp.text) && /candidate\s+measured 1\/1/.test(cmp.text) &&
+      cmp.text.indexOf('mean − ruler') !== -1, cmp.text);
+    const after = {};
+    Object.keys(before).forEach(function (f) { after[f] = fs.existsSync(f) ? fs.statSync(f).mtimeMs : null; });
+    let newFiles = 0;
+    [process.env.JUDGE_DATA_DIR, process.env.JUDGE_UPLOADS_DIR, process.env.JUDGE_SCANS_DIR].forEach(function (dir) {
+      (function walk(d) {
+        fs.readdirSync(d, { withFileTypes: true }).forEach(function (ent) {
+          const full = path.join(d, ent.name);
+          if (ent.isDirectory()) walk(full);
+          else if (!(full in before)) newFiles += 1;
+        });
+      })(dir);
+    });
+    assert('compare_finders writes nothing (no new or modified files)',
+      newFiles === 0 && Object.keys(before).every(function (f) { return after[f] === before[f]; }), { newFiles: newFiles });
+
     const local = require('../server').isLocalNetworkAddress;
     assert('local-network check allows loopback / RFC1918 / link-local',
       ['127.0.0.1', '::1', '::ffff:192.168.1.20', '10.0.0.4', '172.20.1.1', '169.254.3.3', 'fe80::1'].every(local));
@@ -424,6 +478,28 @@ async function run() {
   } finally {
     await new Promise(function (resolve) { server.close(resolve); });
   }
+
+  // Dump ordering / dedupe on a database.json that holds a repeat and is not newest-first.
+  const dumpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'judge-dump-'));
+  const mk = function (id, t) {
+    return { id: id, scanId: id, createdAt: '2026-09-27T' + t + '.000Z', gradingReport: {} };
+  };
+  fs.writeFileSync(path.join(dumpDir, 'database.json'), JSON.stringify({ inventory: [
+    mk('f23c098c-0000-4000-8000-000000000001', '14:06:33'),
+    mk('f075209a-0000-4000-8000-000000000002', '14:04:24'),
+    mk('27238ca2-0000-4000-8000-000000000003', '14:04:40'),
+    mk('f075209a-0000-4000-8000-000000000002', '14:04:24'),
+    mk('cd4a2598-0000-4000-8000-000000000004', '14:02:00')
+  ] }));
+  const dumpScans = require('./dump_scans');
+  const ordered = dumpScans.formatScans(dumpDir, 10).split('\n').filter(function (l) { return l.indexOf('── ') === 0; })
+    .map(function (l) { return l.slice(3, 11); });
+  assert('dump lists each scanId once', ordered.filter(function (id) { return id === 'F075209A'; }).length === 1, ordered);
+  assert('dump is strictly oldest → newest', ordered.join(',') === 'CD4A2598,F075209A,27238CA2,F23C098C', ordered);
+  const audit = dumpScans.auditScans(dumpDir, ['F075209A', 'BF3F8126']);
+  assert('audit reports the duplicate', audit.indexOf('duplicate f075209a') !== -1 && audit.indexOf('×2') !== -1, audit);
+  assert('audit reports the out-of-order file', audit.indexOf('not newest-first') !== -1, audit);
+  assert('audit says where a missing id is (nowhere)', /BF3F8126\s+scanId not found/.test(audit), audit);
 
   if (failures) {
     console.error(failures + ' card-box check(s) failed.');
