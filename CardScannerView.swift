@@ -1,14 +1,6 @@
 import SwiftUI
 import Combine
 
-// MARK: - Supported Multi-Phase Scanning Workflow States
-enum ScanningPhase: String, CaseIterable {
-    case frontCentering = "1. Front Centering"
-    case surfaceTiltSweep = "2. Surface Light Scan"
-    case cornerMacroCheck = "3. Corner Inspection"
-    case backPerimeter = "4. Back Border Check"
-}
-
 /// Fits neon + status + 44pt actions on SE (~455pt content) through 16 Pro.
 private struct CompactScanLayout {
     let cameraHeight: CGFloat
@@ -57,10 +49,7 @@ struct CardScannerView: View {
     // TheJudge is not used for saved grades. Live framing is CenteringAnalyzer;
     // Capture → /api/grade is the only ledger authority.
     private let centeringAnalyzer = CenteringAnalyzer()
-    private let defectAnalyzer = DefectAnalyzer()
 
-    @State private var currentPhase: ScanningPhase = .frontCentering
-    @State private var scanResult: CenteringResult?
     @State private var pendingServerLedger: ScanLedger?
     @State private var pendingScanId = ""
     @State private var isLoadingPrice = false
@@ -69,19 +58,6 @@ struct CardScannerView: View {
     @State private var cardMissStreak = 0
     @State private var automaticCardIdentifier = "unknown"
 
-    @State private var autoSurfaceScratches = 0
-    @State private var autoEdgeWhitening = 0
-    @State private var autoCornerFraying = 0
-
-    // NEW: tracks whether the multi-frame centering buffer has accumulated enough
-    // consistent samples yet. Drives the "Hold steady..." progress state and gates
-    // the advance button on the front-centering phase so users lock in an averaged,
-    // stable reading instead of whatever single noisy frame happened to land last.
-    @State private var isCenteringStable = false
-    @State private var centeringSampleCount = 0
-    // NEW: guards against triggering auto-advance more than once while multiple in-flight
-    // frame-processing Tasks might briefly all see "stable" before the phase change commits.
-    @State private var isAutoAdvancing = false
 
     @State private var showingActiveScanReport = false
     @State private var selectedVaultCard: SavedCard? = nil
@@ -139,39 +115,10 @@ struct CardScannerView: View {
         return portfolio.savedCards.filter { $0.targetBatchId == targetedId }
     }
 
-    // NEW: the advance button now requires a stable, averaged centering reading during
-    // the front-centering phase — not just raw card detection — before letting the user
-    // lock the phase in. Other phases only require card detection, same as before.
-    private var canAdvancePhase: Bool {
-        guard isCardDetected else { return false }
-        if currentPhase == .frontCentering {
-            return isCenteringStable
-        }
-        return true
-    }
-
-    // NEW: status line for the front-centering phase, reflecting level-gating.
-    private var statusTextForFrontCentering: String {
-        if isCenteringStable { return "Averaged Reading Locked (\(centeringSampleCount) samples)" }
-        if !calibrationEngine.isPerfectlyLevel { return "Level the Phone to Begin Averaging" }
-        return "Hold Steady — Averaging Frames..."
-    }
-
-    // NEW (fix): the center-guide box previously turned green on ANY card detection,
-    // regardless of whether the centering reading was actually good — meaning a badly
-    // off-center card would still show the same "all clear" green as a well-centered one.
-    // Now: outside the front-centering phase, green still just means "card detected"
-    // (there's no centering reading to verify there). During front-centering specifically,
-    // green requires BOTH a stable averaged reading AND that reading actually passing the
-    // PSA10 centering threshold — a detected-but-poorly-centered card now shows orange
-    // instead, so the color is telling the truth about alignment quality, not just presence.
+    // Live Vision only reports "card in view". Centering is measured on the
+    // server from the Capture still, so the guide no longer grades alignment.
     private var guideBoxColor: Color {
-        guard isCardDetected else { return Color.white.opacity(0.4) }
-        if currentPhase == .frontCentering {
-            let isVerifiedGoodCentering = isCenteringStable && (scanResult?.passesPSA10 ?? false)
-            return isVerifiedGoodCentering ? Color.green : Color.orange
-        }
-        return Color.green
+        isCardDetected ? Color.green : Color.white.opacity(0.4)
     }
 
     private var guideBoxLineWidth: CGFloat {
@@ -253,17 +200,6 @@ struct CardScannerView: View {
             .onChange(of: selectedCategory) {
                 resetCurrentScanState()
             }
-            HStack(spacing: 4) {
-                ForEach(ScanningPhase.allCases, id: \.self) { phase in
-                    Rectangle()
-                        .fill(phase == currentPhase ? Color.blue : (ScanningPhase.allCases.firstIndex(of: phase)! < ScanningPhase.allCases.firstIndex(of: currentPhase)! ? Color.green : Color.gray.opacity(0.3)))
-                        .frame(height: 4)
-                }
-            }
-            Text(currentPhase.rawValue)
-                .font(.system(.caption2, design: .monospaced))
-                .bold()
-                .foregroundColor(.secondary)
         }
     }
 
@@ -318,25 +254,15 @@ struct CardScannerView: View {
             .disabled(isRemoteGrading || sweepActive)
 
             if sweepActive {
-                Button("Skip sweep") {
+                Button("Submit without tilt frames") {
                     finishSweepAndUpload()
                 }
                 .font(.subheadline).bold()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(Color(.secondarySystemBackground))
                 .cornerRadius(8)
-            } else {
-                Button(action: { advanceInspectionFlowPipeline() }) {
-                    Text(currentPhase == .backPerimeter ? "Submit grade" : "Advance")
-                        .font(.subheadline).bold()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(canAdvancePhase ? Color.blue : Color.gray)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-                .disabled(!canAdvancePhase)
             }
         }
     }
@@ -353,7 +279,6 @@ struct CardScannerView: View {
                     .onChange(of: judgeServerURL) {
                         UserDefaults.standard.set(judgeServerURL, forKey: JudgeAPIClient.serverURLDefaultsKey)
                     }
-                phaseStatusExplainerLayout()
                 if let lastRemoteError {
                     Text(lastRemoteError)
                         .font(.caption2)
@@ -365,10 +290,6 @@ struct CardScannerView: View {
                         .font(.system(size: 10, design: .monospaced))
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(centeringAnalyzer.diagnosticsSummaryText)
-                    .font(.system(size: 8, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(8)
         }
@@ -395,10 +316,17 @@ struct CardScannerView: View {
                 levelBubbleOverlay
                     .position(x: neonCenter.x, y: neonCenter.y)
 
-                if currentPhase == .frontCentering && !isCenteringStable {
+                if sweepActive, let target = sweepTarget {
+                    VStack {
+                        sweepBanner(target: target)
+                            .padding(.top, 6)
+                            .padding(.horizontal, 8)
+                        Spacer()
+                    }
+                } else if !calibrationEngine.isPerfectlyLevel {
                     VStack {
                         Spacer()
-                        Text(calibrationEngine.isPerfectlyLevel ? "HOLD STEADY... \(centeringSampleCount)/4" : "LEVEL THE PHONE")
+                        Text("LEVEL THE PHONE")
                             .font(.caption2).bold()
                             .padding(6)
                             .background(Color.black.opacity(0.6))
@@ -432,9 +360,7 @@ struct CardScannerView: View {
             .stroke(Color.white.opacity(0.45), lineWidth: 1)
             RoundedRectangle(cornerRadius: 4)
                 .stroke(guideBoxColor, lineWidth: guideBoxLineWidth)
-            if let centeringRatio = scanResult, isCardDetected {
-                CenteringGuideOverlay(ratios: centeringRatio, size: CGSize(width: neon.w, height: neon.h))
-            } else {
+            if !isCardDetected {
                 VStack {
                     Image(systemName: "viewfinder").font(.title2)
                     Text("CARD INSIDE · BACKGROUND SHOWING").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4)
@@ -702,40 +628,6 @@ struct CardScannerView: View {
             }.navigationTitle("Live Deals")
         }
     }
-    private func phaseStatusExplainerLayout() -> some View {
-        switch currentPhase {
-        case .frontCentering:
-            return AnyView(HStack {
-                Text("Status:")
-                Spacer()
-                Text(statusTextForFrontCentering)
-                    .bold()
-                    .foregroundColor(isCenteringStable ? .green : (calibrationEngine.isPerfectlyLevel ? .orange : .red))
-            })
-        case .surfaceTiltSweep:
-            return AnyView(VStack(alignment: .leading, spacing: 4) {
-                HStack { Text("Gyro-Stabilization:"); Spacer(); Text("Active Sweep (Tilt Phone)").bold().foregroundColor(.purple) }
-                Divider()
-                HStack { Text("Isolated Clearcoat Scratches:"); Spacer(); Text(String(format: "%d defects", autoSurfaceScratches)).bold() }
-                HStack { Text("Isolated Surface Dimples:"); Spacer(); Text(String(format: "%d targets", autoEdgeWhitening)).bold() }
-            })
-        case .cornerMacroCheck:
-            return AnyView(HStack { Text("Macro Focal Pass:"); Spacer(); Text("Analyzing 4 Curved Corner Radii...").bold().foregroundColor(.orange) })
-        case .backPerimeter:
-            return AnyView(HStack { Text("Status:"); Spacer(); Text("Flipping Card: Scanning Back Edges...").bold().foregroundColor(.blue) })
-        }
-    }
-    private func advanceInspectionFlowPipeline() {
-        if currentPhase == .frontCentering {
-            currentPhase = .surfaceTiltSweep
-        } else if currentPhase == .surfaceTiltSweep {
-            currentPhase = .cornerMacroCheck
-        } else if currentPhase == .cornerMacroCheck {
-            currentPhase = .backPerimeter
-        } else if currentPhase == .backPerimeter {
-            executeGradingPipeline()
-        }
-    }
     // REMOVED: computeStrictGrade was dead code — never called anywhere in the pipeline.
     // TheJudge.evaluateMultiPhaseCondition already applies a real sub-grade ceiling rule
     // (final grade capped to the lowest sub-grade + 0.5), which is more correct than this
@@ -754,17 +646,24 @@ struct CardScannerView: View {
             Label("PDF", systemImage: "doc.badge.gearshape.fill").font(.system(size: 9, weight: .bold))
         }
     }
-    @ViewBuilder
-    private func CenteringGuideOverlay(ratios: CenteringResult, size: CGSize = CGSize(width: 170, height: 210)) -> some View {
-        ZStack {
-            Path { $0.move(to: CGPoint(x: 0, y: size.height / 2)); $0.addLine(to: CGPoint(x: size.width, y: size.height / 2)) }.stroke(Color.blue.opacity(0.3), lineWidth: 1)
-            Path { $0.move(to: CGPoint(x: size.width / 2, y: 0)); $0.addLine(to: CGPoint(x: size.width / 2, y: size.height)) }.stroke(Color.blue.opacity(0.3), lineWidth: 1)
-            VStack {
-                HStack { Text(String(format: "L:%.0f%%", ratios.leftRightRatio.left)); Spacer(); Text(String(format: "R:%.0f%%", ratios.leftRightRatio.right)) }
-                Spacer()
-                HStack { Text(String(format: "T:%.0f%%", ratios.topBottomRatio.top)); Spacer(); Text(String(format: "B:%.0f%%", ratios.topBottomRatio.bottom)) }
-            }.font(.system(size: 9, weight: .bold)).foregroundColor(.green).padding(6)
-        }.frame(width: size.width, height: size.height)
+    private func sweepBanner(target: CardSweepBins.Bin) -> some View {
+        VStack(spacing: 2) {
+            Text("TILT \(sweepGrabbed.count)/5 — \(target.prompt)")
+                .font(.caption).bold()
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(String(
+                format: "pitch %+.1f° → %+.0f°   roll %+.1f° → %+.0f°",
+                calibrationEngine.currentPitch, target.targetPitch,
+                calibrationEngine.currentRoll, target.targetRoll
+            ))
+            .font(.system(.caption2, design: .monospaced))
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity)
+        .background(Color.yellow.opacity(0.92))
+        .foregroundColor(.black)
+        .cornerRadius(8)
     }
 
     private func requestNativeStillGrade() {
@@ -959,48 +858,20 @@ struct CardScannerView: View {
             }
         }
     }
-    private func executeGradingPipeline() {
-        if pendingServerLedger != nil {
-            showingActiveScanReport = true
-        } else {
-            lastRemoteError = "No server grade yet. Use Capture to send this card to /api/grade."
-        }
-    }
     private func commitAndResetScan(ledger: ScanLedger) {
         portfolio.appendCard(from: ledger)
         resetCurrentScanState()
     }
     private func resetCurrentScanState() {
-        scanResult = nil; pendingServerLedger = nil; pendingScanId = ""; isSaveConfirmed = false; isCardDetected = false; cardMissStreak = 0
-        autoSurfaceScratches = 0; autoEdgeWhitening = 0; autoCornerFraying = 0
-        // NEW: clear the multi-frame centering buffer so a new card (or a new scan of the
-        // same card) starts averaging fresh rather than blending in stale samples.
-        centeringAnalyzer.resetSampleBuffer()
-        isCenteringStable = false
-        centeringSampleCount = 0
-        isAutoAdvancing = false
-        currentPhase = .frontCentering
+        pendingServerLedger = nil; pendingScanId = ""; isSaveConfirmed = false; isCardDetected = false; cardMissStreak = 0
         automaticCardIdentifier = "unknown"
     }
+    // Live preview only answers "is a card in view?" and hunts a serial like
+    // 123/250. Nothing here is graded or saved; Capture → /api/grade is.
     private func processLiveCameraFrame(_ imageFrame: CGImage) {
         guard !isLoadingPrice && !isSaveConfirmed else { return }
         let targetNow = Date()
         guard targetNow.timeIntervalSince(lastProcessedFrameTime) >= 0.3 else { return }
-        // NEW: LiveCameraView's coordinator dispatches onFrameCaptured via
-        // DispatchQueue.main.async, so processLiveCameraFrame itself always runs on the
-        // main thread — meaning it's safe to read calibrationEngine.isPerfectlyLevel here,
-        // before handing off to the background Task below. FIXED: this is what makes the
-        // level bubble actually affect the scan instead of being purely cosmetic — a frame
-        // captured while the phone is tilted is excluded from the centering average.
-        let isDeviceLevelAtCapture = calibrationEngine.isPerfectlyLevel
-        // FIXED (major bug): scanResult was being overwritten by every frame in every phase,
-        // not just front-centering. By the time grading ran at the end of phase 4, the grade
-        // was computed from whatever the camera saw in the LAST frame of the back-perimeter
-        // check — often mid-motion from tilting/flipping the card for the surface and corner
-        // sweeps — not the carefully averaged phase-1 reading. Centering must be measured and
-        // locked during phase 1 only; capturing the phase here (on the main thread, where
-        // currentPhase is safe to read) lets the background Task below gate on it.
-        let isFrontCenteringPhaseAtCapture = (currentPhase == .frontCentering)
         Task(priority: .userInitiated) {
             await MainActor.run { self.lastProcessedFrameTime = targetNow }
             centeringAnalyzer.detectCardRectangle(in: imageFrame) { recognizedObservation in
@@ -1009,12 +880,8 @@ struct CardScannerView: View {
                         self.cardMissStreak += 1
                         guard self.cardMissStreak >= 3 else { return }
                         if self.isCardDetected { self.isCardDetected = false }
-                        self.centeringAnalyzer.resetSampleBuffer()
-                        self.isCenteringStable = false
-                        self.centeringSampleCount = 0
                     }; return
                 }
-                let automatedDefects = defectAnalyzer.analyzeCardSurface(from: imageFrame)
                 self.centeringAnalyzer.extractCardIdentifierText(from: imageFrame, cardBoundingBox: cardRect) { foundTextString in
                     Task { @MainActor in
                         if let serialCode = foundTextString, !serialCode.isEmpty {
@@ -1024,46 +891,9 @@ struct CardScannerView: View {
                         }
                     }
                 }
-                // FIXED: only measure/average centering while still on the front-centering
-                // phase. Once locked and advanced past phase 1, scanResult is frozen — later
-                // phases (surface sweep, corner check, back perimeter) intentionally involve
-                // moving/tilting the card and must never overwrite the reading that grading
-                // actually uses.
-                let computedCentering: CenteringResult? = (isDeviceLevelAtCapture && isFrontCenteringPhaseAtCapture)
-                ? self.centeringAnalyzer.analyzeCenteringAveraged(from: cardRect, in: imageFrame)
-                : nil
                 Task { @MainActor in
                     self.cardMissStreak = 0
                     if !self.isCardDetected { self.isCardDetected = true }
-                    if let computedCentering = computedCentering, currentPhase == .frontCentering {
-                        self.scanResult = computedCentering
-                        self.isCenteringStable = self.centeringAnalyzer.isStableReading
-                        self.centeringSampleCount = self.centeringAnalyzer.currentSampleCount
-                    }
-                    // FIXED: these were placeholder `imageFrame.width % N` computations that
-                    // had nothing to do with the actual card in frame. automatedDefects is
-                    // already computed above from a real DefectAnalyzer pass over this exact
-                    // frame — surfaceScratchCount and edgeWhiteningSeverity were already being
-                    // used correctly elsewhere in this function; edgeWhiteningSeverity and the
-                    // new cornerFrayingSeverity now feed these two phases the same way.
-                    if currentPhase == .surfaceTiltSweep {
-                        self.autoSurfaceScratches = automatedDefects.surfaceScratchCount
-                        self.autoEdgeWhitening = automatedDefects.edgeWhiteningSeverity
-                    } else if currentPhase == .cornerMacroCheck {
-                        self.autoCornerFraying = automatedDefects.cornerFrayingSeverity
-                    } else if currentPhase == .backPerimeter {
-                        self.autoEdgeWhitening = automatedDefects.edgeWhiteningSeverity
-                    }
-                    // RE-ENABLED: auto-advance was temporarily disabled to allow screenshotting
-                    // the locked diagnostic panel while chasing the axis-swap bug. The manual
-                    // "Lock & Advance" button remains as a fallback either way (canAdvancePhase
-                    // already requires isCenteringStable). isAutoAdvancing still guards against
-                    // multiple in-flight frame-processing Tasks all seeing "stable" at once and
-                    // firing the phase change more than once.
-                    if currentPhase == .frontCentering && self.isCenteringStable && !self.isAutoAdvancing {
-                        self.isAutoAdvancing = true
-                        self.advanceInspectionFlowPipeline()
-                    }
                 }
             }
         }

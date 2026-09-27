@@ -376,6 +376,11 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             let source = (cardDetection["quadSource"] as? String) ?? "none"
             let pct = doubleValue(cardDetection["cardBoxPctOfPhoto"]).map { String(format: "%.1f%% of photo", $0) } ?? "—"
             lines.append("quadSource  \(source) · card box \(pct)")
+            let upload = [doubleValue(cardDetection["photoWidth"]), doubleValue(cardDetection["photoHeight"])]
+            let warp = [doubleValue(cardDetection["warpWidth"]), doubleValue(cardDetection["warpHeight"])]
+            if let uw = upload[0], let uh = upload[1], let ww = warp[0], let wh = warp[1] {
+                lines.append(String(format: "upload %.0f×%.0f · graded on %.0f×%.0f warp", uw, uh, ww, wh))
+            }
         }
         if lines.isEmpty { lines.append(raw) }
 
