@@ -40,7 +40,11 @@ async function gradeCard(opts) {
     }
   }
   const pad = 80;
-  const png = await sharp(d, { raw: { width: W, height: H, channels: 3 } })
+  let raster = sharp(d, { raw: { width: W, height: H, channels: 3 } });
+  if (opts.soften) {
+    raster = sharp(await raster.blur(opts.soften).raw().toBuffer(), { raw: { width: W, height: H, channels: 3 } });
+  }
+  const png = await raster
     .extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 236, g: 72, b: 153 } })
     .jpeg({ quality: 92 }).toBuffer();
   const quad = { tl: [pad, pad], tr: [pad + W - 1, pad], br: [pad + W - 1, pad + H - 1], bl: [pad, pad + H - 1] };
@@ -138,6 +142,15 @@ async function run() {
   const deep = await gradeCard({ borders: { top: 130 } });
   assert('top step at 130px (>108px cap) is not accepted as a border',
     deep.widths.top == null && deep.report.printCenteringDetected === false, deep.widths);
+
+  // Soft edges (focus / motion blur / JPEG): the half-step crossing falls
+  // after the trigger pixel. Widths must not read short.
+  const soft = await gradeCard({ soften: 2.5 });
+  assert('soft edges: T ≈ 30, B ≈ 35, L ≈ 40, R ≈ 30 (not short)',
+    near(soft.widths.top, 30, 1) && near(soft.widths.bottom, 35, 1) &&
+    near(soft.widths.left, 40, 1) && near(soft.widths.right, 30, 1), soft.widths);
+  assert('soft edges: T/B ≈ 46.2 and L/R ≈ 57.1', soft.tb && near(soft.tb.top, 46.2, 0.7) &&
+    soft.lr && near(soft.lr.left, 57.1, 0.7), { tb: soft.tb, lr: soft.lr });
 
   // 9. Pattern A (5-scan run, e.g. 198A60F1 top @375/@429/@483 at 3.0/4.0/8.3px,
   //    right @375 at 3–4px on every scan): a darker sliver at the cut, left by a

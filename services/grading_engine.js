@@ -718,10 +718,24 @@ function detectBorderStep(profile, trigger, maxDepth) {
       if ((profile[i + k] - baseline) * sign <= trigger) { sustained = false; break; }
     }
     if (!sustained) continue;
-    const plateau = (profile[i + 1] + profile[i + 2] + profile[i + 3]) / 3;
+    // Plateau = where the step has finished (profile flattens), not the
+    // pixels right after the trigger, which are still on the blurred slope
+    // and pull the half-step crossing toward the cut.
+    const flatStep = Math.max(1, trigger / 4);
+    const flatLimit = Math.min(profile.length - 3, i + 4 * EDGE_SUSTAIN_PX);
+    let k0 = i;
+    while (k0 < flatLimit && Math.abs(profile[k0 + 1] - profile[k0]) > flatStep) k0 += 1;
+    const plateau = (profile[k0] + profile[k0 + 1] + profile[k0 + 2]) / 3;
     const half = (baseline + plateau) / 2;
+    // The trigger fires on the slope; the half-level crossing can be before
+    // it (sharp edge) or after it (soft edge). Find the first sample on the
+    // plateau side of `half`, then interpolate against the one before it.
     let j = i;
-    while (j > b0 && (profile[j - 1] - half) * sign > 0) j -= 1;
+    if ((profile[j] - half) * sign > 0) {
+      while (j > b0 + 1 && (profile[j - 1] - half) * sign > 0) j -= 1;
+    } else {
+      while (j < k0 + 2 && (profile[j] - half) * sign <= 0) j += 1;
+    }
     const before = profile[j - 1];
     const after = profile[j];
     const step = after - before;
