@@ -42,6 +42,7 @@ const classifier = require('./services/classifier_engine');
 const wallet = require('./services/wallet_engine');
 const lanHttps = require('./scripts/lan_https');
 const scanLevel = require('./public/scan_level');
+const dumpScans = require('./scripts/dump_scans');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -510,6 +511,85 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
   }
 });
 
+/* =========================
+   Debug views (read-only, local network only)
+   ========================= */
+
+/** Loopback, RFC1918, link-local, or IPv6 ULA/link-local peer. Uses the socket
+ *  address, not X-Forwarded-For, so a proxy header cannot widen access. */
+function isLocalNetworkAddress(raw) {
+  let ip = String(raw || '').toLowerCase();
+  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+  if (ip === '::1' || ip.startsWith('127.')) return true;
+  if (ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('169.254.')) return true;
+  const m = /^172\.(\d+)\./.exec(ip);
+  if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return true;
+  if (ip.startsWith('fc') || ip.startsWith('fd') || ip.startsWith('fe80:')) return true;
+  return false;
+}
+
+function localNetworkOnly(req, res, next) {
+  if (isLocalNetworkAddress(req.socket && req.socket.remoteAddress)) return next();
+  return res.status(403).type('text/plain').send('Debug views are local-network only.');
+}
+
+const DEBUG_ARTIFACT_FILES = { 'oriented.jpg': 'image/jpeg', 'debug.json': 'application/json' };
+
+app.get('/scans/:scanId/:file', localNetworkOnly, (req, res) => {
+  const scanId = grading.normalizeScanId(req.params.scanId);
+  const type = DEBUG_ARTIFACT_FILES[req.params.file];
+  if (!scanId || !type) return res.status(404).type('text/plain').send('not found');
+  const filePath = path.join(SCANS_DIR, scanId, req.params.file);
+  if (!fs.existsSync(filePath)) return res.status(404).type('text/plain').send('not found');
+  res.type(type);
+  return res.sendFile(filePath);
+});
+
+app.get('/api/debug/scan/:scanId', localNetworkOnly, (req, res) => {
+  const scanId = grading.normalizeScanId(req.params.scanId);
+  const text = scanId ? dumpScans.formatScanById(DATA_DIR, scanId) : null;
+  if (!text) return res.status(404).json({ ok: false, error: 'scan not found' });
+  return res.json({ ok: true, scanId: scanId, text: text });
+});
+
+function escapeHtmlText(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+app.get('/debug/recent', localNetworkOnly, (req, res) => {
+  const n = Math.max(1, Math.min(50, Number(req.query.n) || 5));
+  const text = dumpScans.formatScans(DATA_DIR, n);
+  if (req.query.format === 'text') return res.type('text/plain').send(text);
+  return res.type('html').send(`<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Judge — last ${n} scans</title>
+<style>
+  body { background:#0b1220; color:#e6edf3; font-family:-apple-system,system-ui,sans-serif; margin:12px; }
+  pre { white-space:pre-wrap; word-break:break-word; font:12px/1.4 ui-monospace,Menlo,monospace; background:#050a14; padding:10px; border-radius:8px; }
+  button { font-size:16px; padding:10px 14px; border-radius:8px; border:0; background:#00d4ff; color:#001; }
+  a { color:#7dd3fc; }
+</style></head><body>
+<p>Last ${n} scans · <a href="?n=5">5</a> · <a href="?n=10">10</a> · <a href="?n=25">25</a> · <a href="?n=${n}&format=text">plain text</a></p>
+<p><button id="copy">Copy all</button> <span id="status"></span></p>
+<pre id="dump">${escapeHtmlText(text)}</pre>
+<script>
+document.getElementById('copy').addEventListener('click', function () {
+  var text = document.getElementById('dump').textContent;
+  var status = document.getElementById('status');
+  function fallback() {
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    status.textContent = ok ? 'Copied.' : 'Select the text below and copy.';
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(function () { status.textContent = 'Copied.'; }, fallback);
+  } else { fallback(); }
+});
+</script></body></html>`);
+});
+
 /* Serve uploaded images statically. In production, serve from secure storage/CDN. */
 app.use('/uploads', express.static(uploadsDir));
 
@@ -580,4 +660,4 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { app, DB_PATH, FAILED_SCANS_PATH, SCANS_DIR, ensureDatabaseFile };
+module.exports = { app, DB_PATH, FAILED_SCANS_PATH, SCANS_DIR, ensureDatabaseFile, isLocalNetworkAddress };

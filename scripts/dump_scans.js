@@ -150,6 +150,21 @@ function formatScans(dataDir, count, idPrefix) {
   return picked.map(function (e) { return e.text(); }).join('\n\n');
 }
 
+/** Exact-id block for one scan (graded or card-not-found), or null. */
+function formatScanById(dataDir, scanId) {
+  const id = String(scanId || '').toLowerCase();
+  if (!id) return null;
+  const db = readJson(path.join(dataDir, 'database.json'), { inventory: [] });
+  const item = (db.inventory || []).find(function (it) {
+    return String(it.scanId || it.id || '').toLowerCase() === id;
+  });
+  if (item) return formatGraded(item);
+  const failed = readJsonl(path.join(dataDir, 'failed_scans.jsonl')).filter(function (e) {
+    return String(e.scanId || '').toLowerCase() === id;
+  });
+  return failed.length ? formatFailed(failed[failed.length - 1]) : null;
+}
+
 if (require.main === module) {
   const count = Number(process.argv[2]) > 0 ? Number(process.argv[2]) : 10;
   const idPrefix = process.argv[3] || null;
@@ -157,4 +172,4 @@ if (require.main === module) {
   console.log(formatScans(dataDir, count, idPrefix));
 }
 
-module.exports = { formatScans, formatGraded, formatFailed };
+module.exports = { formatScans, formatScanById, formatGraded, formatFailed };
