@@ -4,6 +4,28 @@ import Foundation
 /// Base URL is user-configured (LAN IP changes). Self-signed LAN certs are
 /// accepted only for loopback / RFC1918 / `.local` hosts — the same trust
 /// decision Safari already requires on `npm run start:lan`.
+/// Test-deck card IDs (TD-01…TD-050), matching services/test_deck.js.
+enum JudgeTestDeck {
+    static let deckIdDefaultsKey = "judgeDeckId"
+
+    static func normalizedDeckId(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard trimmed.hasPrefix("TD-") else { return nil }
+        let digits = trimmed.dropFirst(3)
+        guard (2...3).contains(digits.count), digits.allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return trimmed
+    }
+
+    /// TD-07 → TD-08, keeping the digit width (TD-099 → TD-100).
+    static func nextDeckId(after id: String) -> String {
+        let digits = id.dropFirst(3)
+        guard let number = Int(digits) else { return id }
+        let next = String(number + 1)
+        let padding = String(repeating: "0", count: max(0, digits.count - next.count))
+        return "TD-" + padding + next
+    }
+}
+
 final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate {
     static let shared = JudgeAPIClient()
     static let serverURLDefaultsKey = "judgeServerBaseURL"
@@ -117,6 +139,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         ocrLines: [String] = [],
         sweepFrames: [SweepFrame] = [],
         cardQuad: CardQuad? = nil,
+        deckId: String? = nil,
+        preSubmission: Bool = false,
         scanId: String
     ) async throws -> RemoteReport {
         guard let root = Self.normalizedBaseURL(baseURL) else {
@@ -137,6 +161,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             ocrLines: ocrLines,
             sweepFrames: sweepFrames,
             cardQuad: cardQuad,
+            deckId: deckId,
+            preSubmission: preSubmission,
             scanId: scanId
         )
 
@@ -230,6 +256,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         ocrLines: [String],
         sweepFrames: [SweepFrame],
         cardQuad: CardQuad?,
+        deckId: String?,
+        preSubmission: Bool,
         scanId: String
     ) -> Data {
         var body = Data()
@@ -245,6 +273,12 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         body.append("\r\n".data(using: .utf8)!)
         appendField("name", name)
         appendField("scanId", scanId)
+        if let deckId, !deckId.isEmpty {
+            appendField("deckId", deckId)
+        }
+        if preSubmission {
+            appendField("preSubmission", "true")
+        }
         appendField("alignmentCrop", "true")
         appendField("debug", "true")
         appendField("captureMode", sweepFrames.isEmpty ? "native-still" : "native-sweep")
