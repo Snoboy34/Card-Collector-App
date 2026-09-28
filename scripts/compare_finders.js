@@ -195,4 +195,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { compareFinders };
+module.exports = { compareFinders, loadEngine, quadOptions, gradeQuietly, summarizeRun };

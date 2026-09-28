@@ -11,6 +11,7 @@
     "test:cardbox": "node scripts/verify_card_box.js",
     "test:topedge": "node scripts/verify_top_edge.js",
     "test:precision": "node scripts/verify_centering_precision.js",
+    "test:edgebias": "node scripts/verify_edge_bias.js",
     "dump:scans": "node scripts/dump_scans.js",
     "lint": "echo \"No linter configured\""
   },
