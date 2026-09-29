@@ -10,6 +10,8 @@
  *      card edge is at the photo top: rotation test reports photo-frame
  *      T−B ≈ −0.2 mm and card-frame T−B ≈ −0.5 mm.
  *   D. bench_centering runs and reports a native warp > 900 tall.
+ *   E. refine_probe on a scan whose detector quad is 0.5 mm short at top and
+ *      bottom: refine ≈ −5 px both, one dominant step, widths unchanged.
  * Run: node scripts/verify_edge_bias.js
  */
 'use strict';
@@ -21,6 +23,7 @@ const sharp = require('sharp');
 const cq = require('../services/card_quad');
 const { edgeBias, impliedShift } = require('./edge_bias');
 const { benchCentering } = require('./bench_centering');
+const { refineProbe } = require('./refine_probe');
 
 const CARD_W_MM = 63.5;
 const CARD_H_MM = 88.9;
@@ -90,7 +93,12 @@ async function capture(i, opts) {
   }
   const jpeg = await sharp(noisy, { raw: { width: PHOTO_W, height: PHOTO_H, channels: 3 } }).jpeg({ quality: 90 }).toBuffer();
   const off = function (p) { return [p[0] + (r() - 0.5) * 4, p[1] + (r() - 0.5) * 4]; };
-  return { jpeg: jpeg, quad: { tl: off(corners[0]), tr: off(corners[1]), br: off(corners[2]), bl: off(corners[3]) } };
+  const inset = (opts.quadInsetMm || 0) * hPx / CARD_H_MM;
+  const down = function (p, k) { return [p[0], p[1] + k * inset]; };
+  return {
+    jpeg: jpeg,
+    quad: { tl: down(off(corners[0]), 1), tr: down(off(corners[1]), 1), br: down(off(corners[2]), -1), bl: down(off(corners[3]), -1) }
+  };
 }
 
 async function writeDeck(name, specs) {
@@ -167,7 +175,24 @@ async function run() {
     });
   }), bench.rows);
 
-  [deckA, deckB, deckC].forEach(function (d) { fs.rmSync(d, { recursive: true, force: true }); });
+  const deckE = await writeDeck('e', repeat(3, {}).concat([{ quadInsetMm: 0.5 }]));
+  const probe = await refineProbe({ appDir: deckE, id: 'u0000003', n: 4 });
+  console.log(probe.text);
+  const shift = probe.detection.edgeRefinementPx;
+  assert('E: short detector quad → refine T/B ≈ −5 px', Math.abs(shift.top + 5) < 1.5 && Math.abs(shift.bottom + 5) < 1.5, shift);
+  assert('E: one dominant step per edge (runner-up < 60%)', ['top', 'bottom'].every(function (k) {
+    const pk = probe.profiles[k].peaks;
+    return pk.length < 2 || Math.abs(pk[1].size / pk[0].size) < 0.6;
+  }), probe.profiles.top.peaks);
+  assert('E: chosen top step sits where refine moved the cut', Math.abs(probe.profiles.top.peaks[0].i + 1 -
+    probe.profiles.top.expand - shift.top * probe.detection.centeringWarp.scale) < 2 * probe.detection.centeringWarp.scale,
+  { peak: probe.profiles.top.peaks[0], shift: shift.top });
+  assert('E: widths match the other scans within 0.05 mm', ['left', 'right', 'top', 'bottom'].every(function (k) {
+    const c = probe.comparison[k];
+    return Math.abs(c.mm - c.othersMm.mean) < 0.05;
+  }), probe.comparison);
+
+  [deckA, deckB, deckC, deckE].forEach(function (d) { fs.rmSync(d, { recursive: true, force: true }); });
   if (failures) { console.error(failures + ' edge-bias check(s) failed.'); process.exit(1); }
   console.log('All edge-bias checks passed.');
 }

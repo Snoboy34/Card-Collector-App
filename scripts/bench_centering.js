@@ -184,4 +184,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { benchCentering };
+module.exports = { benchCentering, decodeLikeEngine };
