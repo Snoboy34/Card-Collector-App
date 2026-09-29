@@ -15,6 +15,7 @@
     "test:cutconf": "node scripts/verify_cut_confidence.js",
     "test:gate": "node scripts/verify_gate.js",
     "test:regrade": "node scripts/verify_regrade.js",
+    "test:metadata": "node scripts/verify_scan_metadata.js",
     "regrade": "node scripts/regrade.js",
     "gate": "node scripts/gate.js",
     "test:deck": "node scripts/verify_test_deck.js",

@@ -44,6 +44,7 @@ const lanHttps = require('./scripts/lan_https');
 const scanLevel = require('./public/scan_level');
 const dumpScans = require('./scripts/dump_scans');
 const testDeck = require('./services/test_deck');
+const scanMetadata = require('./services/scan_metadata');
 const deckReport = require('./scripts/deck_report');
 const childProcess = require('child_process');
 
@@ -182,6 +183,8 @@ function respondCardNotFound(res, args) {
     imagePath: args.imagePath || null,
     debugDir: report.debugArtifacts && report.debugArtifacts.dir ? report.debugArtifacts.dir : null,
     captureTilt: report.captureTilt || null,
+    captureMetadata: args.captureMetadata || null,
+    serverMetadata: args.serverMetadata || null,
     diagnostics: report.cardDetection || null
   });
   console.log('[grade] scanId=' + args.scanId + ' card not found: ' + reason);
@@ -241,6 +244,19 @@ const ENGINE = (function () {
   }
   return { version: grading.ENGINE_VERSION, commit: commit };
 })();
+
+/** App-reported + server-observed metadata for one upload (recorded, never graded). */
+async function scanMetadataFor(req, args) {
+  const parsed = scanMetadata.parseCaptureMetadata(req.body);
+  if (parsed.error) console.warn('[metadata] ' + parsed.error);
+  const serverMetadata = await scanMetadata.buildServerMetadata(Object.assign({}, args, {
+    engine: ENGINE,
+    userAgent: req.get('user-agent'),
+    localNetwork: isLocalNetworkAddress(req.socket && req.socket.remoteAddress),
+    captureMetadataError: parsed.error
+  }));
+  return { captureMetadata: parsed.metadata, serverMetadata: serverMetadata };
+}
 
 /** Deck / pre-submission fields sent with a Capture. */
 function captureLabelFields(body) {
@@ -421,6 +437,9 @@ app.get('/api/stats', (req, res) => {
  *   name      ignored for identity (title is Unidentified until family match)
  *   cardType  optional SPORTS | TCG (reserved for Phase 3 corner templates)
  *   debug     optional "true" to attach metrology dumps
+ *   captureMetadata optional JSON {schema, app, device, camera, capture} from
+ *             the native app; stored as item.captureMetadata (never graded).
+ *             The server adds item.serverMetadata itself.
  *
  * Response: { ok: true, item } where item.gradingReport is the Judge payload
  * from services/grading_engine.js (10-point finalScore + 0–100 projections).
@@ -435,6 +454,7 @@ const gradeUpload = memoryUpload.fields([
 
 app.post('/api/grade', gradeUpload, async (req, res) => {
   try {
+    const receivedAt = new Date().toISOString();
     const imageFile = req.files && req.files.image && req.files.image[0];
     if (!imageFile || !imageFile.buffer) return res.status(400).json({ error: 'image buffer required' });
     const opts = parseGradingOptions(req.body);
@@ -453,12 +473,17 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
     const classification = await classifier.classifyBuffer(imageFile.buffer, { filename: orig });
 
     // 2) Strict 4-phase Judge pipeline (centering / surface / edges / corners + 0.5 ceiling)
+    const gradeStart = Date.now();
     const report = await grading.gradeBuffer(imageFile.buffer, opts);
+    const meta = await scanMetadataFor(req, {
+      buffer: imageFile.buffer, file: imageFile, route: '/api/grade', receivedAt: receivedAt,
+      gradeMs: Date.now() - gradeStart, sweepFrames: ((req.files && req.files.sweep) || []).length
+    });
     report.scanId = scanId;
     if (report.cardNotFound) {
-      return respondCardNotFound(res, {
+      return respondCardNotFound(res, Object.assign({
         report: report, scanId: scanId, route: '/api/grade', imagePath: `/uploads/${filename}`, body: req.body
-      });
+      }, meta));
     }
 
     const sweepFiles = (req.files && req.files.sweep) || [];
@@ -489,6 +514,8 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
       category: classification,
       gradingReport: report,
       engine: ENGINE,
+      captureMetadata: meta.captureMetadata,
+      serverMetadata: meta.serverMetadata,
       createdAt: new Date().toISOString()
     };
 
@@ -511,6 +538,7 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
  */
 app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
   try {
+    const receivedAt = new Date().toISOString();
     if (!req.file) return res.status(400).json({ error: 'image file is required' });
     const opts = parseGradingOptions(req.body);
     const scanId = resolveScanId(req.body);
@@ -519,13 +547,17 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     const buffer = await fs.promises.readFile(req.file.path);
     const orig = req.file.originalname || path.basename(req.file.path);
     const classification = await classifier.classifyBuffer(buffer, { filename: orig });
+    const gradeStart = Date.now();
     const report = await grading.gradeBuffer(buffer, opts);
+    const meta = await scanMetadataFor(req, {
+      buffer: buffer, file: req.file, route: '/api/grade/upload', receivedAt: receivedAt, gradeMs: Date.now() - gradeStart
+    });
     report.scanId = scanId;
     if (report.cardNotFound) {
-      return respondCardNotFound(res, {
+      return respondCardNotFound(res, Object.assign({
         report: report, scanId: scanId, route: '/api/grade/upload',
         imagePath: `/uploads/${path.basename(req.file.path)}`, body: req.body
-      });
+      }, meta));
     }
     await grading.applySurfaceSweep(report, [], {
       alignmentCrop: Boolean(opts.alignmentCrop),
@@ -544,6 +576,8 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
       category: classification,
       gradingReport: report,
       engine: ENGINE,
+      captureMetadata: meta.captureMetadata,
+      serverMetadata: meta.serverMetadata,
       createdAt: new Date().toISOString()
     };
 

@@ -99,6 +99,37 @@ function detectionBlock(det) {
   return out;
 }
 
+function metadataLines(cap, srv) {
+  const out = [];
+  if (cap) {
+    const d = cap.device || {};
+    const a = cap.app || {};
+    const c = cap.camera || {};
+    const k = cap.capture || {};
+    const dims = function (w, h) { return w && h ? w + '×' + h : '—'; };
+    const shutter = typeof c.exposureDurationS === 'number' && c.exposureDurationS > 0
+      ? (c.exposureDurationS < 1 ? '1/' + Math.round(1 / c.exposureDurationS) : c.exposureDurationS.toFixed(1)) + 's'
+      : null;
+    out.push('capture ' + (d.model || '—') + ' ' + (d.systemName || '') + ' ' + (d.systemVersion || '') +
+      '  app ' + (a.version || '—') + (a.build ? ' (' + a.build + ')' : '') +
+      '  photo ' + dims(c.photoWidth, c.photoHeight) + ' of max ' + dims(c.maxPhotoWidth, c.maxPhotoHeight) +
+      ' (' + (c.photoSizeSetting || '—') + ', ' + (c.codec || '—') + ')' +
+      (c.iso != null ? '  ISO ' + Math.round(c.iso) : '') + (shutter ? ' ' + shutter : '') +
+      (c.zoomFactor != null ? '  zoom ' + num(c.zoomFactor, 2) : '') + (k.mode ? '  ' + k.mode : ''));
+  }
+  if (srv) {
+    const img = srv.image || {};
+    out.push('server  ' + (srv.uploadBytes != null ? (srv.uploadBytes / 1e6).toFixed(2) + ' MB' : '—') +
+      ' ' + (img.format || '?') + ' ' + (img.width && img.height ? img.width + '×' + img.height : '—') +
+      (img.orientation ? ' orient ' + img.orientation : '') +
+      '  grade ' + (srv.gradeMs != null ? srv.gradeMs + 'ms' : '—') +
+      (srv.uploadSha256 ? '  sha ' + srv.uploadSha256.slice(0, 12) : '') +
+      (srv.localNetwork === true ? '  LAN' : srv.localNetwork === false ? '  remote' : '') +
+      (srv.captureMetadataError ? '  (' + srv.captureMetadataError + ')' : ''));
+  }
+  return out;
+}
+
 function formatGraded(item) {
   const r = item.gradingReport || {};
   const diag = r.centeringDiagnostics || {};
@@ -112,6 +143,7 @@ function formatGraded(item) {
     (item.deckId ? '  deck ' + item.deckId : '') +
     (item.engine ? '  engine ' + item.engine.version + (item.engine.commit ? ' (' + item.engine.commit + ')' : '') : '') +
     (tilt ? '  tilt P ' + num(tilt.pitchDeg) + '° R ' + num(tilt.rollDeg) + '°' : ''));
+  metadataLines(item.captureMetadata, item.serverMetadata).forEach(function (l) { out.push(l); });
   detectionBlock(r.cardDetection).forEach(function (l) { out.push(l); });
   out.push('borders L ' + num(w.left) + '  R ' + num(w.right) + '  T ' + num(w.top) + '  B ' + num(w.bottom) +
     ' px   spread L/R ' + num(diag.leftRightSampleSpreadPx) + '  T/B ' + num(diag.topBottomSampleSpreadPx) +
@@ -140,6 +172,7 @@ function formatFailed(entry) {
   const id = String(entry.scanId || '');
   const out = [];
   out.push('── ' + id.slice(0, 8).toUpperCase() + '  ' + localTime(entry.timestamp) + '  CARD NOT FOUND  ' + id);
+  metadataLines(entry.captureMetadata, entry.serverMetadata).forEach(function (l) { out.push(l); });
   detectionBlock(entry.diagnostics).forEach(function (l) { out.push(l); });
   out.push('reject  ' + (entry.reason || '—'));
   return out.join('\n');
