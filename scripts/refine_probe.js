@@ -149,10 +149,18 @@ async function refineProbe(options) {
       const pos = (pk.i + 1 - pr.expand) / s;
       return (n === 0 ? 'chosen ' : 'next ') + signed(pos, 1) + ' px (' + signed(pk.size, 1) + ')';
     });
-    const ratio = pr.peaks.length > 1 ? Math.abs(pr.peaks[1].size / pr.peaks[0].size) : 0;
-    lines.push('  ' + pad(e, 7) + peaks.join('   ') + (ratio > 0.6 ? '   ← runner-up ' + Math.round(ratio * 100) + '% of chosen' : ''));
+    lines.push('  ' + pad(e, 7) + peaks.join('   '));
   });
   lines.push('  (a real cut is one dominant step; a runner-up ≥60% nearby means a shadow, sleeve, or second edge)');
+  const conf = det.edgeCutConfidence;
+  if (conf) {
+    lines.push('Engine cut confidence (separate peaks only; low = runner-up ≥60% within 3 px):');
+    EDGES.forEach(function (e) {
+      const c = conf[e];
+      lines.push('  ' + pad(e, 7) + 'runner-up ' + pad(Math.round((c.runnerUpRatio || 0) * 100) + '%', 5) + 'at ' +
+        pad(signed(c.runnerUpOffsetPx, 1) + ' px', 10) + (c.lowConfidence ? 'LOW CONFIDENCE' : 'ok'));
+    });
+  }
 
   const report = await compare.gradeQuietly(engine, buffer, q.opts);
   const here = {};

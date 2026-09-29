@@ -290,7 +290,8 @@ const REFINE_EXPAND_FRAC = 0.02;
  *
  * @param {{data:Buffer,width:number,height:number,channels:number}} src interleaved photo
  * @param {{tl:number[],tr:number[],br:number[],bl:number[]}} quad ordered quad in src pixels
- * @returns {{ quad: object, shiftPx: object }}
+ * @returns {{ quad: object, shiftPx: object, cutSteps: object }} cutSteps per edge:
+ *   stepSize, runnerUpRatio (strongest separate step / chosen), runnerUpOffsetPx (output px)
  */
 function refineQuadToCut(src, quad, outW, outH) {
   const ex = Math.max(4, Math.round(outW * REFINE_EXPAND_FRAC));
@@ -333,10 +334,28 @@ function refineQuadToCut(src, quad, outW, outH) {
     const p = profile(edge, length);
     let best = expand - 1;
     let bestStep = -1;
+    const steps = new Float64Array(length - 1);
     for (let i = 0; i < length - 1; i++) {
       const step = Math.abs(p[i + 1] - p[i]);
+      steps[i] = step;
       if (step > bestStep) { bestStep = step; best = i; }
     }
+    // Runner-up = strongest separate peak of |step| (a local maximum at
+    // least 2 samples from the chosen one), so the blurred shoulder of the
+    // chosen edge never counts as a second edge.
+    let runner = -1;
+    let runnerStep = 0;
+    for (let i = 0; i < steps.length; i++) {
+      if (Math.abs(i - best) < 2) continue;
+      const left = i > 0 ? steps[i - 1] : -Infinity;
+      const right = i < steps.length - 1 ? steps[i + 1] : -Infinity;
+      if (steps[i] >= left && steps[i] >= right && steps[i] > runnerStep) { runnerStep = steps[i]; runner = i; }
+    }
+    const stepInfo = {
+      stepSize: Math.round(bestStep * 10) / 10,
+      runnerUpRatio: runner >= 0 && bestStep > 0 ? Math.round((runnerStep / bestStep) * 1000) / 1000 : 0,
+      runnerUpOffsetPx: runner >= 0 ? runner - best : null
+    };
     // Sub-pixel: locate the half-level crossing between the background and
     // card plateaus around the strongest step, instead of snapping to a
     // whole warp pixel. Returned value is the first card-side position
@@ -357,8 +376,10 @@ function refineQuadToCut(src, quad, outW, outH) {
         break;
       }
     }
+    cutSteps[edge] = stepInfo;
     return crossing + 0.5;
   }
+  const cutSteps = {};
   const leftCut = findCut('left', ex);
   const rightCut = findCut('right', ex);
   const topCut = findCut('top', ey);
@@ -380,7 +401,8 @@ function refineQuadToCut(src, quad, outW, outH) {
       right: Math.round((rightCut - ex) * 100) / 100,
       top: Math.round((topCut - ey) * 100) / 100,
       bottom: Math.round((bottomCut - ey) * 100) / 100
-    }
+    },
+    cutSteps: cutSteps
   };
 }
 

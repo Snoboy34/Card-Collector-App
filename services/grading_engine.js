@@ -74,7 +74,7 @@ const scanDebug = require('./scan_debug');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.09.27-native-centering';
+const ENGINE_VERSION = '2026.09.29-cut-confidence';
 
 let sharp = null;
 try {
@@ -2007,7 +2007,39 @@ const CARD_HEIGHT_MM = 88.9;
 // (≈10.1 px/mm). Other detectors keep 643×900: their thresholds are tuned there.
 const CENTERING_WARP_MIN_HEIGHT = 900;
 const CENTERING_WARP_MAX_HEIGHT = 2400;
+// A second cut-like step this strong and this close (643-equivalent px) means
+// the refined cut could be either one: the edge is marked low-confidence.
+// Flag only — the chosen cut and every measured value stay as they are.
+const CUT_RUNNER_UP_RATIO = 0.6;
+const CUT_RUNNER_UP_MAX_PX = 3;
 const SERVER_DETECT_DIM = 900;
+
+function cutConfidence(cutSteps, scale) {
+  const out = {};
+  ['left', 'right', 'top', 'bottom'].forEach(function (e) {
+    const s = (cutSteps && cutSteps[e]) || {};
+    const offset = s.runnerUpOffsetPx == null ? null : round2(s.runnerUpOffsetPx / scale);
+    out[e] = {
+      stepSize: s.stepSize == null ? null : s.stepSize,
+      runnerUpRatio: s.runnerUpRatio == null ? null : s.runnerUpRatio,
+      runnerUpOffsetPx: offset,
+      lowConfidence: offset != null && s.runnerUpRatio >= CUT_RUNNER_UP_RATIO && Math.abs(offset) <= CUT_RUNNER_UP_MAX_PX
+    };
+  });
+  return out;
+}
+
+/** Low-confidence cut edges → edge flags and centeringMetrics. Values untouched. */
+function applyCutConfidence(centeringMeasurement, detection) {
+  const low = (detection && detection.lowConfidenceEdges) || [];
+  centeringMeasurement.edgeFlags = centeringMeasurement.edgeFlags || [];
+  low.forEach(function (e) {
+    const c = detection.edgeCutConfidence[e];
+    centeringMeasurement.edgeFlags.push(e + ': cut edge low confidence — second step ' + Math.round(c.runnerUpRatio * 100) +
+      '% of the chosen one, ' + Math.abs(c.runnerUpOffsetPx) + 'px ' + (c.runnerUpOffsetPx < 0 ? 'outside' : 'inside') + ' it');
+  });
+  return low;
+}
 
 async function decodeUprightRgb(buffer) {
   const meta = await sharp(buffer, { failOnError: false }).metadata();
@@ -2171,9 +2203,14 @@ async function locateCard(buffer, options) {
       top: round2(refined.shiftPx.top / centerScale),
       bottom: round2(refined.shiftPx.bottom / centerScale)
     };
+    detection.edgeCutConfidence = cutConfidence(refined.cutSteps, centerScale);
   } else {
     detection.edgeRefinementPx = null;
+    detection.edgeCutConfidence = null;
   }
+  detection.lowConfidenceEdges = detection.edgeCutConfidence
+    ? ['left', 'right', 'top', 'bottom'].filter(function (e) { return detection.edgeCutConfidence[e].lowConfidence; })
+    : [];
   detection.quadSource = accepted.source;
   // quad = tightened corners actually warped; rawQuad = detector output.
   detection.rawQuad = accepted.source === 'native' ? detection.nativeQuadRaw : detection.serverQuadRaw;
@@ -2411,6 +2448,7 @@ async function gradeBuffer(buffer, options) {
     const centeringMeasurement = await measureCenteringOnWarp(
       located.centeringWarped, cardDetection.centeringWarp, getPixel, getPaperPixel, centeringBox
     );
+    const lowConfidenceEdges = applyCutConfidence(centeringMeasurement, cardDetection);
     const interiorGrey = measureInteriorGrey(
       getPaperPixel, centeringBox.width, centeringBox.height, centeringMeasurement.widths
     );
@@ -2487,7 +2525,8 @@ async function gradeBuffer(buffer, options) {
           topBottomRatio: null,
           detected: false,
           borderWidthsMm: centeringMeasurement.widthsMm,
-          centeringWarp: centeringMeasurement.centeringWarp
+          centeringWarp: centeringMeasurement.centeringWarp,
+          lowConfidenceEdges: lowConfidenceEdges
         },
         surfacePenalties: {
           scratchCount: Number(surface.scratchCount) || 0,
@@ -2572,7 +2611,8 @@ async function gradeBuffer(buffer, options) {
       conditionCeilingApplied: judged.conditionCeilingApplied,
       centeringMetrics: Object.assign({}, judged.centeringMetrics, {
         borderWidthsMm: centeringMeasurement.widthsMm,
-        centeringWarp: centeringMeasurement.centeringWarp
+        centeringWarp: centeringMeasurement.centeringWarp,
+        lowConfidenceEdges: lowConfidenceEdges
       }),
       surfacePenalties: judged.surfacePenalties,
       edgesWhiteningCount: judged.edgesWhiteningCount,

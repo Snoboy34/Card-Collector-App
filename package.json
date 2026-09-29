@@ -12,6 +12,7 @@
     "test:topedge": "node scripts/verify_top_edge.js",
     "test:precision": "node scripts/verify_centering_precision.js",
     "test:edgebias": "node scripts/verify_edge_bias.js",
+    "test:cutconf": "node scripts/verify_cut_confidence.js",
     "test:deck": "node scripts/verify_test_deck.js",
     "deck:report": "node scripts/deck_report.js",
     "dump:scans": "node scripts/dump_scans.js",

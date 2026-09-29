@@ -61,7 +61,8 @@ function resultFromReport(report) {
     worstShare: measured ? 50 + Math.max(Math.abs(lr - 50), Math.abs(tb - 50)) : null,
     cen: r.subGrades ? r.subGrades.centering : null,
     finalScore: r.finalScore != null ? r.finalScore : null,
-    mm: m.borderWidthsMm || null
+    mm: m.borderWidthsMm || null,
+    lowConfidenceEdges: m.lowConfidenceEdges || (r.cardDetection && r.cardDetection.lowConfidenceEdges) || []
   };
 }
 
@@ -81,6 +82,9 @@ function resultLine(label, res, extra) {
     }
   } else if (res.reason) {
     line += res.reason;
+  }
+  if (res.lowConfidenceEdges && res.lowConfidenceEdges.length) {
+    line += '  low-confidence cut: ' + res.lowConfidenceEdges.join(', ');
   }
   return line + (extra ? '  ' + extra : '');
 }
@@ -222,6 +226,9 @@ async function buildDeckReport(opts) {
   const rateAll = function (a, b) { return b ? a + '/' + b + ' ' + Math.round(100 * a / b) + '%' : '—'; };
   lines.push(pad('OVERALL', 18) + pad(totals.cards, 6) + pad(totals.scanned, 9) + pad(rateAll(totals.pass, totals.judged), 14) +
     (candidate ? rateAll(totals.cpass, totals.cjudged) : ''));
+  const lowCut = rows.filter(function (r) { return r.latest && (r.latest.result.lowConfidenceEdges || []).length; });
+  lines.push('LOW-CONFIDENCE CUT  ' + lowCut.length + ' of ' + totals.scanned + ' latest scans' +
+    (lowCut.length ? ': ' + lowCut.map(function (r) { return r.deckId + ' (' + r.latest.result.lowConfidenceEdges.join(', ') + ')'; }).join(', ') : ''));
 
   // PSA ground truth: any labeled scan with a returned grade (deck or not).
   const psa = Object.keys(labels)
@@ -240,7 +247,10 @@ async function buildDeckReport(opts) {
       (p.label.psaCert ? '  cert ' + p.label.psaCert : ''));
   });
 
-  return { text: lines.join('\n'), rows: rows, categories: categories, psa: psa.length, pending: pending };
+  return {
+    text: lines.join('\n'), rows: rows, categories: categories, psa: psa.length, pending: pending,
+    lowConfidenceCut: lowCut.map(function (r) { return { deckId: r.deckId, edges: r.latest.result.lowConfidenceEdges }; })
+  };
 }
 
 if (require.main === module) {
