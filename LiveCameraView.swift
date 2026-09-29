@@ -13,6 +13,8 @@ public struct LiveCameraView: UIViewRepresentable {
     public struct StillCapture {
         public let jpeg: Data
         public let previewSize: CGSize
+        let camera: CameraFacts
+        let capturedAt: Date
     }
 
     @EnvironmentObject private var calibrationEngine: CameraCalibration
@@ -244,7 +246,12 @@ public struct LiveCameraView: UIViewRepresentable {
             } else {
                 previewSize = DispatchQueue.main.sync { previewLayerAnchor?.bounds.size ?? .zero }
             }
-            let payload = StillCapture(jpeg: jpeg, previewSize: previewSize)
+            let payload = StillCapture(
+                jpeg: jpeg,
+                previewSize: previewSize,
+                camera: CameraFacts.read(device: captureDevice, photo: photo, fileData: jpeg),
+                capturedAt: Date()
+            )
             DispatchQueue.main.async { [weak self] in
                 self?.onStillCaptured?(.success(payload))
             }
