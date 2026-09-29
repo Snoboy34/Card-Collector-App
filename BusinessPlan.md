@@ -203,7 +203,7 @@ Modern smartphone hardware injects aggressive computational photography (auto-ex
 - **Transparency:** The labs' grades are a black box. "The Judge" shows its work: where each border was measured, the resulting ratios, and which sub-grades were measured.
 - **Honesty:** Unmeasured values are shown as "—", never guessed. Trust is the product.
 - **Proven accuracy:** Predicted-vs-actual PSA results from real submissions (Section 9) become published evidence of accuracy.
-- **Hardware evolution:** The app automatically improves as users upgrade their phones.
+- **Hardware evolution:** Better cameras can be adopted as users upgrade their phones, once the test deck shows the change improves results.
 
 ---
 
