@@ -14,6 +14,8 @@
     "test:edgebias": "node scripts/verify_edge_bias.js",
     "test:cutconf": "node scripts/verify_cut_confidence.js",
     "test:gate": "node scripts/verify_gate.js",
+    "test:regrade": "node scripts/verify_regrade.js",
+    "regrade": "node scripts/regrade.js",
     "gate": "node scripts/gate.js",
     "test:deck": "node scripts/verify_test_deck.js",
     "deck:report": "node scripts/deck_report.js",
