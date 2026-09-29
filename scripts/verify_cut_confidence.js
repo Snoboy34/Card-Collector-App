@@ -1,9 +1,9 @@
 /**
  * scripts/verify_cut_confidence.js
- * Cut-edge confidence: when refineQuadToCut sees a second step ≥60% of the
- * chosen one within 3 px (643-equivalent), that edge is marked low-confidence
- * in the grade output and the deck report. It is a flag only: the chosen cut,
- * widths, CEN, and final score are computed exactly as before.
+ * Cut-edge confidence. An edge is marked low-confidence, in the grade output
+ * and the deck report, when its runner-up is either ≥60% of the chosen step
+ * within 3 px, or ≥80% anywhere in the refine search. Flag only: the chosen
+ * cut, widths, CEN, and final score are computed exactly as before.
  * Run: node scripts/verify_cut_confidence.js
  */
 'use strict';
@@ -87,9 +87,20 @@ async function run() {
   }), { lip: lip.centeringMetrics.borderWidthsMm, clean: clean.centeringMetrics.borderWidthsMm });
 
   const wide = await grade(await capture(101, { outsideBand: { edge: 'right', mm: 0.6, color: [200, 200, 200] } }));
-  console.log('band 0.6 mm right: ' + JSON.stringify(wide.cardDetection.edgeCutConfidence.right));
-  assert('0.6 mm band (second step > 3 px away) → not low-confidence', wide.centeringMetrics.lowConfidenceEdges.length === 0,
-    wide.cardDetection.edgeCutConfidence.right);
+  const wideConf = wide.cardDetection.edgeCutConfidence.right;
+  console.log('band 0.6 mm right: ' + JSON.stringify(wideConf));
+  assert('0.6 mm outer band → right is low-confidence',
+    wide.centeringMetrics.lowConfidenceEdges.length === 1 && wide.centeringMetrics.lowConfidenceEdges[0] === 'right',
+    wideConf);
+  assert('0.6 mm band is the wide rule: runner-up ≥ 80% and farther than 3 px',
+    wideConf.runnerUpRatio >= 0.8 && Math.abs(wideConf.runnerUpOffsetPx) > 3, wideConf);
+  assert('0.6 mm band flag names the edge', (wide.centeringDiagnostics.edgeFlags || []).some(function (f) {
+    return /^right: cut edge low confidence/.test(f);
+  }), wide.centeringDiagnostics.edgeFlags);
+  assert('flag only: 0.6 mm band still reports the measured right border and CEN',
+    wide.centeringMetrics.borderWidthsMm.right != null && wide.subGrades.centering != null &&
+    wide.subGrades.centering === g.scoreCenteringPhase(wide.centeringMetrics.leftRightRatio, wide.centeringMetrics.topBottomRatio).score,
+    { right: wide.centeringMetrics.borderWidthsMm.right, cen: wide.subGrades.centering });
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cut-conf-'));
   const dataDir = path.join(root, 'data');

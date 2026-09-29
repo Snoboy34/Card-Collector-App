@@ -74,7 +74,7 @@ const scanDebug = require('./scan_debug');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.09.29-cut-confidence';
+const ENGINE_VERSION = '2026.09.29-cut-wide';
 
 let sharp = null;
 try {
@@ -2007,11 +2007,15 @@ const CARD_HEIGHT_MM = 88.9;
 // (≈10.1 px/mm). Other detectors keep 643×900: their thresholds are tuned there.
 const CENTERING_WARP_MIN_HEIGHT = 900;
 const CENTERING_WARP_MAX_HEIGHT = 2400;
-// A second cut-like step this strong and this close (643-equivalent px) means
-// the refined cut could be either one: the edge is marked low-confidence.
-// Flag only — the chosen cut and every measured value stay as they are.
+// A second cut-like step means the refined cut could be either one. Flag the
+// edge (the chosen cut and every measured value stay as they are) when:
+//   close — runner-up ≥ 60% of the chosen step and within 3 px, or
+//   strong — runner-up ≥ 80% anywhere in the refine search (the 2% expanded
+//   margin, at least 4 px). The 0.6 mm outer band is this second case:
+//   about 90% as strong, about 6 px away, so the 3 px window missed it.
 const CUT_RUNNER_UP_RATIO = 0.6;
 const CUT_RUNNER_UP_MAX_PX = 3;
+const CUT_RUNNER_UP_WIDE_RATIO = 0.8;
 const SERVER_DETECT_DIM = 900;
 
 function cutConfidence(cutSteps, scale) {
@@ -2023,7 +2027,10 @@ function cutConfidence(cutSteps, scale) {
       stepSize: s.stepSize == null ? null : s.stepSize,
       runnerUpRatio: s.runnerUpRatio == null ? null : s.runnerUpRatio,
       runnerUpOffsetPx: offset,
-      lowConfidence: offset != null && s.runnerUpRatio >= CUT_RUNNER_UP_RATIO && Math.abs(offset) <= CUT_RUNNER_UP_MAX_PX
+      lowConfidence: offset != null && (
+        (s.runnerUpRatio >= CUT_RUNNER_UP_RATIO && Math.abs(offset) <= CUT_RUNNER_UP_MAX_PX) ||
+        s.runnerUpRatio >= CUT_RUNNER_UP_WIDE_RATIO
+      )
     };
   });
   return out;
