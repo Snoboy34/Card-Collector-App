@@ -103,7 +103,9 @@ struct CardScannerView: View {
     @State private var pendingLevelOCR: [String] = []
     @State private var pendingLevelQuad: JudgeAPIClient.CardQuad?
     @State private var pendingLevelCamera: CameraFacts?
+    @State private var pendingLevelPhotoSize: PhotoSizeFacts?
     @State private var pendingLevelCapturedAt: Date?
+    @AppStorage(PhotoSizeSetting.defaultsKey) private var photoSizeRaw = PhotoSizeSetting.twelveMP.rawValue
     private let sweepClock = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     private var filteredVaultRecords: [SavedCard] {
@@ -181,6 +183,8 @@ struct CardScannerView: View {
                 CameraCalibration.runContractChecks()
                 CompactScanLayout.runContractChecks()
                 CaptureMetadata.runContractChecks()
+                PhotoSizeSetting.runContractChecks()
+                JudgeAPIClient.runContractChecks()
                 #endif
                 calibrationEngine.startDeviceLevelMonitoring()
             }
@@ -282,6 +286,15 @@ struct CardScannerView: View {
                     .onChange(of: judgeServerURL) {
                         UserDefaults.standard.set(judgeServerURL, forKey: JudgeAPIClient.serverURLDefaultsKey)
                     }
+                Text("Photo size")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Picker("Photo size", selection: $photoSizeRaw) {
+                    ForEach(PhotoSizeSetting.allCases) { size in
+                        Text(size.label).tag(size.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
                 if let lastRemoteError {
                     Text(lastRemoteError)
                         .font(.caption2)
@@ -694,6 +707,7 @@ struct CardScannerView: View {
         pendingLevelOCR = []
         pendingLevelQuad = nil
         pendingLevelCamera = nil
+        pendingLevelPhotoSize = nil
         pendingLevelCapturedAt = nil
     }
 
@@ -718,6 +732,7 @@ struct CardScannerView: View {
                     pendingLevelOCR = ocrLines
                     pendingLevelQuad = CardStillQuad.detect(in: cropped)
                     pendingLevelCamera = still.camera
+                    pendingLevelPhotoSize = still.photoSize
                     pendingLevelCapturedAt = still.capturedAt
                     beginSweepAfterFirstStill()
                 } else if let target = sweepTarget {
@@ -835,7 +850,8 @@ struct CardScannerView: View {
             mode: extras.isEmpty ? "native-still" : "native-sweep",
             capturedAt: pendingLevelCapturedAt ?? Date(),
             sweepFrames: extras.count,
-            quad: cardQuad
+            quad: cardQuad,
+            extraCamera: pendingLevelPhotoSize?.cameraFields() ?? ["photoSizeSetting": PhotoSizeSetting.current().rawValue]
         )
         Task {
             do {

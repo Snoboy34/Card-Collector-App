@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import CoreImage
+import CoreMedia
 
 /// Live viewfinder + session-once AE/WB lock + high-quality stills.
 ///
@@ -14,6 +15,7 @@ public struct LiveCameraView: UIViewRepresentable {
         public let jpeg: Data
         public let previewSize: CGSize
         let camera: CameraFacts
+        let photoSize: PhotoSizeFacts
         let capturedAt: Date
     }
 
@@ -79,6 +81,7 @@ public struct LiveCameraView: UIViewRepresentable {
         private let recordingSession = AVCaptureSession()
         private var photoOutput: AVCapturePhotoOutput?
         private var captureDevice: AVCaptureDevice?
+        private var photoSizeForCapture = PhotoSizeFacts(setting: PhotoSizeSetting.twelveMP.rawValue, requestedWidth: nil, requestedHeight: nil, maxPhotoWidth: nil, maxPhotoHeight: nil, supported: [])
         private var didStartSession = false
         private var didLockExposure = false
         private var captureInFlight = false
@@ -145,6 +148,9 @@ public struct LiveCameraView: UIViewRepresentable {
             publishLockStatus("Point at empty mat — AE settling…")
             recordingSession.startRunning()
             didStartSession = true
+            if let stillOutput = photoOutput {
+                applyPhotoSize(to: stillOutput)
+            }
             scheduleExposureSettleCheck(on: primaryBackCamera, started: Date())
         }
 
@@ -207,6 +213,33 @@ public struct LiveCameraView: UIViewRepresentable {
             }
         }
 
+        /// Picks 12 MP or Max from the sizes this session actually offers and
+        /// raises the output cap to match. Per-shot `settings.maxPhotoDimensions`
+        /// cannot exceed the output cap, so the cap moves first.
+        @discardableResult
+        private func applyPhotoSize(to output: AVCapturePhotoOutput) -> PhotoSizeFacts {
+            let setting = PhotoSizeSetting.current()
+            let supported = output.supportedMaxPhotoDimensions
+            let chosen = PhotoSizeSetting.choose(setting, supported: supported)
+            if let chosen {
+                let current = output.maxPhotoDimensions
+                if current.width != chosen.width || current.height != chosen.height {
+                    output.maxPhotoDimensions = chosen
+                }
+            }
+            let deviceMax = PhotoSizeSetting.largest(supported)
+            let facts = PhotoSizeFacts(
+                setting: setting.rawValue,
+                requestedWidth: chosen.map { Int($0.width) },
+                requestedHeight: chosen.map { Int($0.height) },
+                maxPhotoWidth: deviceMax.map { Int($0.width) },
+                maxPhotoHeight: deviceMax.map { Int($0.height) },
+                supported: supported.filter { $0.width > 0 && $0.height > 0 }.prefix(16).map { "\($0.width)x\($0.height)" }
+            )
+            photoSizeForCapture = facts
+            return facts
+        }
+
         func captureStillPhoto() {
             sessionQueue.async { [weak self] in
                 guard let self else { return }
@@ -223,7 +256,16 @@ public struct LiveCameraView: UIViewRepresentable {
                     return
                 }
                 self.captureInFlight = true
-                let settings = AVCapturePhotoSettings()
+                guard photoOutput.availablePhotoCodecTypes.contains(.jpeg) else {
+                    self.captureInFlight = false
+                    self.failStill(CaptureError.jpegUnavailable)
+                    return
+                }
+                self.applyPhotoSize(to: photoOutput)
+                let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
+                if let w = self.photoSizeForCapture.requestedWidth, let h = self.photoSizeForCapture.requestedHeight {
+                    settings.maxPhotoDimensions = CMVideoDimensions(width: Int32(w), height: Int32(h))
+                }
                 settings.flashMode = .off
                 settings.photoQualityPrioritization = .quality
                 photoOutput.capturePhoto(with: settings, delegate: self)
@@ -240,6 +282,10 @@ public struct LiveCameraView: UIViewRepresentable {
                 failStill(CaptureError.missingJPEG)
                 return
             }
+            guard CameraFacts.codecName(jpeg) == "jpeg" else {
+                failStill(CaptureError.notJPEG)
+                return
+            }
             var previewSize = CGSize.zero
             if Thread.isMainThread {
                 previewSize = previewLayerAnchor?.bounds.size ?? .zero
@@ -250,6 +296,7 @@ public struct LiveCameraView: UIViewRepresentable {
                 jpeg: jpeg,
                 previewSize: previewSize,
                 camera: CameraFacts.read(device: captureDevice, photo: photo, fileData: jpeg),
+                photoSize: photoSizeForCapture,
                 capturedAt: Date()
             )
             DispatchQueue.main.async { [weak self] in
@@ -290,6 +337,8 @@ public struct LiveCameraView: UIViewRepresentable {
             case exposureNotLocked
             case captureInFlight
             case missingJPEG
+            case jpegUnavailable
+            case notJPEG
 
             var errorDescription: String? {
                 switch self {
@@ -301,6 +350,10 @@ public struct LiveCameraView: UIViewRepresentable {
                     return "A still is already being captured."
                 case .missingJPEG:
                     return "PhotoOutput returned no JPEG bytes."
+                case .jpegUnavailable:
+                    return "This camera cannot deliver a JPEG. The Judge only uploads JPEG."
+                case .notJPEG:
+                    return "The camera returned a non-JPEG photo. The Judge only uploads JPEG."
                 }
             }
         }

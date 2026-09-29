@@ -7,6 +7,8 @@ import Foundation
 final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate {
     static let shared = JudgeAPIClient()
     static let serverURLDefaultsKey = "judgeServerBaseURL"
+    /// Multer on `POST /api/grade` rejects any one file over this.
+    static let maxUploadBytes = 10 * 1024 * 1024
 
     struct TiltSnapshot {
         var pitchDeg: Double
@@ -123,6 +125,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         guard let root = Self.normalizedBaseURL(baseURL) else {
             throw APIError.invalidServerURL
         }
+        if jpeg.count > Self.maxUploadBytes || sweepFrames.contains(where: { $0.jpeg.count > Self.maxUploadBytes }) {
+            throw APIError.uploadTooLarge
+        }
         let endpoint = root.appendingPathComponent("api/grade")
         let boundary = "JudgeBoundary\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
 
@@ -179,6 +184,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         case cardNotFound(String)
         case httpFailure(Int, String)
         case undecodableResponse
+        case uploadTooLarge
 
         var errorDescription: String? {
             switch self {
@@ -192,6 +198,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 return "Grade request failed (\(code)): \(body)"
             case .undecodableResponse:
                 return "Server did not return JSON."
+            case .uploadTooLarge:
+                return "This photo is over 10 MB, which the server rejects. Set Photo size to 12 MP and retake."
             }
         }
     }
@@ -210,6 +218,13 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         }
         completionHandler(.performDefaultHandling, nil)
     }
+
+    #if DEBUG
+    static func runContractChecks() {
+        precondition(maxUploadBytes == 10 * 1024 * 1024)
+        precondition(maxUploadBytes == 10_485_760)
+    }
+    #endif
 
     static func isLANHost(_ host: String) -> Bool {
         let lower = host.lowercased()
