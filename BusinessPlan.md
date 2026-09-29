@@ -2,7 +2,7 @@
 
 **The Definitive Elite-Tier Pre-Submission Diagnostic Protocol & Comprehensive Global Business Plan**
 
-*Last amended: September 27, 2026. Sections marked **(amended Sept 2026)** were updated from real-device development and testing. See Section 10 for the full amendment log.*
+*Last amended: September 29, 2026. Sections marked **(amended Sept 2026)** were updated from real-device development and testing. See Section 10 for the full amendment log.*
 
 ---
 
@@ -25,7 +25,7 @@ Traditional physical grading laboratories (such as PSA, BGS, SGC, and CGC) opera
 
 "The Judge" delivers objectivity, instant multi-dimensional reports, and reproducibility. If the card's physical condition has not altered, the system should output the same grade across repeated scans.
 
-**Reproducibility standard (amended Sept 2026):** Reproducibility is measured, not assumed. Every engine release must meet published repeatability targets on the fixed test deck (Section 9). For example, centering on a stationary card must stay within a 3-point ratio spread across repeated scans. Current real-device result: about 1.6 points on a white-bordered card.
+**Reproducibility standard (amended Sept 2026):** Reproducibility is measured, not assumed. Every engine release must meet published repeatability targets on the fixed test deck (Section 9). For example, centering on a stationary card must stay within a 3-point ratio spread across repeated scans. Current hi-res result: 0.7 points left/right and 0.4 points top/bottom, on 12 real scans.
 
 ```
                   [ USER DEVICE / NATIVE CAPTURE CLIENT ]
@@ -78,7 +78,7 @@ The software architecture incorporates a continuous learning loop. Every digital
 - **Engine versioning:** Every grade is stamped with the grading-engine version that produced it.
 - **Archived originals:** Original captures and their metadata are retained, so any new engine can be back-tested against the full archive before release. Old scans can be re-graded when the engine improves, so users' vaults get better over time.
 - **Back-testing release gate:** No engine change ships until it has been re-run against archived real scans and the fixed test deck, and shown to be equal or better. This was first proven in September 2026, when a new border finder was validated on 12 archived real scans (12/12 measured vs 8/12 for the prior engine) before release.
-- **Device-adaptive evolution:** As phones gain better cameras and sensors, the capture client uses them automatically (Section 6), and all measurements are stored in physical units, so new hardware adds precision without changing the grading rules.
+- **Device-adaptive evolution:** As phones gain better cameras and sensors, larger photo sizes and RAW are adopted only when the test deck shows they improve results (Section 6). Measurements stay in physical units, so a capture change does not change the grading rules.
 
 ### Uncompromised Market Dominance
 
@@ -119,7 +119,7 @@ Modern smartphone hardware injects aggressive computational photography (auto-ex
 - **The Living Rule (amended):** Control computational photography **at capture**, rather than trying to undo it afterward:
   - Lock exposure and white balance once per scanning session.
   - Capture full-resolution stills from the photo pipeline, not preview video frames.
-  - Use RAW/ProRAW and the highest available resolution where the device supports it.
+  - Larger photo sizes and RAW/ProRAW are adopted only when the test deck shows they improve results. Until then, capture stays at 12 MP JPEG.
   - Detect the card's corners on-device and upload a full-detail, perspective-ready crop.
 - Server-side, every card is perspective-corrected to a standard geometry and measured in **physical units (millimeters)**, using the standard card size of 63.5 × 88.9 mm, so results are independent of the phone that captured them.
 
@@ -231,7 +231,7 @@ The original plan called for a universal mobile-web frontend. Testing proved tha
 
 ### Device-Adaptive Capture (amended Sept 2026)
 
-- At runtime, the app detects what each phone supports: maximum photo resolution (e.g., 48MP on recent iPhones), RAW/ProRAW, HEIF, depth/LiDAR (for card flatness and warp), lens options, and stabilization. It captures at the best available.
+- At runtime, the app detects what each phone supports: maximum photo resolution (e.g., 48MP on recent iPhones), RAW/ProRAW, HEIF, depth/LiDAR (for card flatness and warp), lens options, and stabilization. Larger photo sizes and RAW are adopted only when the test deck shows they improve results. Until then, capture stays at 12 MP JPEG.
 - Every scan records its metadata: device model, OS version, lens, resolution, exposure/ISO/white balance, capture mode, and app + engine version.
 - All geometry is stored in millimeters, so higher-resolution hardware increases precision without changing grading rules or requiring app rewrites.
 
@@ -241,7 +241,7 @@ All grading logic, vision models, and target-lab algorithms stay server-side on 
 
 ### Hardware Evolution Scaling
 
-As camera sensors and mobile processors improve, the capture client automatically uses the new capabilities, and the pipeline absorbs the higher-resolution data. Grading precision increases without frontend rewrites.
+As camera sensors and mobile processors improve, the capture client can use the new capabilities. Larger photo sizes and RAW are adopted only when the test deck shows they improve results. Grading rules stay the same.
 
 ---
 
@@ -345,3 +345,8 @@ Scans (originals, metadata, results, engine version) form the ML flywheel datase
 - **Section 7:** Updated roadmap phases and statuses.
 - **Section 8:** Added mandates 4–6 (never fabricate, prove before merging, measure in physical units).
 - **Section 9:** New section on the test deck, PSA ground truth, and data/privacy.
+
+**September 29, 2026**
+
+- **Section 1:** Replaced the 1.6-point repeatability figure with the current hi-res result on 12 real scans: 0.7 points left/right and 0.4 points top/bottom.
+- **Sections 2, 4, and 6:** Larger photo sizes and RAW are adopted only when the test deck shows they improve results. Capture stays at 12 MP JPEG until then.
