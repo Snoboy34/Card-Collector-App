@@ -81,6 +81,10 @@ struct CardScannerView: View {
     @State private var stillCaptureNonce: UInt64 = 0
     @State private var exposureLockStatus = "Camera starting…"
     @State private var judgeServerURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
+    @State private var deckIdInput = UserDefaults.standard.string(forKey: JudgeTestDeck.deckIdDefaultsKey) ?? ""
+    @State private var preSubmission = false
+    @State private var pendingDeckId: String?
+    @State private var pendingPreSubmission = false
     @State private var isRemoteGrading = false
     @State private var remoteGradeSummary = ""
     @State private var lastRemoteError: String?
@@ -279,6 +283,19 @@ struct CardScannerView: View {
                     .onChange(of: judgeServerURL) {
                         UserDefaults.standard.set(judgeServerURL, forKey: JudgeAPIClient.serverURLDefaultsKey)
                     }
+                HStack(spacing: 8) {
+                    TextField("Deck card (TD-01)", text: $deckIdInput)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .font(.system(.caption2, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: deckIdInput) {
+                            UserDefaults.standard.set(deckIdInput, forKey: JudgeTestDeck.deckIdDefaultsKey)
+                        }
+                    Toggle("Pre-sub", isOn: $preSubmission)
+                        .font(.caption2)
+                        .fixedSize()
+                }
                 if let lastRemoteError {
                     Text(lastRemoteError)
                         .font(.caption2)
@@ -675,6 +692,16 @@ struct CardScannerView: View {
             lastRemoteError = JudgeAPIClient.APIError.invalidServerURL.localizedDescription
             return
         }
+        let deckText = deckIdInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if deckText.isEmpty {
+            pendingDeckId = nil
+        } else if let deckId = JudgeTestDeck.normalizedDeckId(deckText) {
+            pendingDeckId = deckId
+        } else {
+            lastRemoteError = "Deck card must look like TD-07 (or leave it empty)."
+            return
+        }
+        pendingPreSubmission = preSubmission
         resetSweepSession()
         stillCaptureNonce += 1
     }
@@ -833,6 +860,8 @@ struct CardScannerView: View {
                     ocrLines: ocrLines,
                     sweepFrames: sweepPayload,
                     cardQuad: cardQuad,
+                    deckId: pendingDeckId,
+                    preSubmission: pendingPreSubmission,
                     scanId: pendingScanId
                 )
                 await MainActor.run {
@@ -847,6 +876,10 @@ struct CardScannerView: View {
                         let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId)
                         pendingServerLedger = ledger
                         showingActiveScanReport = true
+                        if let usedDeckId = pendingDeckId {
+                            deckIdInput = JudgeTestDeck.nextDeckId(after: usedDeckId)
+                        }
+                        preSubmission = false
                     }
                 }
             } catch {
