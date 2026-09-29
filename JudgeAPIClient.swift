@@ -117,6 +117,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         ocrLines: [String] = [],
         sweepFrames: [SweepFrame] = [],
         cardQuad: CardQuad? = nil,
+        captureMetadata: String? = nil,
         scanId: String
     ) async throws -> RemoteReport {
         guard let root = Self.normalizedBaseURL(baseURL) else {
@@ -137,6 +138,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             ocrLines: ocrLines,
             sweepFrames: sweepFrames,
             cardQuad: cardQuad,
+            captureMetadata: captureMetadata,
             scanId: scanId
         )
 
@@ -230,6 +232,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         ocrLines: [String],
         sweepFrames: [SweepFrame],
         cardQuad: CardQuad?,
+        captureMetadata: String?,
         scanId: String
     ) -> Data {
         var body = Data()
@@ -292,6 +295,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 appendField("quadImageHeight", String(cardQuad.imageHeight))
                 appendField("quadConfidence", String(format: "%.3f", cardQuad.confidence))
             }
+        }
+        if let captureMetadata, !captureMetadata.isEmpty {
+            appendField("captureMetadata", captureMetadata)
         }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         return body

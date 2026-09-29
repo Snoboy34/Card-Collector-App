@@ -102,6 +102,8 @@ struct CardScannerView: View {
     @State private var sweepStatus = ""
     @State private var pendingLevelOCR: [String] = []
     @State private var pendingLevelQuad: JudgeAPIClient.CardQuad?
+    @State private var pendingLevelCamera: CameraFacts?
+    @State private var pendingLevelCapturedAt: Date?
     private let sweepClock = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     private var filteredVaultRecords: [SavedCard] {
@@ -178,6 +180,7 @@ struct CardScannerView: View {
                 CardSweepBins.runContractChecks()
                 CameraCalibration.runContractChecks()
                 CompactScanLayout.runContractChecks()
+                CaptureMetadata.runContractChecks()
                 #endif
                 calibrationEngine.startDeviceLevelMonitoring()
             }
@@ -690,6 +693,8 @@ struct CardScannerView: View {
         sweepStatus = ""
         pendingLevelOCR = []
         pendingLevelQuad = nil
+        pendingLevelCamera = nil
+        pendingLevelCapturedAt = nil
     }
 
     private func handleStillCapture(_ result: Result<LiveCameraView.StillCapture, Error>) {
@@ -712,6 +717,8 @@ struct CardScannerView: View {
                     storeSweepFrame(bin: .level, jpeg: cropped, pitch: pitch, roll: roll)
                     pendingLevelOCR = ocrLines
                     pendingLevelQuad = CardStillQuad.detect(in: cropped)
+                    pendingLevelCamera = still.camera
+                    pendingLevelCapturedAt = still.capturedAt
                     beginSweepAfterFirstStill()
                 } else if let target = sweepTarget {
                     storeSweepFrame(bin: target, jpeg: cropped, pitch: pitch, roll: roll)
@@ -822,6 +829,14 @@ struct CardScannerView: View {
         let ocrLines = pendingLevelOCR
         let cardQuad = pendingLevelQuad
         let cardType = selectedCategory == .sports ? "SPORTS" : "TCG"
+        let captureMetadata = CaptureMetadata.json(
+            camera: pendingLevelCamera,
+            uploadJPEG: levelJPEG,
+            mode: extras.isEmpty ? "native-still" : "native-sweep",
+            capturedAt: pendingLevelCapturedAt ?? Date(),
+            sweepFrames: extras.count,
+            quad: cardQuad
+        )
         Task {
             do {
                 let report = try await JudgeAPIClient.shared.grade(
@@ -833,6 +848,7 @@ struct CardScannerView: View {
                     ocrLines: ocrLines,
                     sweepFrames: sweepPayload,
                     cardQuad: cardQuad,
+                    captureMetadata: captureMetadata,
                     scanId: pendingScanId
                 )
                 await MainActor.run {
