@@ -80,9 +80,9 @@ Every card sent to a grading company (deck or not) becomes a labeled example.
 Companies stay in their own lists. A PSA 8 and a BGS 9.5 are never averaged.
 
 1. Turn on **Pre-sub** before Capture (or tick it on `/deck` afterwards).
-2. Set the **intended grader**: PSA, BGS, SGC, CGC, TAG, or Other. The phone's
-   Pre-sub toggle does not send a company; set it on `/deck`. A capture may
-   also send `intendedGrader`.
+2. Set the **intended grader** on the phone, next to Pre-sub: PSA, BGS, SGC,
+   CGC, TAG, or Other. Capture sends `intendedGrader`. Leave the picker unset
+   and the scan has no company; you can still set it on `/deck`.
 3. When the slab comes back, enter that company's result on `/deck` for that
    scan:
    - **Overall** grade, half points (8, 9.5, 10).
