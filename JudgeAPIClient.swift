@@ -144,6 +144,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         deckId: String? = nil,
         preSubmission: Bool = false,
         intendedGrader: String? = nil,
+        side: String? = nil,
+        pairId: String? = nil,
         captureMetadata: String? = nil,
         scanId: String
     ) async throws -> RemoteReport {
@@ -168,6 +170,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             deckId: deckId,
             preSubmission: preSubmission,
             intendedGrader: intendedGrader,
+            side: side,
+            pairId: pairId,
             captureMetadata: captureMetadata,
             scanId: scanId
         )
@@ -265,6 +269,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         deckId: String?,
         preSubmission: Bool,
         intendedGrader: String?,
+        side: String?,
+        pairId: String?,
         captureMetadata: String?,
         scanId: String
     ) -> Data {
@@ -289,6 +295,12 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         }
         if let intendedGrader, JudgeTestDeck.graders.contains(intendedGrader) {
             appendField("intendedGrader", intendedGrader)
+        }
+        if let side, side == "front" || side == "back" {
+            appendField("side", side)
+        }
+        if let pairId, !pairId.isEmpty {
+            appendField("pairId", pairId)
         }
         appendField("alignmentCrop", "true")
         appendField("debug", "true")
@@ -565,11 +577,12 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
     static func runContractChecks() {
         precondition(JudgeTestDeck.graders == ["PSA", "BGS", "SGC", "CGC", "TAG", "Other"])
         let jpeg = Data([0xFF, 0xD8, 0xFF])
-        func text(grader: String?) -> String {
+        func text(grader: String?, side: String? = nil, pairId: String? = nil) -> String {
             let data = multipartBody(
                 boundary: "B", jpeg: jpeg, name: "unknown", cardType: nil, tilt: nil,
                 ocrLines: [], sweepFrames: [], cardQuad: nil, deckId: "TD-07",
-                preSubmission: true, intendedGrader: grader, captureMetadata: nil, scanId: "scan"
+                preSubmission: true, intendedGrader: grader, side: side, pairId: pairId,
+                captureMetadata: nil, scanId: "scan"
             )
             return String(data: data, encoding: .utf8) ?? ""
         }
@@ -581,6 +594,13 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         precondition(!text(grader: nil).contains("intendedGrader"))
         precondition(!text(grader: "").contains("intendedGrader"))
         precondition(!text(grader: "Beckett").contains("intendedGrader"))
+        let back = text(grader: nil, side: "back", pairId: "front-scan-1")
+        precondition(back.contains("name=\"side\""))
+        precondition(back.contains("\r\n\r\nback\r\n"))
+        precondition(back.contains("name=\"pairId\""))
+        precondition(back.contains("\r\n\r\nfront-scan-1\r\n"))
+        precondition(!text(grader: nil, side: "top", pairId: "").contains("name=\"side\""))
+        precondition(!text(grader: nil).contains("name=\"pairId\""))
     }
     #endif
 }

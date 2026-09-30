@@ -89,6 +89,9 @@ struct CardScannerView: View {
     @State private var pendingPreSubmission = false
     @State private var pendingIntendedGrader: String?
     @State private var pendingScanBackground: String?
+    @State private var captureSide = "front"
+    @State private var awaitingBack = false
+    @State private var frontPairId: String?
     @State private var isRemoteGrading = false
     @State private var remoteGradeSummary = ""
     @State private var lastRemoteError: String?
@@ -234,7 +237,7 @@ struct CardScannerView: View {
             Text(primaryInstructionText)
                 .font(.caption2)
                 .foregroundColor(.secondary)
-                .lineLimit(2)
+                .lineLimit(awaitingBack ? 4 : 2)
             if !sweepStatus.isEmpty {
                 Text(sweepStatus)
                     .font(.caption2)
@@ -245,6 +248,9 @@ struct CardScannerView: View {
     }
 
     private var primaryInstructionText: String {
+        if awaitingBack {
+            return "Turn the card over left to right. Keep the same edge at the top of the frame. Leave background showing on all four sides."
+        }
         if sweepActive {
             return "Hold the highlighted tick. Keep the whole card inside the frame with a little background showing."
         }
@@ -253,6 +259,31 @@ struct CardScannerView: View {
 
     private var compactActions: some View {
         HStack(spacing: 8) {
+            if awaitingBack {
+                Button(action: requestBackCapture) {
+                    Text(isRemoteGrading ? "Uploading…" : "Capture back")
+                        .font(.subheadline).bold()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(isRemoteGrading ? Color.gray : Color.cyan)
+                        .foregroundColor(.black)
+                        .cornerRadius(8)
+                }
+                .disabled(isRemoteGrading)
+                Button("Skip back") {
+                    finishPair()
+                }
+                .font(.subheadline).bold()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(Color(.secondarySystemBackground))
+                .foregroundColor(.primary)
+                .cornerRadius(8)
+                .disabled(isRemoteGrading)
+            }
+            if !awaitingBack {
             Button(action: requestNativeStillGrade) {
                 HStack {
                     if isRemoteGrading { ProgressView().tint(.black) }
@@ -278,6 +309,7 @@ struct CardScannerView: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(Color(.secondarySystemBackground))
                 .cornerRadius(8)
+            }
             }
         }
     }
@@ -735,6 +767,9 @@ struct CardScannerView: View {
         remoteGradeSummary = ""
         pendingServerLedger = nil
         pendingScanId = UUID().uuidString
+        captureSide = "front"
+        awaitingBack = false
+        frontPairId = nil
         guard JudgeAPIClient.normalizedBaseURL(judgeServerURL) != nil else {
             lastRemoteError = JudgeAPIClient.APIError.invalidServerURL.localizedDescription
             return
@@ -751,6 +786,16 @@ struct CardScannerView: View {
         pendingPreSubmission = preSubmission
         pendingIntendedGrader = JudgeTestDeck.graders.contains(intendedGrader) ? intendedGrader : nil
         pendingScanBackground = CaptureMetadata.backgrounds.contains(scanBackground) ? scanBackground : nil
+        resetSweepSession()
+        stillCaptureNonce += 1
+    }
+
+    private func requestBackCapture() {
+        guard awaitingBack, frontPairId != nil else { return }
+        lastRemoteError = nil
+        remoteGradeSummary = ""
+        pendingScanId = UUID().uuidString
+        captureSide = "back"
         resetSweepSession()
         stillCaptureNonce += 1
     }
@@ -785,6 +830,15 @@ struct CardScannerView: View {
                 let cropped = try CardAlignmentCrop.cropJPEG(still.jpeg, previewSize: still.previewSize)
                 let pitch = calibrationEngine.currentPitch
                 let roll = calibrationEngine.currentRoll
+                if captureSide == "back" {
+                    let ocrLines = (try? CardStillOCR.recognizeLines(from: cropped)) ?? []
+                    pendingLevelOCR = ocrLines
+                    pendingLevelQuad = CardStillQuad.detect(in: cropped)
+                    pendingLevelCamera = still.camera
+                    pendingLevelCapturedAt = still.capturedAt
+                    uploadNativeGrade(levelJPEG: cropped, extras: [])
+                    return
+                }
                 if sweepFrames.isEmpty {
                     let ocrLines = (try? CardStillOCR.recognizeLines(from: cropped)) ?? []
                     storeSweepFrame(bin: .level, jpeg: cropped, pitch: pitch, roll: roll)
@@ -902,6 +956,8 @@ struct CardScannerView: View {
         let ocrLines = pendingLevelOCR
         let cardQuad = pendingLevelQuad
         let cardType = selectedCategory == .sports ? "SPORTS" : "TCG"
+        let side = captureSide == "back" ? "back" : "front"
+        let pairId = side == "back" ? frontPairId : pendingScanId
         let captureMetadata = CaptureMetadata.json(
             camera: pendingLevelCamera,
             uploadJPEG: levelJPEG,
@@ -925,6 +981,8 @@ struct CardScannerView: View {
                     deckId: pendingDeckId,
                     preSubmission: pendingPreSubmission,
                     intendedGrader: pendingIntendedGrader,
+                    side: side,
+                    pairId: pairId,
                     captureMetadata: captureMetadata,
                     scanId: pendingScanId
                 )
@@ -936,15 +994,19 @@ struct CardScannerView: View {
                         : "Uploaded \(1 + extras.count) frames. SUR is still the level still."
                     if !report.ok {
                         lastRemoteError = "Server returned ok=false"
+                    } else if side == "back" {
+                        let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId)
+                        pendingServerLedger = ledger
+                        showingActiveScanReport = true
+                        sweepStatus = "Uploaded the back."
+                        finishPair()
                     } else {
                         let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId)
                         pendingServerLedger = ledger
                         showingActiveScanReport = true
-                        if let usedDeckId = pendingDeckId {
-                            deckIdInput = JudgeTestDeck.nextDeckId(after: usedDeckId)
-                        }
-                        preSubmission = false
-                        intendedGrader = ""
+                        frontPairId = pendingScanId
+                        awaitingBack = true
+                        sweepStatus = "Front uploaded. Flip the card for the back."
                     }
                 }
             } catch {
@@ -956,6 +1018,17 @@ struct CardScannerView: View {
             }
         }
     }
+    private func finishPair() {
+        if let usedDeckId = pendingDeckId {
+            deckIdInput = JudgeTestDeck.nextDeckId(after: usedDeckId)
+        }
+        preSubmission = false
+        intendedGrader = ""
+        awaitingBack = false
+        frontPairId = nil
+        captureSide = "front"
+    }
+
     private func commitAndResetScan(ledger: ScanLedger) {
         portfolio.appendCard(from: ledger)
         resetCurrentScanState()
