@@ -83,8 +83,10 @@ struct CardScannerView: View {
     @State private var judgeServerURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
     @State private var deckIdInput = UserDefaults.standard.string(forKey: JudgeTestDeck.deckIdDefaultsKey) ?? ""
     @State private var preSubmission = false
+    @State private var intendedGrader = ""
     @State private var pendingDeckId: String?
     @State private var pendingPreSubmission = false
+    @State private var pendingIntendedGrader: String?
     @State private var isRemoteGrading = false
     @State private var remoteGradeSummary = ""
     @State private var lastRemoteError: String?
@@ -185,6 +187,7 @@ struct CardScannerView: View {
                 CameraCalibration.runContractChecks()
                 CompactScanLayout.runContractChecks()
                 CaptureMetadata.runContractChecks()
+                JudgeAPIClient.runContractChecks()
                 #endif
                 calibrationEngine.startDeviceLevelMonitoring()
             }
@@ -295,6 +298,18 @@ struct CardScannerView: View {
                         .onChange(of: deckIdInput) {
                             UserDefaults.standard.set(deckIdInput, forKey: JudgeTestDeck.deckIdDefaultsKey)
                         }
+                    Picker(selection: $intendedGrader) {
+                        Text("Grader").tag("")
+                        ForEach(JudgeTestDeck.graders, id: \.self) { name in
+                            Text(name).tag(name)
+                        }
+                    } label: {
+                        Text("Grader")
+                    }
+                    .pickerStyle(.menu)
+                    .font(.caption2)
+                    .labelsHidden()
+                    .fixedSize()
                     Toggle("Pre-sub", isOn: $preSubmission)
                         .font(.caption2)
                         .fixedSize()
@@ -705,6 +720,7 @@ struct CardScannerView: View {
             return
         }
         pendingPreSubmission = preSubmission
+        pendingIntendedGrader = JudgeTestDeck.graders.contains(intendedGrader) ? intendedGrader : nil
         resetSweepSession()
         stillCaptureNonce += 1
     }
@@ -877,6 +893,7 @@ struct CardScannerView: View {
                     cardQuad: cardQuad,
                     deckId: pendingDeckId,
                     preSubmission: pendingPreSubmission,
+                    intendedGrader: pendingIntendedGrader,
                     captureMetadata: captureMetadata,
                     scanId: pendingScanId
                 )
@@ -896,6 +913,7 @@ struct CardScannerView: View {
                             deckIdInput = JudgeTestDeck.nextDeckId(after: usedDeckId)
                         }
                         preSubmission = false
+                        intendedGrader = ""
                     }
                 }
             } catch {

@@ -7,6 +7,8 @@ import Foundation
 /// Test-deck card IDs (TD-01…TD-050), matching services/test_deck.js.
 enum JudgeTestDeck {
     static let deckIdDefaultsKey = "judgeDeckId"
+    /// Same companies as services/test_deck.js GRADERS. Empty means unset.
+    static let graders = ["PSA", "BGS", "SGC", "CGC", "TAG", "Other"]
 
     static func normalizedDeckId(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -141,6 +143,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         cardQuad: CardQuad? = nil,
         deckId: String? = nil,
         preSubmission: Bool = false,
+        intendedGrader: String? = nil,
         captureMetadata: String? = nil,
         scanId: String
     ) async throws -> RemoteReport {
@@ -164,6 +167,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             cardQuad: cardQuad,
             deckId: deckId,
             preSubmission: preSubmission,
+            intendedGrader: intendedGrader,
             captureMetadata: captureMetadata,
             scanId: scanId
         )
@@ -260,6 +264,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         cardQuad: CardQuad?,
         deckId: String?,
         preSubmission: Bool,
+        intendedGrader: String?,
         captureMetadata: String?,
         scanId: String
     ) -> Data {
@@ -281,6 +286,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         }
         if preSubmission {
             appendField("preSubmission", "true")
+        }
+        if let intendedGrader, JudgeTestDeck.graders.contains(intendedGrader) {
+            appendField("intendedGrader", intendedGrader)
         }
         appendField("alignmentCrop", "true")
         appendField("debug", "true")
@@ -552,4 +560,27 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         }
         return nil
     }
+
+    #if DEBUG
+    static func runContractChecks() {
+        precondition(JudgeTestDeck.graders == ["PSA", "BGS", "SGC", "CGC", "TAG", "Other"])
+        let jpeg = Data([0xFF, 0xD8, 0xFF])
+        func text(grader: String?) -> String {
+            let data = multipartBody(
+                boundary: "B", jpeg: jpeg, name: "unknown", cardType: nil, tilt: nil,
+                ocrLines: [], sweepFrames: [], cardQuad: nil, deckId: "TD-07",
+                preSubmission: true, intendedGrader: grader, captureMetadata: nil, scanId: "scan"
+            )
+            return String(data: data, encoding: .utf8) ?? ""
+        }
+        let sent = text(grader: "BGS")
+        precondition(sent.contains("name=\"deckId\""))
+        precondition(sent.contains("name=\"preSubmission\""))
+        precondition(sent.contains("name=\"intendedGrader\""))
+        precondition(sent.contains("\r\n\r\nBGS\r\n"))
+        precondition(!text(grader: nil).contains("intendedGrader"))
+        precondition(!text(grader: "").contains("intendedGrader"))
+        precondition(!text(grader: "Beckett").contains("intendedGrader"))
+    }
+    #endif
 }
