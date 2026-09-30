@@ -2,6 +2,7 @@ import Foundation
 import CoreMotion
 import Combine
 import AVFoundation
+import AudioToolbox
 
 @MainActor 
 public final class CameraCalibration: ObservableObject {
