@@ -75,6 +75,9 @@ async function run() {
   assert('no copyright line leaves the year blank and the map off',
     unknown.copyrightYear === null && unknown.upsideDown === null && unknown.applied === false, unknown);
 
+  assert('PSA 10 reverse 75/25 is within at 75 and outside past it',
+    backScan.psaGemMint10Back(75).within === true && backScan.psaGemMint10Back(75.1).within === false &&
+    backScan.psaGemMint10Back(null).judged === false);
   const only = backScan.inspectLines(['© 1989 Score']);
   assert('a single copyright line stores the year and does not guess orientation',
     only.copyrightYear === 1989 && only.upsideDown === null && only.applied === false, only);
@@ -169,6 +172,8 @@ async function run() {
       row && row.latest && row.latest.scanId === frontId && row.back && row.back.copyrightYear === 2020, row);
     assert('deck report prints the upside-down flag', /back .*upside down, edge map not applied/.test(report.text) &&
       /copyright 2020/.test(report.text), report.text);
+    assert('deck report compares the back to PSA 10 reverse 75/25 and does not score it',
+      /PSA 10 reverse \(75\/25\):/.test(report.text) && row.back.result.cen == null, report.text);
     const labels = store.loadLabels().scans;
     assert('front label keeps side front', labels[frontId] && labels[frontId].side === 'front' && labels[frontId].pairId === frontId, labels[frontId]);
   } finally {

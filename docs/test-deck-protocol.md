@@ -67,7 +67,9 @@ Per card:
 5. The deck field advances after the back upload or the skip, not after the front.
 
 The report's pass/fail is the latest front. A back is measured (borders, low-confidence
-edges) and its centering sub-grade stays blank. A copyright line in the bottom half
+edges) and its centering sub-grade stays blank. The back row also says whether the
+worst share is within PSA's published Gem Mint 10 reverse tolerance of 75/25
+(https://www.psacard.com/gradingstandards). That line is not a centering score. A copyright line in the bottom half
 of the back text stores the year and records that image-left is the front's right.
 A copyright line in the top half flags the back upside down and does not apply that
 map. No copyright line leaves the map unapplied and the year blank.

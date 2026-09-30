@@ -20,6 +20,7 @@ const path = require('path');
 const deck = require('../services/test_deck');
 const dumpScans = require('./dump_scans');
 const scanMetadata = require('../services/scan_metadata');
+const backScan = require('../services/back_scan');
 
 function fmt(v, d) {
   return typeof v === 'number' && isFinite(v) ? v.toFixed(d == null ? 1 : d) : '—';
@@ -75,6 +76,14 @@ function rulerRatios(mm) {
   if (!mm || [mm.left, mm.right, mm.top, mm.bottom].some(function (v) { return v == null; })) return null;
   if (mm.left + mm.right <= 0 || mm.top + mm.bottom <= 0) return null;
   return { lr: 100 * mm.left / (mm.left + mm.right), tb: 100 * mm.top / (mm.top + mm.bottom) };
+}
+
+function psaBackComparison(scan) {
+  const share = scan && scan.result ? scan.result.worstShare : null;
+  const verdict = backScan.psaGemMint10Back(share);
+  if (!verdict.judged) return 'PSA 10 reverse (75/25): centering —';
+  return 'PSA 10 reverse (75/25): worst share ' + fmt(verdict.worstShare) +
+    (verdict.within ? ' (within)' : ' (outside)');
 }
 
 function backNote(scan) {
@@ -210,6 +219,7 @@ async function buildDeckReport(opts) {
     if (!latest) {
       lines.push('  front not scanned');
       lines.push(resultLine('back', latestBack.result, backNote(latestBack)));
+      lines.push('  ' + psaBackComparison(latestBack));
       rows.push(row);
       continue;
     }
@@ -235,6 +245,7 @@ async function buildDeckReport(opts) {
     }
     if (latestBack) {
       lines.push(resultLine('back', latestBack.result, backNote(latestBack)));
+      lines.push('  ' + psaBackComparison(latestBack));
     }
     if (candidate && latest.item && latest.item.imagePath) {
       const file = path.join(uploadsDir, path.basename(latest.item.imagePath));

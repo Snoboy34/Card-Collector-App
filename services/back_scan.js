@@ -14,6 +14,20 @@
 'use strict';
 
 const FLIP_INSTRUCTION = 'Turn the card over left to right. Keep the same edge at the top of the frame. Leave background showing on all four sides.';
+
+/**
+ * PSA Gem Mint 10 reverse centering, strict end of the published tolerance.
+ * This is a comparison, not a centering sub-grade. Grades below 10 are not
+ * given a reverse score: the passage below states the 10 only.
+ *
+ * Source, checked 2026-09-30: PSA Grading Standards, Gem Mint (10),
+ * https://www.psacard.com/gradingstandards
+ * "The image must be centered on the card within a tolerance not to exceed
+ * approximately 55/45 percent on the front, and 75/25 percent on the reverse."
+ * The live page was behind a bot check; the sentence is the Gem Mint 10
+ * paragraph from that URL.
+ */
+const PSA_GEM_MINT_10_BACK_MAX_SHARE = 75;
 const COPYRIGHT_RE = /©|\(c\)|copyright/i;
 const YEAR_RE = /\b(?:19|20)\d{2}\b/;
 
@@ -64,6 +78,22 @@ function inspectLines(lines) {
  * not passed here.
  * @param {object} report
  */
+/**
+ * @param {number|null} worstShare larger border share, 0–100
+ * @returns {{ judged: boolean, within: boolean|null, maxShare: number, worstShare: number|null }}
+ */
+function psaGemMint10Back(worstShare) {
+  if (typeof worstShare !== 'number' || !isFinite(worstShare)) {
+    return { judged: false, within: null, maxShare: PSA_GEM_MINT_10_BACK_MAX_SHARE, worstShare: null };
+  }
+  return {
+    judged: true,
+    within: worstShare <= PSA_GEM_MINT_10_BACK_MAX_SHARE + 1e-9,
+    maxShare: PSA_GEM_MINT_10_BACK_MAX_SHARE,
+    worstShare: worstShare
+  };
+}
+
 function unscoreBack(report) {
   if (!report) return report;
   report.side = 'back';
@@ -91,7 +121,9 @@ function unscoreBack(report) {
 
 module.exports = {
   FLIP_INSTRUCTION,
+  PSA_GEM_MINT_10_BACK_MAX_SHARE,
   parseCopyrightYear,
   inspectLines,
+  psaGemMint10Back,
   unscoreBack
 };
