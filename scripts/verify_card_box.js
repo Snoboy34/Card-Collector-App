@@ -427,6 +427,11 @@ async function run() {
       quadImageHeight: String(PHOTO_H)
     }, skewJpeg);
     assert('re-posting the same scanId → 200', again.status === 200, again.status);
+    const noFamily = again.body.item && again.body.item.cardIdentity;
+    assert('no OCR → familyId null, title Unidentified, set —',
+      noFamily && noFamily.familyId === null && again.body.item.name === 'Unidentified' &&
+      again.body.item.setName === '—', again.body.item && again.body.item.cardIdentity);
+
     assert('re-posting the same scanId keeps one inventory record', inventoryCount() === 1, inventoryCount());
 
     // compare_finders: both finders re-grade the stored upload + quad, read-only.
@@ -469,6 +474,29 @@ async function run() {
     });
     assert('compare_finders writes nothing (no new or modified files)',
       newFiles === 0 && Object.keys(before).every(function (f) { return after[f] === before[f]; }), { newFiles: newFiles });
+
+    const famId = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
+    const fam = await post({
+      scanId: famId,
+      alignmentCrop: 'true',
+      cardQuad: JSON.stringify(skewQuad),
+      quadImageWidth: String(PHOTO_W),
+      quadImageHeight: String(PHOTO_H),
+      ocrLines: JSON.stringify(['ERIC KARROS', '1991 UPPER DECK', 'DODGERS'])
+    }, skewJpeg);
+    const famIdentity = fam.body.item && fam.body.item.cardIdentity;
+    assert('OCR "1991 UPPER DECK" → familyId 1991-upper-deck', famIdentity && famIdentity.familyId === '1991-upper-deck',
+      famIdentity);
+    assert('family match fills set, title stays Unidentified, no display-name "match" field',
+      fam.body.item.setName === '1991 Upper Deck' && fam.body.item.name === 'Unidentified' &&
+      !('match' in famIdentity) && famIdentity.setName === '1991 Upper Deck', fam.body.item);
+    const ambiguous = await post({
+      scanId: '99999999-8888-4999-8aaa-bbbbbbbbbbbb', alignmentCrop: 'true',
+      cardQuad: JSON.stringify(skewQuad), quadImageWidth: String(PHOTO_W), quadImageHeight: String(PHOTO_H),
+      ocrLines: JSON.stringify(['1993 Topps Bowman'])
+    }, skewJpeg);
+    assert('ambiguous OCR (two families) → familyId null',
+      ambiguous.body.item && ambiguous.body.item.cardIdentity.familyId === null, ambiguous.body.item && ambiguous.body.item.cardIdentity);
 
     const local = require('../server').isLocalNetworkAddress;
     assert('local-network check allows loopback / RFC1918 / link-local',

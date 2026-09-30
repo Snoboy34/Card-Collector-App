@@ -40,6 +40,7 @@ const crypto = require('crypto');
 const grading = require('./services/grading_engine');
 const classifier = require('./services/classifier_engine');
 const wallet = require('./services/wallet_engine');
+const cardFamily = require('./services/card_family_lookup');
 const lanHttps = require('./scripts/lan_https');
 const scanLevel = require('./public/scan_level');
 const dumpScans = require('./scripts/dump_scans');
@@ -126,14 +127,24 @@ function resolveScanId(body) {
   return grading.normalizeScanId(body && body.scanId) || crypto.randomUUID();
 }
 
+/**
+ * Card identity from the client's still OCR. A family (set) match fills
+ * familyId / setName only; the player/card title stays Unidentified until a
+ * catalog lookup exists. No match or an ambiguous one → nulls, never a guess.
+ * `match` is intentionally not sent: native clients render it as a title.
+ */
 function honestCardIdentity(body) {
+  const ocrLines = parseOcrLines(body && body.ocrLines);
+  const hit = cardFamily.identify(ocrLines);
+  const family = hit.match === 'exact' ? cardFamily.familyById(hit.familyId) : null;
   return {
     name: 'Unidentified',
-    setName: '—',
+    setName: family ? family.label : '—',
     cardIdentity: {
-      familyId: null,
-      match: null,
-      ocrLines: parseOcrLines(body && body.ocrLines)
+      familyId: family ? family.id : null,
+      setName: family ? family.label : null,
+      matchType: family ? 'exact-tokens' : 'none',
+      ocrLines: ocrLines
     }
   };
 }
