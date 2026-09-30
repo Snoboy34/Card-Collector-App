@@ -350,6 +350,19 @@ function createStore(dataDir) {
       }
     }
     if ('preSubmission' in f) next.preSubmission = f.preSubmission === true || f.preSubmission === 'true' || f.preSubmission === '1';
+    if ('side' in f) {
+      if (f.side == null || f.side === '') next.side = null;
+      else if (f.side === 'front' || f.side === 'back') next.side = f.side;
+      else return { ok: false, error: 'side must be front or back' };
+    }
+    if ('pairId' in f) {
+      if (f.pairId == null || f.pairId === '') next.pairId = null;
+      else {
+        const pairId = String(f.pairId).trim();
+        if (!/^[A-Za-z0-9._-]{8,80}$/.test(pairId)) return { ok: false, error: 'pairId is not a scan id' };
+        next.pairId = pairId;
+      }
+    }
     if ('intendedGrader' in f) {
       const g = normalizeGrader(f.intendedGrader);
       if (g === undefined) return { ok: false, error: 'intended grader must be one of ' + GRADERS.join(', ') };

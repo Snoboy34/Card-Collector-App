@@ -45,6 +45,7 @@ const scanLevel = require('./public/scan_level');
 const dumpScans = require('./scripts/dump_scans');
 const testDeck = require('./services/test_deck');
 const scanMetadata = require('./services/scan_metadata');
+const backScan = require('./services/back_scan');
 const deckReport = require('./scripts/deck_report');
 const childProcess = require('child_process');
 
@@ -152,6 +153,10 @@ function parseGradingOptions(body) {
   if (body.quadImageWidth) opts.quadImageWidth = Number(body.quadImageWidth);
   if (body.quadImageHeight) opts.quadImageHeight = Number(body.quadImageHeight);
   if (body.quadConfidence) opts.quadConfidence = Number(body.quadConfidence);
+  // Only a back changes the report. side=front is stored on the item and
+  // is not passed into the grader, so a front grade matches a request with
+  // no side field.
+  if (body.side === 'back') opts.side = 'back';
   return opts;
 }
 
@@ -264,7 +269,34 @@ function captureLabelFields(body) {
   if (body && body.deckId) fields.deckId = body.deckId;
   if (body && body.preSubmission != null && body.preSubmission !== '') fields.preSubmission = body.preSubmission;
   if (body && body.intendedGrader) fields.intendedGrader = body.intendedGrader;
+  if (body && (body.side === 'front' || body.side === 'back')) fields.side = body.side;
+  if (body && body.pairId) {
+    const pairId = grading.normalizeScanId(body.pairId);
+    if (pairId) fields.pairId = pairId;
+  }
   return fields;
+}
+
+function pairFields(body, scanId) {
+  const side = body && body.side === 'back' ? 'back' : 'front';
+  const pairId = grading.normalizeScanId(body && body.pairId) || (side === 'front' ? scanId : null);
+  return { side: side, pairId: pairId };
+}
+
+/** Copyright year and the flip map. Front reports are not touched. */
+function attachBackMetadata(report, body, pairId) {
+  if (!report || !body || body.side !== 'back') return report;
+  const info = backScan.inspectLines(parseOcrLines(body.ocrLines));
+  report.edgeMap = {
+    instructedFlip: info.instructedFlip,
+    upsideDown: info.upsideDown,
+    applied: info.applied,
+    imageToFront: info.imageToFront
+  };
+  report.copyrightYear = info.copyrightYear;
+  report.copyrightLine = info.copyrightLine;
+  report.pairId = pairId;
+  return report;
 }
 
 function labelFromCapture(scanId, body) {
@@ -476,6 +508,8 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
     // 2) Strict 4-phase Judge pipeline (centering / surface / edges / corners + 0.5 ceiling)
     const gradeStart = Date.now();
     const report = await grading.gradeBuffer(imageFile.buffer, opts);
+    const pair = pairFields(req.body, scanId);
+    attachBackMetadata(report, req.body, pair.pairId);
     const meta = await scanMetadataFor(req, {
       buffer: imageFile.buffer, file: imageFile, route: '/api/grade', receivedAt: receivedAt,
       gradeMs: Date.now() - gradeStart, sweepFrames: ((req.files && req.files.sweep) || []).length
@@ -517,6 +551,8 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
       engine: ENGINE,
       captureMetadata: meta.captureMetadata,
       serverMetadata: meta.serverMetadata,
+      side: pair.side,
+      pairId: pair.pairId,
       createdAt: new Date().toISOString()
     };
 
@@ -550,6 +586,8 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     const classification = await classifier.classifyBuffer(buffer, { filename: orig });
     const gradeStart = Date.now();
     const report = await grading.gradeBuffer(buffer, opts);
+    const pair = pairFields(req.body, scanId);
+    attachBackMetadata(report, req.body, pair.pairId);
     const meta = await scanMetadataFor(req, {
       buffer: buffer, file: req.file, route: '/api/grade/upload', receivedAt: receivedAt, gradeMs: Date.now() - gradeStart
     });
@@ -579,6 +617,8 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
       engine: ENGINE,
       captureMetadata: meta.captureMetadata,
       serverMetadata: meta.serverMetadata,
+      side: pair.side,
+      pairId: pair.pairId,
       createdAt: new Date().toISOString()
     };
 

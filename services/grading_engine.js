@@ -71,6 +71,7 @@
 const scanLevel = require('../public/scan_level');
 const cardQuad = require('./card_quad');
 const scanDebug = require('./scan_debug');
+const backScan = require('./back_scan');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
@@ -2379,6 +2380,13 @@ async function gradeBuffer(buffer, options) {
     return gradeResult;
   }
 
+  // Side is set only for a back. A front grade, including side=front, does
+  // not enter unscoreBack and the report stays byte-for-byte the same.
+  async function deliver(report, ctx) {
+    if (options.side === 'back') backScan.unscoreBack(report);
+    return returnGrade(await attachScanDebug(report, ctx));
+  }
+
   if (!sharp) {
     return returnGrade(fallbackReport('grading skipped: optional dependency `sharp` not installed'));
   }
@@ -2392,7 +2400,7 @@ async function gradeBuffer(buffer, options) {
     // is never used as the card box (that graded pink backdrop paper).
     const located = await locateCard(buffer, options);
     if (!located.found) {
-      return returnGrade(await attachScanDebug(cardNotFoundReport(located.detection), null));
+      return deliver(cardNotFoundReport(located.detection), null);
     }
     const cardDetection = located.detection;
     const shouldRotate = cardDetection.rotatedToPortrait;
@@ -2573,10 +2581,10 @@ async function gradeBuffer(buffer, options) {
           edgesWhiteningCount
         };
       }
-      return returnGrade(await attachScanDebug(applyDetectorTrust(report), {
+      return deliver(applyDetectorTrust(report), {
         warped: warped, centeringBox: centeringBox,
         measurement: centeringMeasurement, borderReliability: borderReliability
-      }));
+      });
     }
 
     const judged = evaluateMultiPhaseCondition(
@@ -2657,10 +2665,10 @@ async function gradeBuffer(buffer, options) {
       };
     }
 
-    return returnGrade(await attachScanDebug(applyDetectorTrust(report), {
+    return deliver(applyDetectorTrust(report), {
       warped: warped, centeringBox: centeringBox,
       measurement: centeringMeasurement, borderReliability: borderReliability
-    }));
+    });
   } catch (err) {
     return returnGrade(fallbackReport('grading engine error: ' + (err && err.message ? err.message : String(err))));
   }

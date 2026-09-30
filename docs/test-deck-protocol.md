@@ -59,11 +59,18 @@ The phone shows this guidance:
 Per card:
 
 1. On the phone, enter the deck ID (`TD-07`) before Capture.
-2. One **Capture**, front only.
-3. When the tilt banner appears, tap **Submit without tilt frames**.
+2. **Capture** the front. When the tilt banner appears, tap **Submit without tilt frames**.
+3. Turn the card over left to right. Keep the same edge at the top of the frame.
+   Leave background showing on all four sides. **Capture back**, or tap **Skip back**.
 4. Do not retake, even for a bad result — the bad result is the data. Retake
    only after "Card not found — retake", and note it.
-5. The deck field advances to the next ID after a successful upload.
+5. The deck field advances after the back upload or the skip, not after the front.
+
+The report's pass/fail is the latest front. A back is measured (borders, low-confidence
+edges) and its centering sub-grade stays blank. A copyright line in the bottom half
+of the back text stores the year and records that image-left is the front's right.
+A copyright line in the top half flags the back upside down and does not apply that
+map. No copyright line leaves the map unapplied and the year blank.
 
 Missed the ID on the phone? Assign it afterwards on `/deck` (recent scans table).
 

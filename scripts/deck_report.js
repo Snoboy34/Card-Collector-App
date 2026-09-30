@@ -77,6 +77,16 @@ function rulerRatios(mm) {
   return { lr: 100 * mm.left / (mm.left + mm.right), tb: 100 * mm.top / (mm.top + mm.bottom) };
 }
 
+function backNote(scan) {
+  const map = scan && scan.edgeMap;
+  const parts = ['not scored'];
+  if (map && map.upsideDown === true) parts.push('upside down, edge map not applied');
+  else if (map && map.applied && map.imageToFront) parts.push('flip-left-right, image left is front right');
+  else parts.push('edge map not applied');
+  if (scan && scan.copyrightYear) parts.push('copyright ' + scan.copyrightYear);
+  return parts.join('; ');
+}
+
 function backgroundOf(meta) {
   const value = scanMetadata.normalizeBackground(meta && meta.capture && meta.capture.background);
   return value || null;
@@ -118,7 +128,9 @@ async function buildDeckReport(opts) {
         ? { version: item.gradingReport.engineVersion } : null),
       result: resultFromReport(item.gradingReport),
       familyId: item.cardIdentity && item.cardIdentity.familyId,
-      background: backgroundOf(item.captureMetadata)
+      background: backgroundOf(item.captureMetadata),
+      edgeMap: item.gradingReport && item.gradingReport.edgeMap || null,
+      copyrightYear: item.gradingReport && item.gradingReport.copyrightYear || null
     });
   });
   failed.forEach(function (e) {
@@ -157,15 +169,23 @@ async function buildDeckReport(opts) {
     const expect = card.expect || (cat ? cat.expect : null);
     const scans = Object.keys(labels)
       .filter(function (sid) { return labels[sid].deckId === deckId && byScan.has(sid); })
-      .map(function (sid) { return byScan.get(sid); })
+      .map(function (sid) {
+        const scan = byScan.get(sid);
+        scan.side = labels[sid].side === 'back' ? 'back' : 'front';
+        scan.pairId = labels[sid].pairId || null;
+        return scan;
+      })
       .sort(function (a, b) { return Date.parse(a.time) - Date.parse(b.time); });
-    const latest = scans[scans.length - 1] || null;
+    const frontScans = scans.filter(function (s) { return s.side !== 'back'; });
+    const backScans = scans.filter(function (s) { return s.side === 'back'; });
+    const latest = frontScans[frontScans.length - 1] || null;
+    const latestBack = backScans[backScans.length - 1] || null;
     let previous = null;
     if (latest) {
       const latestVer = latest.engine && latest.engine.version;
-      for (let i = scans.length - 2; i >= 0; i--) {
-        const v = scans[i].engine && scans[i].engine.version;
-        if (v !== latestVer) { previous = scans[i]; break; }
+      for (let i = frontScans.length - 2; i >= 0; i--) {
+        const v = frontScans[i].engine && frontScans[i].engine.version;
+        if (v !== latestVer) { previous = frontScans[i]; break; }
       }
     }
     const ruler = rulerRatios(card.physicalMm);
@@ -175,9 +195,21 @@ async function buildDeckReport(opts) {
       '  expect ' + (expect || '—') +
       (ruler ? '  ruler L/R ' + fmt(ruler.lr) + ' T/B ' + fmt(ruler.tb) : '') +
       (known ? '  known ' + deck.formatGradeShort(known) : ''));
-    const row = { deckId: deckId, category: card.category || null, expect: expect, latest: null, previous: null, candidate: null };
-    if (!latest) {
+    const row = { deckId: deckId, category: card.category || null, expect: expect, latest: null, previous: null, candidate: null, back: null };
+    if (!latest && !latestBack) {
       lines.push('  not scanned yet');
+      rows.push(row);
+      continue;
+    }
+    if (latestBack) {
+      row.back = {
+        scanId: latestBack.scanId, result: latestBack.result, edgeMap: latestBack.edgeMap || null,
+        copyrightYear: latestBack.copyrightYear || null
+      };
+    }
+    if (!latest) {
+      lines.push('  front not scanned');
+      lines.push(resultLine('back', latestBack.result, backNote(latestBack)));
       rows.push(row);
       continue;
     }
@@ -200,6 +232,9 @@ async function buildDeckReport(opts) {
       lines.push(resultLine('previous', previous.result, p.text + '  ' + engineLabel(previous.engine) +
         ' · ' + previous.scanId.slice(0, 8).toUpperCase() +
         '  background ' + (previous.background || 'unspecified')));
+    }
+    if (latestBack) {
+      lines.push(resultLine('back', latestBack.result, backNote(latestBack)));
     }
     if (candidate && latest.item && latest.item.imagePath) {
       const file = path.join(uploadsDir, path.basename(latest.item.imagePath));
