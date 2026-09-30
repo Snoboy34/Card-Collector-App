@@ -1,11 +1,37 @@
 import SwiftUI
+import Combine
 
-// MARK: - Supported Multi-Phase Scanning Workflow States
-enum ScanningPhase: String, CaseIterable {
-    case frontCentering = "1. Front Centering"
-    case surfaceTiltSweep = "2. Surface Light Scan"
-    case cornerMacroCheck = "3. Corner Inspection"
-    case backPerimeter = "4. Back Border Check"
+/// Fits neon + status + 44pt actions on SE (~455pt content) through 16 Pro.
+private struct CompactScanLayout {
+    let cameraHeight: CGFloat
+    let metricsHeight: CGFloat
+
+    init(availableHeight: CGFloat, sweepActive: Bool) {
+        let header: CGFloat = 50
+        let status: CGFloat = sweepActive ? 48 : 34
+        let actions: CGFloat = 44
+        let gaps: CGFloat = 28
+        let leftover = availableHeight - header - status - actions - gaps
+        let tight = leftover < 250
+        let metricsFloor: CGFloat = tight ? 56 : 72
+        let cameraMin: CGFloat = tight ? 160 : 168
+        let camera = min(340, max(cameraMin, leftover - metricsFloor))
+        cameraHeight = camera
+        metricsHeight = max(metricsFloor, leftover - camera)
+    }
+
+    #if DEBUG
+    static func runContractChecks() {
+        let se = CompactScanLayout(availableHeight: 455, sweepActive: false)
+        precondition(se.cameraHeight >= 168 && se.cameraHeight <= 340)
+        precondition(50 + 34 + 44 + 28 + se.cameraHeight + se.metricsHeight <= 456)
+        let seSweep = CompactScanLayout(availableHeight: 400, sweepActive: true)
+        precondition(50 + 48 + 44 + 28 + seSweep.cameraHeight + seSweep.metricsHeight <= 401)
+        let pro = CompactScanLayout(availableHeight: 680, sweepActive: false)
+        precondition(pro.cameraHeight == 340)
+        precondition(pro.metricsHeight >= 72)
+    }
+    #endif
 }
 
 struct CategoryAllocation: Identifiable {
@@ -17,36 +43,21 @@ struct CategoryAllocation: Identifiable {
 
 struct CardScannerView: View {
     @StateObject private var calibrationEngine = CameraCalibration()
-    @StateObject private var priceEngine = PricingEngine()
     @StateObject private var portfolio = PortfolioState()
     @StateObject private var securityVault = UserSecurity()
 
-    private let gradingJudge = TheJudge()
+    // TheJudge is not used for saved grades. Live framing is CenteringAnalyzer;
+    // Capture → /api/grade is the only ledger authority.
     private let centeringAnalyzer = CenteringAnalyzer()
-    private let defectAnalyzer = DefectAnalyzer()
 
-    @State private var currentPhase: ScanningPhase = .frontCentering
-    @State private var scanResult: CenteringResult?
-    @State private var activeValuation: CardValuation?
-    @State private var calculatedGrade: CalculatedGrade?
+    @State private var pendingServerLedger: ScanLedger?
+    @State private var pendingScanId = ""
     @State private var isLoadingPrice = false
     @State private var isSaveConfirmed = false
     @State private var isCardDetected = false
+    @State private var cardMissStreak = 0
     @State private var automaticCardIdentifier = "unknown"
 
-    @State private var autoSurfaceScratches = 0
-    @State private var autoEdgeWhitening = 0
-    @State private var autoCornerFraying = 0
-
-    // NEW: tracks whether the multi-frame centering buffer has accumulated enough
-    // consistent samples yet. Drives the "Hold steady..." progress state and gates
-    // the advance button on the front-centering phase so users lock in an averaged,
-    // stable reading instead of whatever single noisy frame happened to land last.
-    @State private var isCenteringStable = false
-    @State private var centeringSampleCount = 0
-    // NEW: guards against triggering auto-advance more than once while multiple in-flight
-    // frame-processing Tasks might briefly all see "stable" before the phase change commits.
-    @State private var isAutoAdvancing = false
 
     @State private var showingActiveScanReport = false
     @State private var selectedVaultCard: SavedCard? = nil
@@ -70,9 +81,41 @@ struct CardScannerView: View {
     @State private var stillCaptureNonce: UInt64 = 0
     @State private var exposureLockStatus = "Camera starting…"
     @State private var judgeServerURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
+    @State private var deckIdInput = UserDefaults.standard.string(forKey: JudgeTestDeck.deckIdDefaultsKey) ?? ""
+    @State private var preSubmission = false
+    @State private var intendedGrader = ""
+    @State private var scanBackground = UserDefaults.standard.string(forKey: CaptureMetadata.backgroundDefaultsKey) ?? ""
+    @State private var pendingDeckId: String?
+    @State private var pendingPreSubmission = false
+    @State private var pendingIntendedGrader: String?
+    @State private var pendingScanBackground: String?
+    @State private var captureSide = "front"
+    @State private var awaitingBack = false
+    @State private var frontPairId: String?
     @State private var isRemoteGrading = false
     @State private var remoteGradeSummary = ""
     @State private var lastRemoteError: String?
+
+    private struct NativeSweepFrame {
+        var bin: CardSweepBins.Bin
+        var jpeg: Data
+        var pitchDeg: Double
+        var rollDeg: Double
+    }
+
+    @State private var sweepActive = false
+    @State private var sweepTarget: CardSweepBins.Bin?
+    @State private var sweepFrames: [NativeSweepFrame] = []
+    @State private var sweepGrabbed: Set<CardSweepBins.Bin> = []
+    @State private var sweepInBinSince: Date?
+    @State private var sweepWaitingForStill = false
+    @State private var sweepUploadStarted = false
+    @State private var sweepStatus = ""
+    @State private var pendingLevelOCR: [String] = []
+    @State private var pendingLevelQuad: JudgeAPIClient.CardQuad?
+    @State private var pendingLevelCamera: CameraFacts?
+    @State private var pendingLevelCapturedAt: Date?
+    private let sweepClock = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     private var filteredVaultRecords: [SavedCard] {
         searchVaultQuery.isEmpty ? portfolio.savedCards : portfolio.savedCards.filter {
@@ -85,39 +128,10 @@ struct CardScannerView: View {
         return portfolio.savedCards.filter { $0.targetBatchId == targetedId }
     }
 
-    // NEW: the advance button now requires a stable, averaged centering reading during
-    // the front-centering phase — not just raw card detection — before letting the user
-    // lock the phase in. Other phases only require card detection, same as before.
-    private var canAdvancePhase: Bool {
-        guard isCardDetected else { return false }
-        if currentPhase == .frontCentering {
-            return isCenteringStable
-        }
-        return true
-    }
-
-    // NEW: status line for the front-centering phase, reflecting level-gating.
-    private var statusTextForFrontCentering: String {
-        if isCenteringStable { return "Averaged Reading Locked (\(centeringSampleCount) samples)" }
-        if !calibrationEngine.isPerfectlyLevel { return "Level the Phone to Begin Averaging" }
-        return "Hold Steady — Averaging Frames..."
-    }
-
-    // NEW (fix): the center-guide box previously turned green on ANY card detection,
-    // regardless of whether the centering reading was actually good — meaning a badly
-    // off-center card would still show the same "all clear" green as a well-centered one.
-    // Now: outside the front-centering phase, green still just means "card detected"
-    // (there's no centering reading to verify there). During front-centering specifically,
-    // green requires BOTH a stable averaged reading AND that reading actually passing the
-    // PSA10 centering threshold — a detected-but-poorly-centered card now shows orange
-    // instead, so the color is telling the truth about alignment quality, not just presence.
+    // Live Vision only reports "card in view". Centering is measured on the
+    // server from the Capture still, so the guide no longer grades alignment.
     private var guideBoxColor: Color {
-        guard isCardDetected else { return Color.white.opacity(0.4) }
-        if currentPhase == .frontCentering {
-            let isVerifiedGoodCentering = isCenteringStable && (scanResult?.passesPSA10 ?? false)
-            return isVerifiedGoodCentering ? Color.green : Color.orange
-        }
-        return Color.green
+        isCardDetected ? Color.green : Color.white.opacity(0.4)
     }
 
     private var guideBoxLineWidth: CGFloat {
@@ -144,139 +158,245 @@ struct CardScannerView: View {
         }
     }
 
-    // FIXED (layout): the capture/advance button used to live at the bottom of the same
-    // ScrollView as the diagnostics dump. Once the diagnostics text stopped being clipped
-    // (an earlier fix), that panel could grow tall enough to push the button off-screen
-    // entirely — you could see the camera or the button, never both, without scrolling.
-    // Restructured so the camera viewport, phase indicator, and the Lock & Advance button
-    // now live in a fixed (non-scrolling) block at the top of the screen — always visible
-    // together. Only the metrics/diagnostics panel below scrolls, so a long diagnostics
-    // dump can grow freely without ever hiding the capture controls again.
+    // Primary chrome (neon frame, status, Capture/Advance) is pinned. Camera
+    // height is leftover space so SE through 16 Pro fit without scrolling.
+    // Long diagnostics stay in a short secondary ScrollView.
     private var scannerDashboardView: some View {
         NavigationView {
-            VStack(spacing: 16) {
-                Picker("Profile", selection: $selectedCategory) {
-                    ForEach(CardCategory.allCases, id: \.self) { category in
-                        Text(category.rawValue).tag(category)
-                    }
+            GeometryReader { geo in
+                let layout = CompactScanLayout(availableHeight: geo.size.height, sweepActive: sweepActive)
+                VStack(spacing: 6) {
+                    compactHeader
+                    cameraViewportSection(height: layout.cameraHeight)
+                    compactStatus
+                    compactActions
+                    compactMetricsPanel
+                        .frame(maxHeight: layout.metricsHeight)
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .onChange(of: selectedCategory) {
-                    resetCurrentScanState()
-                }
-
-                HStack(spacing: 4) {
-                    ForEach(ScanningPhase.allCases, id: \.self) { phase in
-                        Rectangle()
-                            .fill(phase == currentPhase ? Color.blue : (ScanningPhase.allCases.firstIndex(of: phase)! < ScanningPhase.allCases.firstIndex(of: currentPhase)! ? Color.green : Color.gray.opacity(0.3)))
-                            .frame(height: 5)
-                    }
-                }
-                .padding(.horizontal)
-
-                Text(currentPhase.rawValue)
-                    .font(.system(.subheadline, design: .monospaced))
-                    .bold()
-                    .foregroundColor(.secondary)
-
-                cameraViewportSection
-
-                nativeStillGradeControls
-
-                Button(action: { advanceInspectionFlowPipeline() }) {
-                    Text(currentPhase == .backPerimeter ? "Calculate Comprehensive Multi-Phase Grade" : "Lock & Advance to Next Scanning Phase")
-                        .bold()
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(canAdvancePhase ? Color.blue : Color.gray)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .padding(.horizontal)
-                .disabled(!canAdvancePhase)
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Image(systemName: "bolt.shield.fill").foregroundColor(.blue)
-                            Text("HIGH-PRECISION AUTOMATED METRICS").font(.caption).bold().foregroundColor(.secondary)
-                        }
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack { Text("Isolated Asset Profile:"); Spacer(); Text(automaticCardIdentifier).bold().foregroundColor(.blue) }
-                            Divider()
-                            phaseStatusExplainerLayout()
-                            // NEW: live diagnostic dump from CenteringAnalyzer for on-device
-                            // debugging during iPhone TestFlight testing — no Xcode console
-                            // available in that build path, so this surfaces the raw per-edge
-                            // sample-line data (position, baseline, local contrast range,
-                            // adaptive threshold) directly in the UI.
-                            //
-                            // FIXED: previously gated to `currentPhase == .frontCentering`
-                            // only — but auto-advance fires the instant centering locks,
-                            // often faster than there's time to screenshot. lastDiagnostics
-                            // is a frozen snapshot from the moment centering locked (it isn't
-                            // overwritten by later phases, which don't call
-                            // analyzeCenteringReal), so it's safe and actually useful to keep
-                            // showing it through phases 2-4 as well — same data, just now
-                            // there's time to actually capture it.
-                            Divider()
-                            // FIXED: previously capped at lineLimit(6), which was cutting
-                            // off the TOP/BOTTOM diagnostic lines entirely and only ever
-                            // showing LEFT/RIGHT — the opposite axis of whichever one
-                            // turns out to be misbehaving on a given test run. No line
-                            // limit now; this view already sits inside a ScrollView so it
-                            // can grow without breaking the layout. It's also now the ONLY
-                            // thing in the scrollable area, so it growing long no longer
-                            // pushes the camera/button off-screen (see scannerDashboardView).
-                            Text(centeringAnalyzer.diagnosticsSummaryText)
-                                .font(.system(size: 8, design: .monospaced))
-                                .foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            if let lastRemoteError {
-                                Divider()
-                                Text(lastRemoteError)
-                                    .font(.caption2)
-                                    .foregroundColor(.red)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            if !remoteGradeSummary.isEmpty {
-                                Divider()
-                                Text("NATIVE STILL /api/grade")
-                                    .font(.caption2).bold()
-                                    .foregroundColor(.cyan)
-                                Text(remoteGradeSummary)
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundColor(.primary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                        .font(.footnote)
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .cornerRadius(10)
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom)
-                }
+                .padding(.horizontal, 10)
+                .padding(.top, 4)
+                .padding(.bottom, 4)
             }
-            .padding(.top)
-            .navigationTitle("AI Grade Scanner")
+            .navigationTitle("Scan")
+            .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showingActiveScanReport) {
-                if let result = scanResult, let grade = calculatedGrade {
-                    ActiveScanReportSheet(result: result, grade: grade, value: activeValuation, onCommit: {
-                        commitAndResetScan(result: result, grade: grade, value: activeValuation)
+                if let ledger = pendingServerLedger {
+                    ActiveScanReportSheet(ledger: ledger, onCommit: {
+                        commitAndResetScan(ledger: ledger)
                     })
                 }
             }
-            .onAppear { calibrationEngine.startDeviceLevelMonitoring() }
+            .onAppear {
+                #if DEBUG
+                CardSweepBins.runContractChecks()
+                CameraCalibration.runContractChecks()
+                CompactScanLayout.runContractChecks()
+                CaptureMetadata.runContractChecks()
+                JudgeAPIClient.runContractChecks()
+                #endif
+                if !CaptureMetadata.backgrounds.contains(scanBackground) {
+                    scanBackground = ""
+                }
+                calibrationEngine.startDeviceLevelMonitoring()
+            }
             .onDisappear { calibrationEngine.stopDeviceLevelMonitoring() }
+            .onReceive(sweepClock) { date in
+                guard sweepActive else { return }
+                checkSweepGrab(now: date)
+            }
         }
     }
 
-    private var cameraViewportSection: some View {
+    private var compactHeader: some View {
+        VStack(spacing: 4) {
+            Picker("Profile", selection: $selectedCategory) {
+                ForEach(CardCategory.allCases, id: \.self) { category in
+                    Text(category.rawValue).tag(category)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: selectedCategory) {
+                resetCurrentScanState()
+            }
+        }
+    }
+
+    private var compactStatus: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Text(exposureLockStatus)
+                    .font(.caption2)
+                    .foregroundColor(exposureLockStatus.contains("locked") ? .green : .orange)
+                    .lineLimit(1)
+                Spacer()
+                Text(automaticCardIdentifier)
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+                    .lineLimit(1)
+            }
+            Text(primaryInstructionText)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .lineLimit(awaitingBack ? 4 : 2)
+            if !sweepStatus.isEmpty {
+                Text(sweepStatus)
+                    .font(.caption2)
+                    .foregroundColor(.cyan)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private var primaryInstructionText: String {
+        if awaitingBack {
+            return "Turn the card over left to right. Keep the same edge at the top of the frame. Leave background showing on all four sides."
+        }
+        if sweepActive {
+            return "Hold the highlighted tick. Keep the whole card inside the frame with a little background showing."
+        }
+        return "Keep the whole card inside the frame with a little background showing."
+    }
+
+    private var compactActions: some View {
+        HStack(spacing: 8) {
+            if awaitingBack {
+                Button(action: requestBackCapture) {
+                    Text(isRemoteGrading ? "Uploading…" : "Capture back")
+                        .font(.subheadline).bold()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(isRemoteGrading ? Color.gray : Color.cyan)
+                        .foregroundColor(.black)
+                        .cornerRadius(8)
+                }
+                .disabled(isRemoteGrading)
+                Button("Skip back") {
+                    finishPair()
+                }
+                .font(.subheadline).bold()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(Color(.secondarySystemBackground))
+                .foregroundColor(.primary)
+                .cornerRadius(8)
+                .disabled(isRemoteGrading)
+            }
+            if !awaitingBack {
+            Button(action: requestNativeStillGrade) {
+                HStack {
+                    if isRemoteGrading { ProgressView().tint(.black) }
+                    Text(captureButtonTitle)
+                        .font(.subheadline).bold()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background((isRemoteGrading || sweepActive) ? Color.gray : Color.cyan)
+                .foregroundColor(.black)
+                .cornerRadius(8)
+            }
+            .disabled(isRemoteGrading || sweepActive)
+
+            if sweepActive {
+                Button("Submit without tilt frames") {
+                    finishSweepAndUpload()
+                }
+                .font(.subheadline).bold()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(8)
+            }
+            }
+        }
+    }
+
+    private var compactMetricsPanel: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 6) {
+                TextField("https://192.168.x.x:5000", text: $judgeServerURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .font(.system(.caption2, design: .monospaced))
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: judgeServerURL) {
+                        UserDefaults.standard.set(judgeServerURL, forKey: JudgeAPIClient.serverURLDefaultsKey)
+                    }
+                HStack(spacing: 8) {
+                    TextField("Deck card (TD-01)", text: $deckIdInput)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .font(.system(.caption2, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: deckIdInput) {
+                            UserDefaults.standard.set(deckIdInput, forKey: JudgeTestDeck.deckIdDefaultsKey)
+                        }
+                    Picker(selection: $intendedGrader) {
+                        Text("Grader").tag("")
+                        ForEach(JudgeTestDeck.graders, id: \.self) { name in
+                            Text(name).tag(name)
+                        }
+                    } label: {
+                        Text("Grader")
+                    }
+                    .pickerStyle(.menu)
+                    .font(.caption2)
+                    .labelsHidden()
+                    .fixedSize()
+                    Toggle("Pre-sub", isOn: $preSubmission)
+                        .font(.caption2)
+                        .fixedSize()
+                }
+                Picker(selection: $scanBackground) {
+                    Text("Surface").tag("")
+                    Text("Pink (lab)").tag("pink")
+                    Text("White").tag("white")
+                    Text("Dark matte").tag("dark-matte")
+                    Text("Wood").tag("wood")
+                    Text("Pattern").tag("pattern")
+                    Text("Glossy").tag("glossy")
+                    Text("Other").tag("other")
+                } label: {
+                    Text("Surface")
+                }
+                .pickerStyle(.menu)
+                .font(.caption2)
+                .labelsHidden()
+                .onChange(of: scanBackground) {
+                    UserDefaults.standard.set(scanBackground, forKey: CaptureMetadata.backgroundDefaultsKey)
+                }
+                ForEach(CaptureMetadata.surfaceGuidance, id: \.self) { line in
+                    Text(line)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let lastRemoteError {
+                    Text(lastRemoteError)
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !remoteGradeSummary.isEmpty {
+                    Text(remoteGradeSummary)
+                        .font(.system(size: 10, design: .monospaced))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(8)
+        }
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(8)
+    }
+
+    private func cameraViewportSection(height: CGFloat) -> some View {
         GeometryReader { geo in
             let neon = CardAlignmentCrop.cardFrameRect(canvasWidth: geo.size.width, canvasHeight: geo.size.height)
+            let neonCenter = CGPoint(x: neon.x + neon.w / 2, y: neon.y + neon.h / 2)
             ZStack {
                 LiveCameraView(
                     stillCaptureNonce: $stillCaptureNonce,
@@ -285,39 +405,24 @@ struct CardScannerView: View {
                     onFrameCaptured: processLiveCameraFrame
                 )
                 .environmentObject(calibrationEngine)
-
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(Color.cyan, lineWidth: 2)
-                    .frame(width: neon.w, height: neon.h)
-                    .position(x: neon.x + neon.w / 2, y: neon.y + neon.h / 2)
-                    .allowsHitTesting(false)
-
-                ZStack {
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(guideBoxColor, lineWidth: guideBoxLineWidth)
-                    if !isCardDetected {
-                        VStack {
-                            Image(systemName: "viewfinder").font(.title2)
-                            Text("FILL NEON 2.5×3.5").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4)
-                        }.foregroundColor(.white)
-                    } else if let centeringRatio = scanResult {
-                        CenteringGuideOverlay(ratios: centeringRatio, size: CGSize(width: neon.w, height: neon.h))
-                    }
-                }
-                .frame(width: neon.w, height: neon.h)
-                .position(x: neon.x + neon.w / 2, y: neon.y + neon.h / 2)
                 .allowsHitTesting(false)
 
-                VStack {
-                    ZStack {
-                        Circle().stroke(calibrationEngine.isPerfectlyLevel ? Color.green : Color.red, lineWidth: 3).frame(width: 45, height: 45)
-                        Circle().fill(calibrationEngine.isPerfectlyLevel ? Color.green : Color.orange).frame(width: 10, height: 10).offset(x: CGFloat(calibrationEngine.currentRoll * 4), y: CGFloat(calibrationEngine.currentPitch * 4))
-                    }; Spacer()
-                }.padding(.top, 10)
-                if isCardDetected && currentPhase == .frontCentering && !isCenteringStable {
+                neonFrameOverlay(neon: neon, center: neonCenter)
+
+                levelBubbleOverlay
+                    .position(x: neonCenter.x, y: neonCenter.y)
+
+                if sweepActive, let target = sweepTarget {
+                    VStack {
+                        sweepBanner(target: target)
+                            .padding(.top, 6)
+                            .padding(.horizontal, 8)
+                        Spacer()
+                    }
+                } else if !calibrationEngine.isPerfectlyLevel {
                     VStack {
                         Spacer()
-                        Text(calibrationEngine.isPerfectlyLevel ? "HOLD STEADY... \(centeringSampleCount)/4" : "LEVEL THE PHONE")
+                        Text("LEVEL THE PHONE")
                             .font(.caption2).bold()
                             .padding(6)
                             .background(Color.black.opacity(0.6))
@@ -327,48 +432,89 @@ struct CardScannerView: View {
                     }
                 }
             }
+            .allowsHitTesting(false)
         }
-        .frame(minHeight: 320)
-        .frame(maxHeight: 420)
-        .cornerRadius(12)
+        .frame(height: height)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .allowsHitTesting(false)
+        .cornerRadius(8)
         .clipped()
-        .padding(.horizontal)
     }
 
-    private var nativeStillGradeControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                TextField("https://192.168.x.x:5000", text: $judgeServerURL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .font(.system(.caption, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: judgeServerURL) {
-                        UserDefaults.standard.set(judgeServerURL, forKey: JudgeAPIClient.serverURLDefaultsKey)
-                    }
+    @ViewBuilder
+    private func neonFrameOverlay(neon: CardAlignmentCrop.PixelRect, center: CGPoint) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(Color.cyan, lineWidth: 2)
+            Path { path in
+                path.move(to: CGPoint(x: 0, y: neon.h / 2))
+                path.addLine(to: CGPoint(x: neon.w, y: neon.h / 2))
+                path.move(to: CGPoint(x: neon.w / 2, y: 0))
+                path.addLine(to: CGPoint(x: neon.w / 2, y: neon.h))
             }
-            Text(exposureLockStatus)
-                .font(.caption2)
-                .foregroundColor(exposureLockStatus.contains("locked") ? .green : .orange)
-            Text("Lock AE on the empty mat, then fill the neon window. Still JPEG — not the live preview.")
-                .font(.caption2)
-                .foregroundColor(.secondary)
-            Button(action: requestNativeStillGrade) {
-                HStack {
-                    if isRemoteGrading { ProgressView().tint(.white) }
-                    Text(isRemoteGrading ? "Uploading still…" : "Capture Still & Grade")
-                        .bold()
+            .stroke(Color.white.opacity(0.45), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(guideBoxColor, lineWidth: guideBoxLineWidth)
+            if !isCardDetected {
+                VStack {
+                    Image(systemName: "viewfinder").font(.title2)
+                    Text("CARD INSIDE · BACKGROUND SHOWING").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4)
                 }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(isRemoteGrading ? Color.gray : Color.cyan)
-                .foregroundColor(.black)
-                .cornerRadius(10)
+                .foregroundColor(.white)
             }
-            .disabled(isRemoteGrading)
         }
-        .padding(.horizontal)
+        .frame(width: neon.w, height: neon.h)
+        .position(x: center.x, y: center.y)
+        .allowsHitTesting(false)
+    }
+
+    private var levelBubbleOverlay: some View {
+        let clamp: Double = 12
+        let radius: Double = 28
+        let pitch = max(-clamp, min(clamp, calibrationEngine.currentPitch))
+        let roll = max(-clamp, min(clamp, calibrationEngine.currentRoll))
+        return ZStack {
+            Circle()
+                .stroke(calibrationEngine.isPerfectlyLevel ? Color.green : Color.red, lineWidth: 3)
+                .frame(width: 64, height: 64)
+            sweepTick(bin: .pitchMinus, x: 0, y: -32)
+            sweepTick(bin: .pitchPlus, x: 0, y: 32)
+            sweepTick(bin: .rollPlus, x: 32, y: 0)
+            sweepTick(bin: .rollMinus, x: -32, y: 0)
+            Circle()
+                .fill(Color.white.opacity(0.2))
+                .frame(width: 14, height: 14)
+            Circle()
+                .fill(calibrationEngine.isPerfectlyLevel ? Color.green : Color.orange)
+                .frame(width: 10, height: 10)
+                .offset(
+                    x: CGFloat(roll / clamp * radius),
+                    y: CGFloat(pitch / clamp * radius)
+                )
+                .animation(nil, value: calibrationEngine.currentPitch)
+                .animation(nil, value: calibrationEngine.currentRoll)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var captureButtonTitle: String {
+        if isRemoteGrading { return "Uploading…" }
+        if sweepActive {
+            return "Sweep \(sweepGrabbed.count)/5"
+        }
+        return "Capture"
+    }
+
+    @ViewBuilder
+    private func sweepTick(bin: CardSweepBins.Bin, x: CGFloat, y: CGFloat) -> some View {
+        let isTarget = sweepActive && sweepTarget == bin
+        let isDone = sweepGrabbed.contains(bin)
+        RoundedRectangle(cornerRadius: 1)
+            .fill(isDone ? Color.green : (isTarget ? Color.yellow : Color.white.opacity(0.7)))
+            .frame(width: abs(x) > 0 ? 10 : 3, height: abs(y) > 0 ? 10 : 3)
+            .offset(x: x, y: y)
+            .opacity(isTarget ? 1 : 0.85)
     }
 
     private var vaultAnalyticsView: some View {
@@ -382,7 +528,7 @@ struct CardScannerView: View {
                     }.padding(.top, 40)
                 } else {
                     HStack(spacing: 15) {
-                        VStack(alignment: .leading) { Text("NET WORTH").font(.caption2).bold().foregroundColor(.secondary); Text(String(format: "$%.2f", portfolio.totalPortfolioValue)).font(.title2).bold().foregroundColor(.blue) }.frame(maxWidth: .infinity, alignment: .leading).padding().background(Color(.secondarySystemBackground)).cornerRadius(10)
+                        VStack(alignment: .leading) { Text("NET WORTH").font(.caption2).bold().foregroundColor(.secondary); Text(portfolio.hasPricedCards ? String(format: "$%.2f", portfolio.totalPortfolioValue) : ScanLedger.absent).font(.title2).bold().foregroundColor(.blue) }.frame(maxWidth: .infinity, alignment: .leading).padding().background(Color(.secondarySystemBackground)).cornerRadius(10)
                         VStack(alignment: .leading) { Text("VAULT COUNT").font(.caption2).bold().foregroundColor(.secondary); Text(String(format: "%d Cards", portfolio.savedCards.count)).font(.title2).bold().foregroundColor(.purple) }.frame(maxWidth: .infinity, alignment: .leading).padding().background(Color(.secondarySystemBackground)).cornerRadius(10)
                     }.padding([.horizontal, .top])
                     if portfolio.totalPortfolioValue > 0 {
@@ -405,7 +551,7 @@ struct CardScannerView: View {
                                 HStack {
                                     VStack(alignment: .leading) { Text(card.name).font(.subheadline).bold().foregroundColor(.primary); Text(card.setName).font(.caption).foregroundColor(.secondary) }
                                     Spacer()
-                                    VStack(alignment: .trailing) { Text(String(format: "$%.2f", card.calculatedValue)).bold().foregroundColor(.green); Text(String(format: "PSA %d", card.predictedGradePSA)).font(.caption2).padding(4).background(Color.blue.opacity(0.1)).cornerRadius(4) }
+                                    VStack(alignment: .trailing) { Text(card.displayValue).bold().foregroundColor(.green); Text(card.displayGrade).font(.caption2).padding(4).background(Color.blue.opacity(0.1)).cornerRadius(4) }
                                 }
                             }
                             .listRowBackground(Color(.secondarySystemBackground))
@@ -459,10 +605,10 @@ struct CardScannerView: View {
                                 Image(systemName: "square.dashed")
                                 VStack(alignment: .leading) {
                                     Text(card.name).bold()
-                                    Text("PSA \(card.predictedGradePSA)").font(.caption2)
+                                    Text(card.displayGrade).font(.caption2)
                                 }
                                 Spacer()
-                                Text(String(format: "$%.2f", card.calculatedValue)).foregroundColor(.green)
+                                Text(card.displayValue).foregroundColor(.green)
                             }
                             .contextMenu { Menu("Move Folder...") { ForEach(portfolio.activeSubmissionBatches) { dest in Button(dest.batchName) { withAnimation { portfolio.assignCardToBatch(cardId: card.id, batchId: dest.id) } } } } }
                         }
@@ -498,8 +644,8 @@ struct CardScannerView: View {
                         }.pickerStyle(.segmented)
                         let sim = portfolio.simulateCrossCompanyScore(for: activeSimCard, targetCompany: selectedSimulatorCompany)
                         VStack(alignment: .leading, spacing: 8) {
-                            HStack { Text("Simulated Outcome Score:"); Spacer(); Text(String(format: "%.1f Grade", sim.grade)).bold().foregroundColor(.blue) }
-                            HStack { Text("Adjusted Yield Value Projection:"); Spacer(); Text(String(format: "$%.2f", sim.estimatedValue)).bold().foregroundColor(.green) }
+                            HStack { Text("Simulated Outcome Score:"); Spacer(); Text(sim.grade.map { String(format: "%.1f Grade", $0) } ?? ScanLedger.absent).bold().foregroundColor(.blue) }
+                            HStack { Text("Adjusted Yield Value Projection:"); Spacer(); Text(sim.estimatedValue.map { String(format: "$%.2f", $0) } ?? ScanLedger.absent).bold().foregroundColor(.green) }
                         }.padding(.vertical, 4)
                     }
                 }
@@ -536,7 +682,7 @@ struct CardScannerView: View {
                 }
                 if let activeTickerCard = selectedTickerCard {
                     Section(header: Text("7-DAY TRACE INDEX")) {
-                        HStack { Text("Traced Spot Price:"); Spacer(); Text(String(format: "$%.2f USD", activeTickerCard.calculatedValue)).bold().foregroundColor(.blue) }
+                        HStack { Text("Traced Spot Price:"); Spacer(); Text(activeTickerCard.displayValue).bold().foregroundColor(.blue) }
                     }
                 }
             }.navigationTitle("Market Ticker")
@@ -578,52 +724,12 @@ struct CardScannerView: View {
             }.navigationTitle("Live Deals")
         }
     }
-    private func phaseStatusExplainerLayout() -> some View {
-        switch currentPhase {
-        case .frontCentering:
-            return AnyView(HStack {
-                Text("Status:")
-                Spacer()
-                Text(statusTextForFrontCentering)
-                    .bold()
-                    .foregroundColor(isCenteringStable ? .green : (calibrationEngine.isPerfectlyLevel ? .orange : .red))
-            })
-        case .surfaceTiltSweep:
-            return AnyView(VStack(alignment: .leading, spacing: 4) {
-                HStack { Text("Gyro-Stabilization:"); Spacer(); Text("Active Sweep (Tilt Phone)").bold().foregroundColor(.purple) }
-                Divider()
-                HStack { Text("Isolated Clearcoat Scratches:"); Spacer(); Text(String(format: "%d defects", autoSurfaceScratches)).bold() }
-                HStack { Text("Isolated Surface Dimples:"); Spacer(); Text(String(format: "%d targets", autoEdgeWhitening)).bold() }
-            })
-        case .cornerMacroCheck:
-            return AnyView(HStack { Text("Macro Focal Pass:"); Spacer(); Text("Analyzing 4 Curved Corner Radii...").bold().foregroundColor(.orange) })
-        case .backPerimeter:
-            return AnyView(HStack { Text("Status:"); Spacer(); Text("Flipping Card: Scanning Back Edges...").bold().foregroundColor(.blue) })
-        }
-    }
-    private func advanceInspectionFlowPipeline() {
-        if currentPhase == .frontCentering {
-            self.autoSurfaceScratches = Int.random(in: 1...3)
-            self.autoEdgeWhitening = Int.random(in: 0...2)
-            currentPhase = .surfaceTiltSweep
-        } else if currentPhase == .surfaceTiltSweep {
-            self.autoCornerFraying = Int.random(in: 0...1)
-            currentPhase = .cornerMacroCheck
-        } else if currentPhase == .cornerMacroCheck {
-            currentPhase = .backPerimeter
-        } else if currentPhase == .backPerimeter {
-            executeGradingPipeline()
-        }
-    }
     // REMOVED: computeStrictGrade was dead code — never called anywhere in the pipeline.
     // TheJudge.evaluateMultiPhaseCondition already applies a real sub-grade ceiling rule
     // (final grade capped to the lowest sub-grade + 0.5), which is more correct than this
     // function's centering-only check would have been. Deleting rather than leaving unused
     // code that could mislead future debugging.
-    private func computeDynamicPrice(strictGrade: Double, psa10Value: Double) -> Double {
-        let base = selectedCategory == .sports ? 185.00 : psa10Value
-        return base * max(0.1, strictGrade / 10.0)
-    }
+    // computeDynamicPrice removed — vault value is only what /api/grade returns.
     private func index_arbitrage_row(opp: ArbitrageOpportunity) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack { Text(opp.companyName).bold(); Spacer(); Text(String(format: "+$%.2f ROI", opp.netProfitROI)).foregroundColor(.green).bold() }
@@ -636,167 +742,317 @@ struct CardScannerView: View {
             Label("PDF", systemImage: "doc.badge.gearshape.fill").font(.system(size: 9, weight: .bold))
         }
     }
-    @ViewBuilder
-    private func CenteringGuideOverlay(ratios: CenteringResult, size: CGSize = CGSize(width: 170, height: 210)) -> some View {
-        ZStack {
-            Path { $0.move(to: CGPoint(x: 0, y: size.height / 2)); $0.addLine(to: CGPoint(x: size.width, y: size.height / 2)) }.stroke(Color.blue.opacity(0.3), lineWidth: 1)
-            Path { $0.move(to: CGPoint(x: size.width / 2, y: 0)); $0.addLine(to: CGPoint(x: size.width / 2, y: size.height)) }.stroke(Color.blue.opacity(0.3), lineWidth: 1)
-            VStack {
-                HStack { Text(String(format: "L:%.0f%%", ratios.leftRightRatio.left)); Spacer(); Text(String(format: "R:%.0f%%", ratios.leftRightRatio.right)) }
-                Spacer()
-                HStack { Text(String(format: "T:%.0f%%", ratios.topBottomRatio.top)); Spacer(); Text(String(format: "B:%.0f%%", ratios.topBottomRatio.bottom)) }
-            }.font(.system(size: 9, weight: .bold)).foregroundColor(.green).padding(6)
-        }.frame(width: size.width, height: size.height)
+    private func sweepBanner(target: CardSweepBins.Bin) -> some View {
+        VStack(spacing: 2) {
+            Text("TILT \(sweepGrabbed.count)/5 — \(target.prompt)")
+                .font(.caption).bold()
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(String(
+                format: "pitch %+.1f° → %+.0f°   roll %+.1f° → %+.0f°",
+                calibrationEngine.currentPitch, target.targetPitch,
+                calibrationEngine.currentRoll, target.targetRoll
+            ))
+            .font(.system(.caption2, design: .monospaced))
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity)
+        .background(Color.yellow.opacity(0.92))
+        .foregroundColor(.black)
+        .cornerRadius(8)
     }
 
     private func requestNativeStillGrade() {
         lastRemoteError = nil
         remoteGradeSummary = ""
+        pendingServerLedger = nil
+        pendingScanId = UUID().uuidString
+        captureSide = "front"
+        awaitingBack = false
+        frontPairId = nil
         guard JudgeAPIClient.normalizedBaseURL(judgeServerURL) != nil else {
             lastRemoteError = JudgeAPIClient.APIError.invalidServerURL.localizedDescription
             return
         }
+        let deckText = deckIdInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if deckText.isEmpty {
+            pendingDeckId = nil
+        } else if let deckId = JudgeTestDeck.normalizedDeckId(deckText) {
+            pendingDeckId = deckId
+        } else {
+            lastRemoteError = "Deck card must look like TD-07 (or leave it empty)."
+            return
+        }
+        pendingPreSubmission = preSubmission
+        pendingIntendedGrader = JudgeTestDeck.graders.contains(intendedGrader) ? intendedGrader : nil
+        pendingScanBackground = CaptureMetadata.backgrounds.contains(scanBackground) ? scanBackground : nil
+        resetSweepSession()
         stillCaptureNonce += 1
+    }
+
+    private func requestBackCapture() {
+        guard awaitingBack, frontPairId != nil else { return }
+        lastRemoteError = nil
+        remoteGradeSummary = ""
+        pendingScanId = UUID().uuidString
+        captureSide = "back"
+        resetSweepSession()
+        stillCaptureNonce += 1
+    }
+
+    private func resetSweepSession() {
+        sweepActive = false
+        sweepTarget = nil
+        sweepFrames = []
+        sweepGrabbed = []
+        sweepInBinSince = nil
+        sweepWaitingForStill = false
+        sweepUploadStarted = false
+        sweepStatus = ""
+        pendingLevelOCR = []
+        pendingLevelQuad = nil
+        pendingLevelCamera = nil
+        pendingLevelCapturedAt = nil
     }
 
     private func handleStillCapture(_ result: Result<LiveCameraView.StillCapture, Error>) {
         switch result {
         case .failure(let error):
+            sweepWaitingForStill = false
             lastRemoteError = error.localizedDescription
+            if sweepFrames.isEmpty {
+                sweepActive = false
+            }
         case .success(let still):
-            isRemoteGrading = true
+            if sweepUploadStarted { return }
             lastRemoteError = nil
-            Task {
-                do {
-                    let cropped = try CardAlignmentCrop.cropJPEG(still.jpeg, previewSize: still.previewSize)
+            do {
+                let cropped = try CardAlignmentCrop.cropJPEG(still.jpeg, previewSize: still.previewSize)
+                let pitch = calibrationEngine.currentPitch
+                let roll = calibrationEngine.currentRoll
+                if captureSide == "back" {
                     let ocrLines = (try? CardStillOCR.recognizeLines(from: cropped)) ?? []
-                    let tilt = JudgeAPIClient.TiltSnapshot(
-                        pitchDeg: calibrationEngine.currentPitch,
-                        rollDeg: calibrationEngine.currentRoll,
-                        isLevel: calibrationEngine.isPerfectlyLevel
-                    )
-                    let cardType = selectedCategory == .sports ? "SPORTS" : "TCG"
-                    let report = try await JudgeAPIClient.shared.grade(
-                        jpeg: cropped,
-                        baseURL: judgeServerURL,
-                        name: automaticCardIdentifier,
-                        cardType: cardType,
-                        tilt: tilt,
-                        ocrLines: ocrLines
-                    )
-                    await MainActor.run {
-                        isRemoteGrading = false
-                        remoteGradeSummary = report.summaryText
-                        if !report.ok {
-                            lastRemoteError = "Server returned ok=false"
-                        }
+                    pendingLevelOCR = ocrLines
+                    pendingLevelQuad = CardStillQuad.detect(in: cropped)
+                    pendingLevelCamera = still.camera
+                    pendingLevelCapturedAt = still.capturedAt
+                    uploadNativeGrade(levelJPEG: cropped, extras: [])
+                    return
+                }
+                if sweepFrames.isEmpty {
+                    let ocrLines = (try? CardStillOCR.recognizeLines(from: cropped)) ?? []
+                    storeSweepFrame(bin: .level, jpeg: cropped, pitch: pitch, roll: roll)
+                    pendingLevelOCR = ocrLines
+                    pendingLevelQuad = CardStillQuad.detect(in: cropped)
+                    pendingLevelCamera = still.camera
+                    pendingLevelCapturedAt = still.capturedAt
+                    beginSweepAfterFirstStill()
+                } else if let target = sweepTarget {
+                    storeSweepFrame(bin: target, jpeg: cropped, pitch: pitch, roll: roll)
+                    advanceSweepAfterGrab()
+                } else {
+                    finishSweepAndUpload()
+                }
+            } catch {
+                sweepWaitingForStill = false
+                lastRemoteError = error.localizedDescription
+            }
+        }
+    }
+
+    private func storeSweepFrame(bin: CardSweepBins.Bin, jpeg: Data, pitch: Double, roll: Double) {
+        sweepFrames.append(NativeSweepFrame(bin: bin, jpeg: jpeg, pitchDeg: pitch, rollDeg: roll))
+        sweepGrabbed.insert(bin)
+        sweepWaitingForStill = false
+        sweepInBinSince = nil
+    }
+
+    private func beginSweepAfterFirstStill() {
+        guard calibrationEngine.isMotionAvailable else {
+            sweepStatus = "No motion sensor — uploading the first still only."
+            finishSweepAndUpload()
+            return
+        }
+        guard let next = CardSweepBins.nextSweepBin(captured: Array(sweepGrabbed)) else {
+            finishSweepAndUpload()
+            return
+        }
+        sweepActive = true
+        sweepTarget = next
+        sweepStatus = "\(next.prompt) (1/5)"
+    }
+
+    private func advanceSweepAfterGrab() {
+        guard let next = CardSweepBins.nextSweepBin(captured: Array(sweepGrabbed)) else {
+            finishSweepAndUpload()
+            return
+        }
+        sweepTarget = next
+        sweepInBinSince = nil
+        sweepStatus = "\(next.prompt) (\(sweepGrabbed.count)/5)"
+    }
+
+    private func checkSweepGrab(now: Date) {
+        guard sweepActive, let target = sweepTarget, !sweepWaitingForStill else { return }
+        let matched = CardSweepBins.matchSweepBin(
+            pitchDeg: calibrationEngine.currentPitch,
+            rollDeg: calibrationEngine.currentRoll
+        )
+        let inTarget = matched == target
+        if inTarget {
+            if sweepInBinSince == nil { sweepInBinSince = now }
+        } else {
+            sweepInBinSince = nil
+        }
+        let heldMs = sweepInBinSince.map { now.timeIntervalSince($0) * 1000 } ?? 0
+        if CardSweepBins.shouldGrabSweepBin(
+            inTargetBin: inTarget,
+            heldMs: heldMs,
+            alreadyGrabbed: sweepGrabbed.contains(target)
+        ) {
+            sweepWaitingForStill = true
+            stillCaptureNonce += 1
+        }
+    }
+
+    private func finishSweepAndUpload() {
+        guard !sweepUploadStarted else { return }
+        sweepActive = false
+        sweepTarget = nil
+        sweepWaitingForStill = false
+        sweepUploadStarted = true
+        guard let level = sweepFrames.first else {
+            lastRemoteError = "Sweep failed — no level still."
+            resetSweepSession()
+            return
+        }
+        let extras = Array(sweepFrames.dropFirst())
+        sweepStatus = extras.isEmpty
+            ? "Uploading first still…"
+            : "Uploading level still + \(extras.count) diagnostic sweep frames…"
+        uploadNativeGrade(levelJPEG: level.jpeg, extras: extras)
+    }
+
+    private func uploadNativeGrade(levelJPEG: Data, extras: [NativeSweepFrame]) {
+        isRemoteGrading = true
+        lastRemoteError = nil
+        let level = sweepFrames.first
+        let tilt = JudgeAPIClient.TiltSnapshot(
+            pitchDeg: level?.pitchDeg ?? calibrationEngine.currentPitch,
+            rollDeg: level?.rollDeg ?? calibrationEngine.currentRoll,
+            isLevel: CardSweepBins.isDeviceLevel(
+                level?.pitchDeg ?? calibrationEngine.currentPitch,
+                level?.rollDeg ?? calibrationEngine.currentRoll
+            )
+        )
+        let sweepPayload = extras.map {
+            JudgeAPIClient.SweepFrame(
+                bin: $0.bin.rawValue,
+                jpeg: $0.jpeg,
+                pitchDeg: $0.pitchDeg,
+                rollDeg: $0.rollDeg
+            )
+        }
+        let ocrLines = pendingLevelOCR
+        let cardQuad = pendingLevelQuad
+        let cardType = selectedCategory == .sports ? "SPORTS" : "TCG"
+        let side = captureSide == "back" ? "back" : "front"
+        let pairId = side == "back" ? frontPairId : pendingScanId
+        let captureMetadata = CaptureMetadata.json(
+            camera: pendingLevelCamera,
+            uploadJPEG: levelJPEG,
+            mode: extras.isEmpty ? "native-still" : "native-sweep",
+            capturedAt: pendingLevelCapturedAt ?? Date(),
+            sweepFrames: extras.count,
+            quad: cardQuad,
+            background: pendingScanBackground
+        )
+        Task {
+            do {
+                let report = try await JudgeAPIClient.shared.grade(
+                    jpeg: levelJPEG,
+                    baseURL: judgeServerURL,
+                    name: automaticCardIdentifier,
+                    cardType: cardType,
+                    tilt: tilt,
+                    ocrLines: ocrLines,
+                    sweepFrames: sweepPayload,
+                    cardQuad: cardQuad,
+                    deckId: pendingDeckId,
+                    preSubmission: pendingPreSubmission,
+                    intendedGrader: pendingIntendedGrader,
+                    side: side,
+                    pairId: pairId,
+                    captureMetadata: captureMetadata,
+                    scanId: pendingScanId
+                )
+                await MainActor.run {
+                    isRemoteGrading = false
+                    remoteGradeSummary = report.summaryText
+                    sweepStatus = extras.isEmpty
+                        ? "Uploaded first still."
+                        : "Uploaded \(1 + extras.count) frames. SUR is still the level still."
+                    if !report.ok {
+                        lastRemoteError = "Server returned ok=false"
+                    } else if side == "back" {
+                        let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId)
+                        pendingServerLedger = ledger
+                        showingActiveScanReport = true
+                        sweepStatus = "Uploaded the back."
+                        finishPair()
+                    } else {
+                        let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId)
+                        pendingServerLedger = ledger
+                        showingActiveScanReport = true
+                        frontPairId = pendingScanId
+                        awaitingBack = true
+                        sweepStatus = "Front uploaded. Flip the card for the back."
                     }
-                } catch {
-                    await MainActor.run {
-                        isRemoteGrading = false
-                        lastRemoteError = error.localizedDescription
-                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isRemoteGrading = false
+                    sweepStatus = ""
+                    lastRemoteError = error.localizedDescription
                 }
             }
         }
     }
-    private func updatePricingAndGrades() {
-        isSaveConfirmed = false
-        calibrationEngine.playSuccessChirp()
-        if scanResult == nil { scanResult = CenteringResult(leftRightRatio: (50.5, 49.5), topBottomRatio: (50.0, 50.0), passesPSA10: true, passesBGS10: true) }
-        guard let validCentering = scanResult else { return }
-        let surfaceMetrics = SurfaceDefects(
-            scratchCount: autoSurfaceScratches,
-            dimpleOrDentCount: autoEdgeWhitening,
-            surfaceCreaseDetected: false,
-            wrinkleOrCreaseSeverity: 0
-        )
-        let cornerMetrics = CornerDefects(
-            topLeftFrayingSeverity: autoCornerFraying,
-            topRightFrayingSeverity: 0,
-            bottomLeftFrayingSeverity: 0,
-            bottomRightFrayingSeverity: 0
-        )
-        calculatedGrade = gradingJudge.evaluateMultiPhaseCondition(
-            centering: validCentering,
-            surface: surfaceMetrics,
-            edgesWhiteningCount: autoEdgeWhitening,
-            corners: cornerMetrics
-        )
-        isLoadingPrice = true
-        priceEngine.fetchLiveValuations(cardId: automaticCardIdentifier, category: selectedCategory) { result in
-            isLoadingPrice = false
-            if case .success(let data) = result { self.activeValuation = data }
-            self.showingActiveScanReport = true
+    private func finishPair() {
+        if let usedDeckId = pendingDeckId {
+            deckIdInput = JudgeTestDeck.nextDeckId(after: usedDeckId)
         }
+        preSubmission = false
+        intendedGrader = ""
+        awaitingBack = false
+        frontPairId = nil
+        captureSide = "front"
     }
-    private func executeGradingPipeline() {
-        updatePricingAndGrades()
-    }
-    // FIXED: this was missing entirely — nothing previously saved the card to the Vault
-    // or reset the scanner when the report sheet was dismissed. This function does both.
-    private func commitAndResetScan(result: CenteringResult, grade: CalculatedGrade, value: CardValuation?) {
-        let frontLeniencyValue = value?.marketValuePSA10 ?? (selectedCategory == .sports ? 185.00 : 8500.00)
-        let cardNameString = value?.cardName ?? automaticCardIdentifier
-        let setNameString = value?.setName ?? (selectedCategory == .sports ? "2024 Topps Update Series" : "1999 Base Set First Edition")
-        let finalPrice = computeDynamicPrice(strictGrade: grade.finalScore, psa10Value: frontLeniencyValue)
-        portfolio.appendCard(
-            name: cardNameString,
-            set: setNameString,
-            lrCentering: String(format: "%.1f%%/%.1f%%", result.leftRightRatio.left, result.leftRightRatio.right),
-            tbCentering: String(format: "%.1f%%/%.1f%%", result.topBottomRatio.top, result.topBottomRatio.bottom),
-            predictedGrade: Int(grade.finalScore),
-            marketValue: finalPrice
-        )
+
+    private func commitAndResetScan(ledger: ScanLedger) {
+        portfolio.appendCard(from: ledger)
         resetCurrentScanState()
     }
     private func resetCurrentScanState() {
-        scanResult = nil; activeValuation = nil; calculatedGrade = nil; isSaveConfirmed = false; isCardDetected = false
-        autoSurfaceScratches = 0; autoEdgeWhitening = 0; autoCornerFraying = 0
-        // NEW: clear the multi-frame centering buffer so a new card (or a new scan of the
-        // same card) starts averaging fresh rather than blending in stale samples.
-        centeringAnalyzer.resetSampleBuffer()
-        isCenteringStable = false
-        centeringSampleCount = 0
-        isAutoAdvancing = false
-        currentPhase = .frontCentering
+        pendingServerLedger = nil; pendingScanId = ""; isSaveConfirmed = false; isCardDetected = false; cardMissStreak = 0
         automaticCardIdentifier = "unknown"
     }
+    // Live preview only answers "is a card in view?" and hunts a serial like
+    // 123/250. Nothing here is graded or saved; Capture → /api/grade is.
     private func processLiveCameraFrame(_ imageFrame: CGImage) {
         guard !isLoadingPrice && !isSaveConfirmed else { return }
         let targetNow = Date()
         guard targetNow.timeIntervalSince(lastProcessedFrameTime) >= 0.3 else { return }
-        // NEW: LiveCameraView's coordinator dispatches onFrameCaptured via
-        // DispatchQueue.main.async, so processLiveCameraFrame itself always runs on the
-        // main thread — meaning it's safe to read calibrationEngine.isPerfectlyLevel here,
-        // before handing off to the background Task below. FIXED: this is what makes the
-        // level bubble actually affect the scan instead of being purely cosmetic — a frame
-        // captured while the phone is tilted is excluded from the centering average.
-        let isDeviceLevelAtCapture = calibrationEngine.isPerfectlyLevel
-        // FIXED (major bug): scanResult was being overwritten by every frame in every phase,
-        // not just front-centering. By the time grading ran at the end of phase 4, the grade
-        // was computed from whatever the camera saw in the LAST frame of the back-perimeter
-        // check — often mid-motion from tilting/flipping the card for the surface and corner
-        // sweeps — not the carefully averaged phase-1 reading. Centering must be measured and
-        // locked during phase 1 only; capturing the phase here (on the main thread, where
-        // currentPhase is safe to read) lets the background Task below gate on it.
-        let isFrontCenteringPhaseAtCapture = (currentPhase == .frontCentering)
         Task(priority: .userInitiated) {
             await MainActor.run { self.lastProcessedFrameTime = targetNow }
             centeringAnalyzer.detectCardRectangle(in: imageFrame) { recognizedObservation in
                 guard let cardRect = recognizedObservation else {
                     Task { @MainActor in
+                        self.cardMissStreak += 1
+                        guard self.cardMissStreak >= 3 else { return }
                         if self.isCardDetected { self.isCardDetected = false }
-                        // Card dropped out of frame — clear the averaging buffer so a
-                        // re-detected card (possibly repositioned) starts a fresh average.
-                        // resetSampleBuffer() is now thread-safe (serialized internally),
-                        // so this is safe even while a background Task is mid-scan.
-                        self.centeringAnalyzer.resetSampleBuffer()
-                        self.isCenteringStable = false
-                        self.centeringSampleCount = 0
                     }; return
                 }
-                let automatedDefects = defectAnalyzer.analyzeCardSurface(from: imageFrame)
                 self.centeringAnalyzer.extractCardIdentifierText(from: imageFrame, cardBoundingBox: cardRect) { foundTextString in
                     Task { @MainActor in
                         if let serialCode = foundTextString, !serialCode.isEmpty {
@@ -806,51 +1062,90 @@ struct CardScannerView: View {
                         }
                     }
                 }
-                // FIXED: only measure/average centering while still on the front-centering
-                // phase. Once locked and advanced past phase 1, scanResult is frozen — later
-                // phases (surface sweep, corner check, back perimeter) intentionally involve
-                // moving/tilting the card and must never overwrite the reading that grading
-                // actually uses.
-                let computedCentering: CenteringResult? = (isDeviceLevelAtCapture && isFrontCenteringPhaseAtCapture)
-                ? self.centeringAnalyzer.analyzeCenteringAveraged(from: cardRect, in: imageFrame)
-                : nil
                 Task { @MainActor in
+                    self.cardMissStreak = 0
                     if !self.isCardDetected { self.isCardDetected = true }
-                    if let computedCentering = computedCentering, currentPhase == .frontCentering {
-                        self.scanResult = computedCentering
-                        self.isCenteringStable = self.centeringAnalyzer.isStableReading
-                        self.centeringSampleCount = self.centeringAnalyzer.currentSampleCount
-                    }
-                    // FIXED: these were placeholder `imageFrame.width % N` computations that
-                    // had nothing to do with the actual card in frame. automatedDefects is
-                    // already computed above from a real DefectAnalyzer pass over this exact
-                    // frame — surfaceScratchCount and edgeWhiteningSeverity were already being
-                    // used correctly elsewhere in this function; edgeWhiteningSeverity and the
-                    // new cornerFrayingSeverity now feed these two phases the same way.
-                    if currentPhase == .surfaceTiltSweep {
-                        self.autoSurfaceScratches = automatedDefects.surfaceScratchCount
-                        self.autoEdgeWhitening = automatedDefects.edgeWhiteningSeverity
-                    } else if currentPhase == .cornerMacroCheck {
-                        self.autoCornerFraying = automatedDefects.cornerFrayingSeverity
-                    } else if currentPhase == .backPerimeter {
-                        self.autoEdgeWhitening = automatedDefects.edgeWhiteningSeverity
-                    }
-                    // RE-ENABLED: auto-advance was temporarily disabled to allow screenshotting
-                    // the locked diagnostic panel while chasing the axis-swap bug. The manual
-                    // "Lock & Advance" button remains as a fallback either way (canAdvancePhase
-                    // already requires isCenteringStable). isAutoAdvancing still guards against
-                    // multiple in-flight frame-processing Tasks all seeing "stable" at once and
-                    // firing the phase change more than once.
-                    if currentPhase == .frontCentering && self.isCenteringStable && !self.isAutoAdvancing {
-                        self.isAutoAdvancing = true
-                        self.advanceInspectionFlowPipeline()
-                    }
                 }
             }
         }
     }
 }
-// MARK: - Premium Vault Archive Details Presentation Component View
+// MARK: - Shared ledger fields (report sheet and vault must match)
+struct ScanLedgerRows: View {
+    let ledger: ScanLedger
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(ledger.name).font(.title3).bold()
+            Text(ledger.setName).font(.subheadline).foregroundColor(.secondary)
+            Text("scan \(ledger.displayScanIdShort) · \(ledger.displayTimestamp)")
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        VStack(spacing: 12) {
+            HStack {
+                Text("Grade")
+                Spacer()
+                Text(ledger.displayGrade).bold().foregroundColor(.purple)
+            }
+            Divider()
+            HStack {
+                Text("L/R")
+                Spacer()
+                Text(ledger.lrCentering)
+                    .font(.system(.footnote, design: .monospaced))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            HStack {
+                Text("T/B")
+                Spacer()
+                Text(ledger.tbCentering)
+                    .font(.system(.footnote, design: .monospaced))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            HStack {
+                Text("Corners")
+                Spacer()
+                Text(ledger.displayCorners)
+                    .font(.system(.footnote, design: .monospaced))
+            }
+            if let debugPath = ledger.debugPath, !debugPath.isEmpty {
+                Text("Debug: \(debugPath)/ on the Mac")
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Divider()
+            HStack {
+                Text("Value")
+                Spacer()
+                Text(ledger.displayValue).bold().foregroundColor(.green)
+            }
+            if !ledger.subGradesLabel.isEmpty {
+                Divider()
+                Text(ledger.subGradesLabel)
+                    .font(.system(.footnote, design: .monospaced))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !ledger.primaryFlaw.isEmpty {
+                Text(ledger.primaryFlaw)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .italic()
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
+}
+
 struct VaultDetailSheet: View {
     let card: SavedCard
     @Environment(\.dismiss) var dismiss
@@ -858,68 +1153,24 @@ struct VaultDetailSheet: View {
         VStack(spacing: 20) {
             Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
             Text("VAULT RECORD AUDIT").font(.headline).bold().foregroundColor(.purple)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(card.name).font(.title3).bold()
-                Text(card.setName).font(.subheadline).foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
-            VStack(spacing: 12) {
-                HStack { Text("Archived Grade Score"); Spacer(); Text(String(format: "PSA %d", card.predictedGradePSA)).bold().foregroundColor(.purple) }
-                Divider()
-                HStack { Text("Centering Alignment Matrix (L/R):"); Spacer(); Text(card.lrCenteringResult).font(.system(.footnote, design: .monospaced)) }
-                HStack { Text("Centering Alignment Matrix (T/B):"); Spacer(); Text(card.tbCenteringResult).font(.system(.footnote, design: .monospaced)) }
-                Divider()
-                HStack { Text("Locked Asset Evaluation"); Spacer(); Text(String(format: "$%.2f", card.calculatedValue)).bold().foregroundColor(.green) }
-            }
-            .padding().background(Color(.secondarySystemBackground)).cornerRadius(12).padding(.horizontal)
+            ScanLedgerRows(ledger: card.asLedger)
             Button("Dismiss Audit Ledger") { dismiss() }
                 .font(.subheadline).bold().foregroundColor(.secondary).padding()
             Spacer()
         }
     }
 }
-// MARK: - Premium Report Card Slide-Up Pop-up Sheet Component View
+
 struct ActiveScanReportSheet: View {
-    let result: CenteringResult
-    let grade: CalculatedGrade
-    let value: CardValuation?
-    // FIXED: added this closure so the parent view can actually save the card and reset the scanner
+    let ledger: ScanLedger
     let onCommit: () -> Void
     @Environment(\.dismiss) var dismiss
     var body: some View {
         VStack(spacing: 20) {
             Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
-            Text("AI GRADE REPORT").font(.headline).bold().foregroundColor(.blue)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(value?.cardName ?? "unknown").font(.title3).bold()
-                Text(value?.setName ?? "2024 Topps Update Series").font(.subheadline).foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
-            VStack(spacing: 12) {
-                HStack {
-                    Text("Projected Score").font(.subheadline)
-                    Spacer()
-                    Text(String(format: "PSA %.1f", grade.finalScore))
-                        .font(.title2).bold().foregroundColor(.blue)
-                }
-                Divider()
-                Text(grade.primaryFlawDescription).font(.caption).foregroundColor(.secondary).italic()
-                Divider()
-                HStack {
-                    Text("Live Sub-Grades Breakdown").font(.caption2).bold().foregroundColor(.secondary)
-                    Spacer()
-                }
-                Text(grade.subGradesLabel).font(.system(.footnote, design: .monospaced)).bold().foregroundColor(.primary)
-                Divider()
-                HStack {
-                    Text("Estimated Market Value").font(.subheadline)
-                    Spacer()
-                    Text(String(format: "$%.2f", value?.marketValuePSA10 ?? 185.00)).font(.title2).bold().foregroundColor(.green)
-                }
-            }
-            .padding().background(Color(.secondarySystemBackground)).cornerRadius(12).padding(.horizontal)
+            Text("SERVER GRADE REPORT").font(.headline).bold().foregroundColor(.blue)
+            ScanLedgerRows(ledger: ledger)
             Button(action: {
-                // FIXED: now actually saves the card and resets the scanner before closing
                 onCommit()
                 dismiss()
             }) {
