@@ -92,6 +92,16 @@ struct CameraFacts {
 /// anything outside app/device/camera/capture, and anything over 8 KB.
 enum CaptureMetadata {
     static let schema = 1
+    static let backgroundDefaultsKey = "judgeScanBackground"
+    /// Same tokens as services/scan_metadata.js BACKGROUNDS. Empty means unset.
+    static let backgrounds = ["pink", "white", "dark-matte", "wood", "pattern", "glossy", "other"]
+    /// Shown on the scan screen. Pink is a lab value, not part of this guidance.
+    static let surfaceGuidance = [
+        "Use a plain, matte, colored surface that contrasts with the card's border, and leave background showing on all four sides.",
+        "Do not use white paper under a white border. A white border needs a colored surface.",
+        "Do not use a black surface under a dark border. A dark border needs a lighter colored surface.",
+        "Do not use a pattern or a glossy surface. Patterns and glare look like extra edges."
+    ]
 
     static func json(
         camera: CameraFacts?,
@@ -100,7 +110,8 @@ enum CaptureMetadata {
         capturedAt: Date,
         sweepFrames: Int,
         quad: JudgeAPIClient.CardQuad?,
-        extraCamera: [String: Any] = [:]
+        extraCamera: [String: Any] = [:],
+        background: String? = nil
     ) -> String? {
         let object = payload(
             camera: camera,
@@ -109,7 +120,8 @@ enum CaptureMetadata {
             capturedAt: capturedAt,
             sweepFrames: sweepFrames,
             quad: quad,
-            extraCamera: extraCamera
+            extraCamera: extraCamera,
+            background: background
         )
         guard JSONSerialization.isValidJSONObject(object),
               let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
@@ -124,7 +136,8 @@ enum CaptureMetadata {
         capturedAt: Date,
         sweepFrames: Int,
         quad: JudgeAPIClient.CardQuad?,
-        extraCamera: [String: Any] = [:]
+        extraCamera: [String: Any] = [:],
+        background: String? = nil
     ) -> [String: Any] {
         let info = Bundle.main.infoDictionary ?? [:]
         var app: [String: Any] = [:]
@@ -170,6 +183,9 @@ enum CaptureMetadata {
             capture["uploadHeight"] = size.height
         }
         if let quad { capture["quadConfidence"] = round3(quad.confidence) }
+        if let background, backgrounds.contains(background) {
+            capture["background"] = background
+        }
 
         var root: [String: Any] = ["schema": schema, "app": app, "device": device, "capture": capture]
         if !cam.isEmpty { root["camera"] = cam }
@@ -239,6 +255,14 @@ enum CaptureMetadata {
         precondition(noCamera["camera"] == nil)
         precondition(json(camera: facts, uploadJPEG: Data([0xFF, 0xD8, 0xFF]), mode: "native-still",
                           capturedAt: Date(), sweepFrames: 0, quad: nil) != nil)
+        let pink = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
+                           capturedAt: Date(), sweepFrames: 0, quad: nil, background: "pink")
+        precondition((pink["capture"] as? [String: Any])?["background"] as? String == "pink")
+        let unknown = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
+                              capturedAt: Date(), sweepFrames: 0, quad: nil, background: "magenta")
+        precondition((unknown["capture"] as? [String: Any])?["background"] == nil)
+        precondition(surfaceGuidance.count == 4)
+        precondition(!surfaceGuidance.joined(separator: " ").localizedCaseInsensitiveContains("pink"))
     }
     #endif
 }

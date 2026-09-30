@@ -84,9 +84,11 @@ struct CardScannerView: View {
     @State private var deckIdInput = UserDefaults.standard.string(forKey: JudgeTestDeck.deckIdDefaultsKey) ?? ""
     @State private var preSubmission = false
     @State private var intendedGrader = ""
+    @State private var scanBackground = UserDefaults.standard.string(forKey: CaptureMetadata.backgroundDefaultsKey) ?? ""
     @State private var pendingDeckId: String?
     @State private var pendingPreSubmission = false
     @State private var pendingIntendedGrader: String?
+    @State private var pendingScanBackground: String?
     @State private var isRemoteGrading = false
     @State private var remoteGradeSummary = ""
     @State private var lastRemoteError: String?
@@ -189,6 +191,9 @@ struct CardScannerView: View {
                 CaptureMetadata.runContractChecks()
                 JudgeAPIClient.runContractChecks()
                 #endif
+                if !CaptureMetadata.backgrounds.contains(scanBackground) {
+                    scanBackground = ""
+                }
                 calibrationEngine.startDeviceLevelMonitoring()
             }
             .onDisappear { calibrationEngine.stopDeviceLevelMonitoring() }
@@ -313,6 +318,30 @@ struct CardScannerView: View {
                     Toggle("Pre-sub", isOn: $preSubmission)
                         .font(.caption2)
                         .fixedSize()
+                }
+                Picker(selection: $scanBackground) {
+                    Text("Surface").tag("")
+                    Text("Pink (lab)").tag("pink")
+                    Text("White").tag("white")
+                    Text("Dark matte").tag("dark-matte")
+                    Text("Wood").tag("wood")
+                    Text("Pattern").tag("pattern")
+                    Text("Glossy").tag("glossy")
+                    Text("Other").tag("other")
+                } label: {
+                    Text("Surface")
+                }
+                .pickerStyle(.menu)
+                .font(.caption2)
+                .labelsHidden()
+                .onChange(of: scanBackground) {
+                    UserDefaults.standard.set(scanBackground, forKey: CaptureMetadata.backgroundDefaultsKey)
+                }
+                ForEach(CaptureMetadata.surfaceGuidance, id: \.self) { line in
+                    Text(line)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if let lastRemoteError {
                     Text(lastRemoteError)
@@ -721,6 +750,7 @@ struct CardScannerView: View {
         }
         pendingPreSubmission = preSubmission
         pendingIntendedGrader = JudgeTestDeck.graders.contains(intendedGrader) ? intendedGrader : nil
+        pendingScanBackground = CaptureMetadata.backgrounds.contains(scanBackground) ? scanBackground : nil
         resetSweepSession()
         stillCaptureNonce += 1
     }
@@ -878,7 +908,8 @@ struct CardScannerView: View {
             mode: extras.isEmpty ? "native-still" : "native-sweep",
             capturedAt: pendingLevelCapturedAt ?? Date(),
             sweepFrames: extras.count,
-            quad: cardQuad
+            quad: cardQuad,
+            background: pendingScanBackground
         )
         Task {
             do {
