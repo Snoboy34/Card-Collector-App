@@ -39,8 +39,18 @@ On `/deck` (iMac browser or phone on the same network), for each card:
 
 Same setup every time:
 
-- **Mat:** the same matte, non-white, non-glossy mat (the pink paper works). The
-  card must contrast with it on all four edges.
+- **Lab baseline:** pink paper, recorded as `capture.background` = `pink`.
+  Pink is the lab baseline only. It is not the instruction for a real scan.
+- **Surface field:** `capture.background` is `pink`, `white`, `dark-matte`,
+  `wood`, `pattern`, `glossy`, or `other`. Empty is `unspecified` and is not
+  a baseline. The grade does not read this field.
+
+The phone shows this guidance:
+
+1. Use a plain, matte, colored surface that contrasts with the card's border, and leave background showing on all four sides.
+2. Do not use white paper under a white border. A white border needs a colored surface.
+3. Do not use a black surface under a dark border. A dark border needs a lighter colored surface.
+4. Do not use a pattern or a glossy surface. Patterns and glare look like extra edges.
 - **Lighting:** same room, same lamps, diffuse, no direct glare on the card.
   Note anything that changed.
 - **Phone:** same phone, held level (green bubble), card flat and taped, the

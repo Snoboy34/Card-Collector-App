@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const deck = require('../services/test_deck');
 const dumpScans = require('./dump_scans');
+const scanMetadata = require('../services/scan_metadata');
 
 function fmt(v, d) {
   return typeof v === 'number' && isFinite(v) ? v.toFixed(d == null ? 1 : d) : '—';
@@ -76,6 +77,11 @@ function rulerRatios(mm) {
   return { lr: 100 * mm.left / (mm.left + mm.right), tb: 100 * mm.top / (mm.top + mm.bottom) };
 }
 
+function backgroundOf(meta) {
+  const value = scanMetadata.normalizeBackground(meta && meta.capture && meta.capture.background);
+  return value || null;
+}
+
 function resultLine(label, res, extra) {
   let line = '  ' + pad(label, 10) + pad(res.status, 15);
   if (res.measured) {
@@ -111,7 +117,8 @@ async function buildDeckReport(opts) {
       engine: item.engine || (item.gradingReport && item.gradingReport.engineVersion
         ? { version: item.gradingReport.engineVersion } : null),
       result: resultFromReport(item.gradingReport),
-      familyId: item.cardIdentity && item.cardIdentity.familyId
+      familyId: item.cardIdentity && item.cardIdentity.familyId,
+      background: backgroundOf(item.captureMetadata)
     });
   });
   failed.forEach(function (e) {
@@ -119,6 +126,7 @@ async function buildDeckReport(opts) {
     if (byScan.has(id)) return;
     byScan.set(id, {
       scanId: id, time: e.timestamp, item: null, engine: e.engine || null, familyId: null,
+      background: backgroundOf(e.captureMetadata),
       result: { measured: false, status: 'card not found', reason: e.reason || 'card not found' }
     });
   });
@@ -183,13 +191,15 @@ async function buildDeckReport(opts) {
     const l = describe(latest);
     row.latest = { scanId: latest.scanId, result: latest.result, pass: l.pass, engine: latest.engine };
     lines.push('  ' + localTime(latest.time) + '  ' + latest.scanId.slice(0, 8).toUpperCase() + '  ' + engineLabel(latest.engine) +
-      '  family ' + (latest.familyId || '—') + '  (' + scans.length + ' scan' + (scans.length === 1 ? '' : 's') + ')');
+      '  family ' + (latest.familyId || '—') + '  (' + scans.length + ' scan' + (scans.length === 1 ? '' : 's') + ')' +
+      '  background ' + (latest.background || 'unspecified'));
     lines.push(resultLine('latest', latest.result, l.text));
     if (previous) {
       const p = describe(previous);
       row.previous = { scanId: previous.scanId, result: previous.result, pass: p.pass, engine: previous.engine };
       lines.push(resultLine('previous', previous.result, p.text + '  ' + engineLabel(previous.engine) +
-        ' · ' + previous.scanId.slice(0, 8).toUpperCase()));
+        ' · ' + previous.scanId.slice(0, 8).toUpperCase() +
+        '  background ' + (previous.background || 'unspecified')));
     }
     if (candidate && latest.item && latest.item.imagePath) {
       const file = path.join(uploadsDir, path.basename(latest.item.imagePath));

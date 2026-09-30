@@ -20,11 +20,25 @@ let sharp = null;
 try { sharp = require('sharp'); } catch (e) { sharp = null; }
 
 const CAPTURE_GROUPS = ['app', 'device', 'camera', 'capture'];
+/** Lab and field surfaces. Pink is the lab baseline, not a user instruction. */
+const BACKGROUNDS = ['pink', 'white', 'dark-matte', 'wood', 'pattern', 'glossy', 'other'];
 const MAX_JSON_BYTES = 8 * 1024;
 const MAX_STRING = 200;
 const MAX_ARRAY = 16;
 const MAX_DEPTH = 3;
 const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,40}$/;
+
+/**
+ * Canonical surface token, or null when unset. Undefined when the value is
+ * not one of BACKGROUNDS (caller drops it). The grade never reads this.
+ * @param {*} v
+ * @returns {string|null|undefined}
+ */
+function normalizeBackground(v) {
+  if (v == null || v === '') return null;
+  const s = String(v).trim().toLowerCase();
+  return BACKGROUNDS.indexOf(s) === -1 ? undefined : s;
+}
 
 function cleanValue(v, depth) {
   if (v == null) return null;
@@ -65,6 +79,11 @@ function parseCaptureMetadata(body) {
     if (parsed[g] && typeof parsed[g] === 'object' && !Array.isArray(parsed[g])) out[g] = cleanValue(parsed[g], 1);
   });
   if (parsed.schema != null) out.schema = cleanValue(parsed.schema, 1);
+  if (out.capture && Object.prototype.hasOwnProperty.call(out.capture, 'background')) {
+    const background = normalizeBackground(out.capture.background);
+    if (background) out.capture.background = background;
+    else delete out.capture.background;
+  }
   const dropped = Object.keys(parsed).filter(function (k) { return CAPTURE_GROUPS.indexOf(k) === -1 && k !== 'schema'; });
   if (dropped.length) out.droppedKeys = dropped.slice(0, MAX_ARRAY).map(function (k) { return String(k).slice(0, 40); });
   return { metadata: out, error: null };
@@ -115,4 +134,7 @@ async function buildServerMetadata(args) {
   };
 }
 
-module.exports = { parseCaptureMetadata, buildServerMetadata, CAPTURE_GROUPS, MAX_JSON_BYTES };
+module.exports = {
+  parseCaptureMetadata, buildServerMetadata, normalizeBackground,
+  CAPTURE_GROUPS, BACKGROUNDS, MAX_JSON_BYTES
+};

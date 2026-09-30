@@ -115,7 +115,8 @@ function metadataLines(cap, srv) {
       '  photo ' + dims(c.photoWidth, c.photoHeight) + ' of max ' + dims(c.maxPhotoWidth, c.maxPhotoHeight) +
       ' (' + (c.photoSizeSetting || '—') + ', ' + (c.codec || '—') + ')' +
       (c.iso != null ? '  ISO ' + Math.round(c.iso) : '') + (shutter ? ' ' + shutter : '') +
-      (c.zoomFactor != null ? '  zoom ' + num(c.zoomFactor, 2) : '') + (k.mode ? '  ' + k.mode : ''));
+      (c.zoomFactor != null ? '  zoom ' + num(c.zoomFactor, 2) : '') + (k.mode ? '  ' + k.mode : '') +
+      '  background ' + (k.background || 'unspecified'));
   }
   if (srv) {
     const img = srv.image || {};

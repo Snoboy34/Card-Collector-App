@@ -73,6 +73,14 @@ async function run() {
   assert('over 8 KB → null + error', /over 8 KB/.test(sm.parseCaptureMetadata({ captureMetadata: JSON.stringify({ app: { x: 'y'.repeat(9000) } }) }).error));
   const longStr = sm.parseCaptureMetadata({ captureMetadata: JSON.stringify({ app: { version: 'v'.repeat(500) } }) });
   assert('strings capped at 200 chars', longStr.metadata.app.version.length === 200);
+  const withSurface = JSON.parse(JSON.stringify(NATIVE_META));
+  withSurface.capture.background = 'Pink';
+  const kept = sm.parseCaptureMetadata({ captureMetadata: JSON.stringify(withSurface) });
+  assert('background pink is canonicalized', kept.metadata.capture.background === 'pink', kept.metadata.capture);
+  withSurface.capture.background = 'magenta';
+  const droppedBg = sm.parseCaptureMetadata({ captureMetadata: JSON.stringify(withSurface) });
+  assert('unknown background is dropped', droppedBg.metadata.capture && !('background' in droppedBg.metadata.capture), droppedBg.metadata.capture);
+  assert('empty background is unspecified', sm.normalizeBackground('') === null && sm.normalizeBackground(null) === null);
 
   // ---- server ----
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'judge-meta-'));
@@ -128,6 +136,30 @@ async function run() {
       return JSON.stringify([r.centeringMetrics.leftRightRatio, r.centeringMetrics.topBottomRatio, r.subGrades, r.finalScore]);
     };
     assert('metadata never changes the grade', strip(noMeta.body.item.gradingReport) === strip(item.gradingReport));
+    const pinkMeta = JSON.parse(JSON.stringify(NATIVE_META));
+    pinkMeta.capture.background = 'pink';
+    const pinkGrade = await post(card, { captureMetadata: JSON.stringify(pinkMeta), deckId: 'TD-01' });
+    assert('background stored and grade unchanged', pinkGrade.status === 200 &&
+      pinkGrade.body.item.captureMetadata.capture.background === 'pink' &&
+      strip(pinkGrade.body.item.gradingReport) === strip(noMeta.body.item.gradingReport),
+      pinkGrade.body.item.captureMetadata);
+    const deckReport = require('./deck_report');
+    const reported = await deckReport.buildDeckReport({
+      dataDir: process.env.JUDGE_DATA_DIR,
+      uploadsDir: process.env.JUDGE_UPLOADS_DIR
+    });
+    assert('deck report prints the surface', reported.text.indexOf('background pink') !== -1, reported.text);
+    const junkMeta = JSON.parse(JSON.stringify(NATIVE_META));
+    junkMeta.capture.background = 'marble';
+    const junk = await post(card, { captureMetadata: JSON.stringify(junkMeta), deckId: 'TD-02' });
+    assert('unknown background is not stored', junk.status === 200 &&
+      junk.body.item.captureMetadata.capture && !('background' in junk.body.item.captureMetadata.capture));
+    const reportedJunk = await deckReport.buildDeckReport({
+      dataDir: process.env.JUDGE_DATA_DIR,
+      uploadsDir: process.env.JUDGE_UPLOADS_DIR
+    });
+    assert('missing background prints unspecified', reportedJunk.text.indexOf('TD-02') !== -1 &&
+      reportedJunk.text.indexOf('background unspecified') !== -1, reportedJunk.text);
 
     const badMeta = await post(card, { captureMetadata: '{not json' });
     assert('bad metadata → still graded, error noted in serverMetadata', badMeta.status === 200 &&
@@ -143,7 +175,10 @@ async function run() {
 
     const dump = require('./dump_scans');
     const text = dump.formatGraded(saved);
-    assert('dump shows the capture line', /capture iPhone15,2 iOS 18\.1  app 1\.4 \(57\)  photo 3024×4032 of max 6048×8064 \(12mp, jpeg\)  ISO 80 1\/120s/.test(text), text);
+    assert('dump shows the capture line', /capture iPhone15,2 iOS 18\.1  app 1\.4 \(57\)  photo 3024×4032 of max 6048×8064 \(12mp, jpeg\)  ISO 80 1\/120s  zoom 1\.00  auto  background unspecified/.test(text), text);
+    assert('dump shows a recorded surface', /background pink/.test(dump.formatGraded(
+      JSON.parse(fs.readFileSync(DB_PATH, 'utf8')).inventory.find(function (x) { return x.scanId === pinkGrade.body.item.scanId; })
+    )));
     assert('dump shows the server line', /server  \d+\.\d\d MB jpeg 803×1060 .*grade \d+ms  sha [0-9a-f]{12}  LAN/.test(text), text);
     assert('dump of a failed scan shows metadata too', /capture iPhone15,2/.test(dump.formatFailed(failed)));
   } finally {
