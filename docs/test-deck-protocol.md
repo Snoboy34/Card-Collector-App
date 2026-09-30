@@ -31,7 +31,9 @@ On `/deck` (iMac browser or phone on the same network), for each card:
 - Ruler or caliper border widths in mm (front: left, right, top, bottom),
   measured at mid-edge. Calipers beat a ruler: ±0.25 mm on a 3 mm border is
   ±2 centering points.
-- Known PSA grade if the card is already slabbed.
+- Known grade if the card is already slabbed. Company, overall grade, and cert.
+  Leave the number blank for Authentic, Altered, or No Grade. Sub-grades,
+  special labels, qualifiers, a TAG score, and an autograph grade are optional.
 
 ## Scanning session
 
@@ -72,13 +74,29 @@ Ship only if:
 - ruler deltas do not get worse on average,
 - repeat scans of the same card spread < 3 points on each axis.
 
-## PSA ground truth
+## Grading-company ground truth
 
-Every card sent to PSA (deck or not) becomes a labeled example:
+Every card sent to a grading company (deck or not) becomes a labeled example.
+Companies stay in their own lists. A PSA 8 and a BGS 9.5 are never averaged.
 
-1. Turn on **Pre-submission** on the phone before its Capture (or tick it on
-   `/deck` afterwards).
-2. When the grade comes back, enter the PSA grade (and cert number) on `/deck`
-   for that scan.
+1. Turn on **Pre-sub** before Capture (or tick it on `/deck` afterwards).
+2. Set the **intended grader**: PSA, BGS, SGC, CGC, TAG, or Other. The phone's
+   Pre-sub toggle does not send a company; set it on `/deck`. A capture may
+   also send `intendedGrader`.
+3. When the slab comes back, enter that company's result on `/deck` for that
+   scan:
+   - **Overall** grade, half points (8, 9.5, 10).
+   - **Special label**, when the company printed one: BGS Pristine, BGS Black
+     Label, SGC Pristine 10, CGC Pristine, CGC Perfect 10.
+   - **No-number result**: Authentic, Altered, or No Grade. Leave Overall
+     blank. The report still lists the scan.
+   - **Sub-grades** (optional): centering, corners, edges, surface, as BGS or
+     CGC printed them.
+   - **TAG score**: type it exactly as printed. It is not converted to a number.
+   - **Qualifiers**: PSA's OC, ST, PD, OF, MC, MK. OC is shown against the
+     Judge centering prediction (worst-axis share past 60/40).
+   - **Autograph** grade when it is separate (BGS dual grade, PSA/DNA).
+   - **Cert** number.
 
-`deck_report.js` lists every returned grade next to the engine's prediction.
+`deck_report.js` prints one section per company. Each returned grade, including
+a slab with no number, sits next to that scan's Judge prediction.

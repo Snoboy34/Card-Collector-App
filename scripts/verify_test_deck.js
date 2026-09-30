@@ -1,6 +1,6 @@
 /**
  * scripts/verify_test_deck.js
- * Test-deck registry, scan labels (deck / pre-submission / PSA), capture
+ * Test-deck registry, scan labels (deck / pre-submission / any grader), capture
  * tagging through /api/grade, the deck report, and the /deck pages.
  * Run: node scripts/verify_test_deck.js
  */
@@ -51,8 +51,17 @@ async function run() {
   // ---- store + rules ----
   assert('deck id normalizes (td-7 is rejected, td-07 → TD-07)',
     deck.normalizeDeckId('td-07') === 'TD-07' && deck.normalizeDeckId('td-7') === null && deck.normalizeDeckId('TD-050') === 'TD-050');
-  assert('PSA grades 1–10 in 0.5 steps', deck.normalizePsaGrade('9.5') === 9.5 && deck.normalizePsaGrade(9.3) === undefined &&
-    deck.normalizePsaGrade(11) === undefined && deck.normalizePsaGrade('') === null);
+  assert('half-point grades 1–10', deck.normalizeHalfGrade('9.5') === 9.5 && deck.normalizeHalfGrade(9.3) === undefined &&
+    deck.normalizeHalfGrade(11) === undefined && deck.normalizeHalfGrade('') === null);
+  const tag = deck.normalizeGradeResult({ grader: 'TAG', grade: '10', tagScore: '975' }, null);
+  assert('TAG score is stored as printed', tag && tag.tagScore === '975' && typeof tag.tagScore === 'string');
+  assert('special label must match the company', deck.normalizeGradeResult({ grader: 'PSA', grade: 10, specialLabel: 'BGS Black Label' }, null) === undefined);
+  assert('a number and a no-number outcome cannot both be set',
+    deck.normalizeGradeResult({ grader: 'PSA', grade: 8, outcome: 'Authentic' }, null) === undefined);
+  const auth = deck.normalizeGradeResult({ grader: 'CGC', outcome: 'authentic' }, null);
+  assert('Authentic is a result with no number', auth && auth.outcome === 'Authentic' && auth.grade == null && deck.hasGradeResult(auth));
+  const oc = deck.normalizeGradeResult({ grader: 'psa', grade: '8', qualifiers: 'oc, ST' }, null);
+  assert('PSA qualifiers normalize', oc && oc.qualifiers.join(',') === 'OC,ST' && oc.grader === 'PSA');
   assert('expectation rules', deck.judgeExpectation('measured', { measured: true }) === true &&
     deck.judgeExpectation('undetectable', { measured: false }) === true &&
     deck.judgeExpectation('undetectable', { measured: true }) === false &&
@@ -129,8 +138,34 @@ async function run() {
     await putJson('/api/deck/cards/TD-04', { category: 'white-modern', title: 'shot with no card' });
     r = await putJson('/api/deck/cards/TD-05', { physicalMm: { left: 99 } });
     assert('ruler mm out of range rejected', r.status === 400);
-    r = await putJson('/api/scans/' + id1 + '/label', { psaGrade: '8', psaCert: '12345678' });
-    assert('PSA grade recorded on the pre-submission scan', r.status === 200 && r.body.label.psaGrade === 8 && r.body.label.preSubmission === true);
+    r = await putJson('/api/scans/' + id1 + '/label', {
+      intendedGrader: 'PSA',
+      result: { grader: 'PSA', grade: '8', qualifiers: ['oc'], cert: '12345678' }
+    });
+    assert('PSA 8 OC recorded on the pre-submission scan', r.status === 200 && r.body.label.result.grade === 8 &&
+      r.body.label.result.qualifiers[0] === 'OC' && r.body.label.preSubmission === true && r.body.label.intendedGrader === 'PSA' &&
+      r.body.label.psaGrade === 8, r.body.label);
+    r = await putJson('/api/scans/' + id2 + '/label', { result: { grader: 'CGC', outcome: 'Authentic', cert: 'CGC1' } });
+    assert('Authentic is stored with no numeric grade', r.status === 200 && r.body.label.result.outcome === 'Authentic' &&
+      r.body.label.result.grade == null);
+    r = await putJson('/api/scans/' + id3 + '/label', {
+      result: { grader: 'BGS', grade: '10', specialLabel: 'BGS Black Label', autoGrade: '10',
+        subgrades: { centering: '10', corners: '10', edges: '9.5', surface: '10' } }
+    });
+    assert('BGS Black Label, sub-grades, and autograph', r.status === 200 && r.body.label.result.specialLabel === 'BGS Black Label' &&
+      r.body.label.result.subgrades.edges === 9.5 && r.body.label.result.autoGrade === 10 && r.body.label.psaGrade == null);
+    r = await putJson('/api/scans/' + id3 + '/label', { result: { grader: 'PSA', specialLabel: 'BGS Black Label' } });
+    assert('label from another company is rejected', r.status === 400);
+    r = await putJson('/api/scans/' + id1 + '/label', { result: { grader: 'PSA', grade: '9.3' } });
+    assert('9.3 is rejected and the stored 8 remains', r.status === 400 && store.loadLabels().scans[id1].result.grade === 8);
+    r = await putJson('/api/deck/cards/TD-01', { knownGrade: { grader: 'PSA', grade: '9' } });
+    assert('known grade on the card mirrors PSA', r.status === 200 && r.body.card.knownGrade.grade === 9 && r.body.card.knownPsaGrade === 9);
+    const legacy = store.labelScan('d0000007-0000-4000-8000-000000000007', { psaGrade: '9.5', psaCert: '999' }, 'web');
+    assert('legacy psaGrade is stored as a PSA result', legacy.ok && legacy.label.result.grader === 'PSA' && legacy.label.result.grade === 9.5);
+    store.labelScan('d0000008-0000-4000-8000-000000000008', { preSubmission: true, intendedGrader: 'SGC' }, 'web');
+    store.labelScan('d0000009-0000-4000-8000-000000000009', {
+      result: { grader: 'TAG', tagScore: '975' }
+    }, 'web');
     r = await putJson('/api/scans/' + id2 + '/label', { deckId: 'bad' });
     assert('invalid deck id label → 400', r.status === 400);
     r = await putJson('/api/scans/00000000-0000-4000-8000-00000000dead/label', { deckId: 'TD-09' });
@@ -151,8 +186,17 @@ async function run() {
       /FAIL/.test(block('TD-04')), block('TD-04'));
     assert('report: per-category rates and overall', /\nborderless\s+1\s+1\s+1\/1 100%/.test(rep) &&
       /\nOVERALL\s+4\s+4\s+3\/4 75%/.test(rep), rep.slice(rep.indexOf('CATEGORY')));
-    assert('report: PSA ground truth lists the returned grade', /PSA GROUND TRUTH\s+1 returned/.test(rep) &&
-      /PSA 8 /.test(rep) && /cert 12345678/.test(rep), rep.slice(rep.indexOf('PSA GROUND')));
+    const truth = rep.slice(rep.indexOf('GROUND TRUTH'));
+    assert('report: PSA section lists 8 OC, the cert, and the centering verdict',
+      /PSA\s+2 returned/.test(truth) && /PSA 8 OC cert 12345678/.test(truth) && /OC vs centering: slab OC;/.test(truth), truth);
+    assert('report: CGC Authentic is listed, not skipped', /CGC\s+1 returned/.test(truth) && /CGC Authentic/.test(truth), truth);
+    assert('report: BGS is its own section, with sub-grades', /BGS\s+1 returned/.test(truth) &&
+      /BGS 10 Black Label/.test(truth) && /sub-grades/.test(truth) && /EDG slab 9\.5/.test(truth), truth);
+    assert('report: TAG score is printed as typed', /TAG\s+1 returned/.test(truth) && /score 975/.test(truth), truth);
+    assert('report: SGC pre-sub with no slab is awaiting', /SGC\s+0 returned · 1 pre-submission awaiting/.test(truth), truth);
+    assert('report keeps each company in its own section', /scales are not combined/.test(truth) &&
+      truth.indexOf('PSA  2 returned') < truth.indexOf('BGS  1 returned') &&
+      truth.indexOf('BGS  1 returned') < truth.indexOf('CGC  1 returned'));
 
     // Previous engine: a second TD-01 scan saved under a different engine version.
     const dbPath = path.join(process.env.JUDGE_DATA_DIR, 'database.json');
@@ -179,7 +223,8 @@ async function run() {
 
     const page = await fetch(base + '/deck');
     const html = await page.text();
-    assert('GET /deck serves the registry page', page.status === 200 && html.indexOf('Test deck') !== -1 && html.indexOf('/api/deck/recent-scans') !== -1);
+    assert('GET /deck serves the registry page', page.status === 200 && html.indexOf('Test deck') !== -1 &&
+      html.indexOf('/api/deck/recent-scans') !== -1 && html.indexOf('Intended grader') !== -1);
     const recent = await (await fetch(base + '/api/deck/recent-scans')).json();
     assert('recent scans list includes the card-not-found attempt', recent.scans.some(function (x) { return x.scanId === id4 && x.summary === 'card not found'; }));
     const dump = require('./dump_scans').formatScanById(process.env.JUDGE_DATA_DIR, id1);

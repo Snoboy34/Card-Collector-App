@@ -4,8 +4,9 @@
  * Test-deck release gate. For each deck card (TD-xx): the latest scan vs
  * the latest scan from a different engine, optionally a candidate engine's
  * re-grade of the latest upload, the ruler check, and per-category pass
- * rates. Also the PSA ground-truth table (pre-submission scans with a
- * returned grade). Read-only.
+ * rates. Also ground truth per grading company: each returned grade, including
+ * a slab with no number, sits next to that scan's Judge prediction. Companies
+ * are not averaged together. Read-only.
  *
  * Usage:
  *   node scripts/deck_report.js                       # stored results
@@ -60,6 +61,9 @@ function resultFromReport(report) {
     tb: tb,
     worstShare: measured ? 50 + Math.max(Math.abs(lr - 50), Math.abs(tb - 50)) : null,
     cen: r.subGrades ? r.subGrades.centering : null,
+    corners: r.subGrades ? r.subGrades.corners : null,
+    edges: r.subGrades ? r.subGrades.edges : null,
+    surface: r.subGrades ? r.subGrades.surface : null,
     finalScore: r.finalScore != null ? r.finalScore : null,
     mm: m.borderWidthsMm || null,
     lowConfidenceEdges: m.lowConfidenceEdges || (r.cardDetection && r.cardDetection.lowConfidenceEdges) || []
@@ -158,10 +162,11 @@ async function buildDeckReport(opts) {
     }
     const ruler = rulerRatios(card.physicalMm);
     lines.push('');
+    const known = deck.resolveKnown(card);
     lines.push(deckId + '  ' + (card.category || 'uncategorized') + (card.title ? '  "' + card.title + '"' : '') +
       '  expect ' + (expect || '—') +
       (ruler ? '  ruler L/R ' + fmt(ruler.lr) + ' T/B ' + fmt(ruler.tb) : '') +
-      (card.knownPsaGrade != null ? '  known PSA ' + card.knownPsaGrade : ''));
+      (known ? '  known ' + deck.formatGradeShort(known) : ''));
     const row = { deckId: deckId, category: card.category || null, expect: expect, latest: null, previous: null, candidate: null };
     if (!latest) {
       lines.push('  not scanned yet');
@@ -230,27 +235,88 @@ async function buildDeckReport(opts) {
   lines.push('LOW-CONFIDENCE CUT  ' + lowCut.length + ' of ' + totals.scanned + ' latest scans' +
     (lowCut.length ? ': ' + lowCut.map(function (r) { return r.deckId + ' (' + r.latest.result.lowConfidenceEdges.join(', ') + ')'; }).join(', ') : ''));
 
-  // PSA ground truth: any labeled scan with a returned grade (deck or not).
-  const psa = Object.keys(labels)
-    .map(function (sid) { return labels[sid]; })
-    .filter(function (l) { return l.psaGrade != null; })
-    .map(function (l) { return { label: l, scan: byScan.get(l.scanId) || null }; });
-  const pending = Object.keys(labels).filter(function (sid) {
-    return labels[sid].preSubmission && labels[sid].psaGrade == null;
-  }).length;
+  // Returned grades, one section per company. Scales are not combined.
+  const groundTruth = groundTruthByGrader(labels, byScan);
   lines.push('');
-  lines.push('PSA GROUND TRUTH  ' + psa.length + ' returned · ' + pending + ' pre-submission scans awaiting a grade');
-  psa.forEach(function (p) {
-    const res = p.scan ? p.scan.result : null;
-    lines.push('  ' + p.label.scanId.slice(0, 8).toUpperCase() + '  ' + pad(p.label.deckId || '—', 7) + 'PSA ' +
-      pad(p.label.psaGrade, 5) + 'predicted final ' + fmt(res && res.finalScore) + '  CEN ' + fmt(res && res.cen) +
-      (p.label.psaCert ? '  cert ' + p.label.psaCert : ''));
+  lines.push('GROUND TRUTH  by grading company (Judge predictions sit beside each result; scales are not combined)');
+  const gradersPrinted = deck.GRADERS.filter(function (g) {
+    return groundTruth[g].returned.length || groundTruth[g].awaiting;
   });
+  if (groundTruth.unset) gradersPrinted.push('unset');
+  if (!gradersPrinted.length) lines.push('  no returned grades and no pre-submission scans');
+  gradersPrinted.forEach(function (g) {
+    const bucket = g === 'unset' ? { returned: [], awaiting: groundTruth.unset } : groundTruth[g];
+    lines.push(g + '  ' + bucket.returned.length + ' returned · ' + bucket.awaiting + ' pre-submission awaiting');
+    bucket.returned.forEach(function (p) {
+      const res = p.scan ? p.scan.result : null;
+      lines.push('  ' + p.label.scanId.slice(0, 8).toUpperCase() + '  ' + pad(p.label.deckId || '—', 7) +
+        deck.formatGradeShort(p.record));
+      lines.push('    predicted (Judge scale)  ' + predictionText(res));
+      const subLine = subgradeText(p.record, res);
+      if (subLine) lines.push('    ' + subLine);
+      if (p.record.grader === 'PSA' && p.record.qualifiers && p.record.qualifiers.indexOf('OC') !== -1) {
+        lines.push('    OC vs centering: slab OC; ' + ocPrediction(res));
+      }
+    });
+  });
+  const pending = deck.GRADERS.reduce(function (n, g) { return n + groundTruth[g].awaiting; }, 0) + groundTruth.unset;
 
   return {
-    text: lines.join('\n'), rows: rows, categories: categories, psa: psa.length, pending: pending,
+    text: lines.join('\n'), rows: rows, categories: categories,
+    psa: groundTruth.PSA.returned.length, pending: pending, groundTruth: groundTruth,
     lowConfidenceCut: lowCut.map(function (r) { return { deckId: r.deckId, edges: r.latest.result.lowConfidenceEdges }; })
   };
+}
+
+function groundTruthByGrader(labels, byScan) {
+  const deck = require('../services/test_deck');
+  const out = { unset: 0 };
+  deck.GRADERS.forEach(function (g) { out[g] = { returned: [], awaiting: 0 }; });
+  Object.keys(labels).forEach(function (sid) {
+    const label = labels[sid];
+    const record = deck.resolveResult(label);
+    if (deck.hasGradeResult(record)) {
+      const g = deck.GRADERS.indexOf(record.grader) === -1 ? 'Other' : record.grader;
+      out[g].returned.push({ label: label, record: record, scan: byScan.get(label.scanId) || null });
+      return;
+    }
+    if (!label.preSubmission) return;
+    const intended = label.intendedGrader && deck.GRADERS.indexOf(label.intendedGrader) !== -1 ? label.intendedGrader : null;
+    if (intended) out[intended].awaiting += 1;
+    else out.unset += 1;
+  });
+  deck.GRADERS.forEach(function (g) {
+    out[g].returned.sort(function (a, b) {
+      const da = a.label.deckId || '';
+      const db = b.label.deckId || '';
+      if (da !== db) return da < db ? -1 : 1;
+      return String(a.label.scanId).localeCompare(String(b.label.scanId));
+    });
+  });
+  return out;
+}
+
+function predictionText(res) {
+  if (!res) return 'no saved grade';
+  const final = 'final ' + fmt(res.finalScore) + '  CEN ' + fmt(res.cen);
+  if (!res.measured) return final + '  centering —';
+  return final + '  L/R ' + fmt(res.lr) + '/' + fmt(100 - res.lr) + '  T/B ' + fmt(res.tb) + '/' + fmt(100 - res.tb);
+}
+
+function subgradeText(record, res) {
+  const sub = record.subgrades || {};
+  const keys = [['centering', 'CEN', res && res.cen], ['corners', 'CRN', res && res.corners], ['edges', 'EDG', res && res.edges], ['surface', 'SUR', res && res.surface]];
+  const any = keys.some(function (k) { return sub[k[0]] != null; });
+  if (!any) return null;
+  return 'sub-grades  ' + keys.map(function (k) {
+    return k[1] + ' slab ' + fmt(sub[k[0]]) + ' / predicted ' + fmt(k[2]);
+  }).join('  ');
+}
+
+function ocPrediction(res) {
+  if (!res || !res.measured || res.worstShare == null) return 'predicted centering —';
+  const caught = res.worstShare > 60;
+  return 'predicted worst share ' + fmt(res.worstShare) + (caught ? ' (off-center)' : ' (not past 60/40)');
 }
 
 if (require.main === module) {

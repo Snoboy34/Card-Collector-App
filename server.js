@@ -263,6 +263,7 @@ function captureLabelFields(body) {
   const fields = {};
   if (body && body.deckId) fields.deckId = body.deckId;
   if (body && body.preSubmission != null && body.preSubmission !== '') fields.preSubmission = body.preSubmission;
+  if (body && body.intendedGrader) fields.intendedGrader = body.intendedGrader;
   return fields;
 }
 
@@ -680,11 +681,22 @@ function scanExists(scanId) {
 }
 
 app.get('/api/deck', localNetworkOnly, (req, res) => {
+  const cards = {};
+  const storedCards = deckStore.loadDeck().cards;
+  Object.keys(storedCards).forEach(function (id) { cards[id] = testDeck.presentCard(storedCards[id]); });
+  const labels = {};
+  const storedLabels = deckStore.loadLabels().scans;
+  Object.keys(storedLabels).forEach(function (id) { labels[id] = testDeck.presentLabel(storedLabels[id]); });
   return res.json({
     ok: true,
     categories: testDeck.DECK_CATEGORIES,
-    cards: deckStore.loadDeck().cards,
-    labels: deckStore.loadLabels().scans,
+    graders: testDeck.GRADERS,
+    specialLabels: testDeck.SPECIAL_LABELS,
+    outcomes: testDeck.OUTCOMES,
+    qualifiers: testDeck.QUALIFIERS,
+    subgradeKeys: testDeck.SUBGRADE_KEYS,
+    cards: cards,
+    labels: labels,
     engine: ENGINE
   });
 });
@@ -742,10 +754,17 @@ app.get('/deck', localNetworkOnly, (req, res) => {
   return res.type('html').send(copyablePage('The Judge — test deck', null, `
 <h2>Test deck</h2>
 <p><a href="/deck/report">Deck report</a> · <a href="/debug/recent?n=10">Recent scans dump</a></p>
-<h3>Recent scans — assign deck card / pre-submission / PSA result</h3>
-<table id="scans"><thead><tr><th>Time</th><th>Scan</th><th>Result</th><th>Deck</th><th>Pre-sub</th><th>PSA</th><th>Cert</th><th></th></tr></thead><tbody></tbody></table>
+<style>
+  .scan { border-bottom:1px solid #223; padding:8px 0; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; margin:4px 0; }
+  label.f { font-size:12px; color:#9fb3c8; display:flex; flex-direction:column; gap:2px; }
+  label.q { font-size:13px; color:#e6edf3; display:flex; gap:4px; align-items:center; }
+</style>
+<h3>Recent scans — deck card, intended grader, returned grade</h3>
+<p>A returned grade is a half-point overall, a special label, sub-grades, a TAG score as printed, qualifiers, an autograph grade, or Authentic / Altered / No Grade. Leave the number blank when the slab has none.</p>
+<div id="scans"></div>
 <h3>Deck cards</h3>
-<table id="cards"><thead><tr><th>ID</th><th>Category</th><th>Title</th><th>Expect</th><th>Ruler mm L R T B</th><th>Known PSA</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table>
+<table id="cards"><thead><tr><th>ID</th><th>Category</th><th>Title</th><th>Expect</th><th>Ruler mm L R T B</th><th>Known grade</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table>
 <script>
 (async function () {
   const deck = await fetch('/api/deck').then(function (r) { return r.json(); });
@@ -753,24 +772,107 @@ app.get('/deck', localNetworkOnly, (req, res) => {
   const cats = deck.categories;
   function el(tag, attrs, text) { const e = document.createElement(tag); Object.assign(e, attrs || {}); if (text != null) e.textContent = text; return e; }
   function input(value, size) { return el('input', { value: value == null ? '' : value, size: size || 6 }); }
-  const sb = document.querySelector('#scans tbody');
+  function select(list, value, placeholder) {
+    const s = el('select');
+    s.appendChild(el('option', { value: '' }, placeholder || '—'));
+    (list || []).forEach(function (item) {
+      const v = typeof item === 'string' ? item : item.id;
+      const t = typeof item === 'string' ? item : item.label;
+      s.appendChild(el('option', { value: v, selected: v === value }, t));
+    });
+    return s;
+  }
+  function field(title, control) {
+    const l = el('label', { className: 'f' });
+    l.appendChild(document.createTextNode(title));
+    l.appendChild(control);
+    return l;
+  }
+  function labelsFor(grader) {
+    return (deck.specialLabels || []).filter(function (s) { return !grader || s.indexOf(grader + ' ') === 0; });
+  }
+  function refill(sel, list, keep) {
+    while (sel.options.length) sel.remove(0);
+    sel.appendChild(el('option', { value: '' }, '—'));
+    list.forEach(function (s) { sel.appendChild(el('option', { value: s, selected: s === keep }, s)); });
+  }
+  function gradeBox(rec) {
+    rec = rec || {};
+    const sub = rec.subgrades || {};
+    const grader = select(deck.graders, rec.grader);
+    const grade = input(rec.grade, 4); grade.placeholder = '9.5';
+    const label = select(labelsFor(rec.grader), rec.specialLabel);
+    grader.addEventListener('change', function () { refill(label, labelsFor(grader.value), label.value); });
+    const outcome = select(deck.outcomes, rec.outcome);
+    const subs = {};
+    const subRow = el('div', { className: 'row' });
+    (deck.subgradeKeys || []).forEach(function (k) {
+      subs[k] = input(sub[k], 3);
+      subRow.appendChild(field(k, subs[k]));
+    });
+    const tag = input(rec.tagScore, 8); tag.placeholder = 'as printed';
+    const auto = input(rec.autoGrade, 8);
+    const cert = input(rec.cert, 12);
+    const qualRow = el('div', { className: 'row' });
+    const quals = {};
+    (deck.qualifiers || []).forEach(function (q) {
+      quals[q] = el('input', { type: 'checkbox', checked: (rec.qualifiers || []).indexOf(q) !== -1 });
+      const lab = el('label', { className: 'q' });
+      lab.appendChild(quals[q]);
+      lab.appendChild(document.createTextNode(q));
+      qualRow.appendChild(lab);
+    });
+    const box = el('div');
+    const r1 = el('div', { className: 'row' });
+    r1.appendChild(field('Grader', grader));
+    r1.appendChild(field('Overall', grade));
+    r1.appendChild(field('Special label', label));
+    r1.appendChild(field('No-number result', outcome));
+    const r2 = el('div', { className: 'row' });
+    r2.appendChild(field('TAG score', tag));
+    r2.appendChild(field('Autograph', auto));
+    r2.appendChild(field('Cert', cert));
+    box.appendChild(r1); box.appendChild(subRow); box.appendChild(qualRow); box.appendChild(r2);
+    return { box: box, read: function () {
+      const qualifiers = (deck.qualifiers || []).filter(function (q) { return quals[q].checked; });
+      const subgrades = {};
+      (deck.subgradeKeys || []).forEach(function (k) { if (subs[k].value !== '') subgrades[k] = subs[k].value; });
+      const body = { grader: grader.value || null, grade: grade.value || null, specialLabel: label.value || null,
+        outcome: outcome.value || null, subgrades: subgrades, tagScore: tag.value || null,
+        qualifiers: qualifiers, autoGrade: auto.value || null, cert: cert.value || null };
+      const any = body.grader || body.grade || body.specialLabel || body.outcome || body.tagScore ||
+        body.autoGrade || body.cert || qualifiers.length || Object.keys(subgrades).length;
+      return any ? body : null;
+    } };
+  }
   recent.scans.forEach(function (s) {
     const l = deck.labels[s.scanId] || {};
-    const tr = el('tr');
+    const wrap = el('div', { className: 'scan' });
+    wrap.appendChild(el('div', {}, (s.time || '') + '  ' + s.scanId.slice(0, 8).toUpperCase() + '  ' + (s.summary || '')));
     const deckIn = input(l.deckId, 6); deckIn.placeholder = 'TD-01';
     const pre = el('input', { type: 'checkbox', checked: Boolean(l.preSubmission) });
-    const psa = input(l.psaGrade, 4); const cert = input(l.psaCert, 10);
+    const intended = select(deck.graders, l.intendedGrader);
+    const grade = gradeBox(l.result);
     const status = el('span');
     const save = el('button', {}, 'Save');
     save.addEventListener('click', async function () {
-      const body = { deckId: deckIn.value || null, preSubmission: pre.checked, psaGrade: psa.value || null, psaCert: cert.value || null };
+      const body = { deckId: deckIn.value || null, preSubmission: pre.checked, intendedGrader: intended.value || null, result: grade.read() };
       const r = await fetch('/api/scans/' + encodeURIComponent(s.scanId) + '/label', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (x) { return x.json(); });
-      status.textContent = r.ok ? ' saved' : ' ' + r.error;
+      status.textContent = r.ok ? ' saved' : ' ' + (r.error || 'failed');
+      status.className = r.ok ? '' : 'err';
     });
-    [s.time, s.scanId.slice(0, 8).toUpperCase(), s.summary].forEach(function (t) { tr.appendChild(el('td', {}, t)); });
-    [deckIn, pre, psa, cert].forEach(function (c) { const td = el('td'); td.appendChild(c); tr.appendChild(td); });
-    const td = el('td'); td.appendChild(save); td.appendChild(status); tr.appendChild(td);
-    sb.appendChild(tr);
+    const top = el('div', { className: 'row' });
+    top.appendChild(field('Deck', deckIn));
+    const preLab = el('label', { className: 'q' });
+    preLab.appendChild(pre);
+    preLab.appendChild(document.createTextNode('Pre-sub'));
+    top.appendChild(preLab);
+    top.appendChild(field('Intended grader', intended));
+    top.appendChild(save);
+    top.appendChild(status);
+    wrap.appendChild(top);
+    wrap.appendChild(grade.box);
+    document.getElementById('scans').appendChild(wrap);
   });
   const cb = document.querySelector('#cards tbody');
   function cardRow(id, c) {
@@ -783,18 +885,20 @@ app.get('/deck', localNetworkOnly, (req, res) => {
     const exp = el('select'); ['', 'measured', 'undetectable', 'offcenter'].forEach(function (v) { exp.appendChild(el('option', { value: v, selected: (c.expect || '') === v }, v || 'category default')); });
     const mm = c.physicalMm || {};
     const L = input(mm.left, 3), R = input(mm.right, 3), T = input(mm.top, 3), B = input(mm.bottom, 3);
-    const known = input(c.knownPsaGrade, 3); const notes = input(c.notes, 22);
+    const known = gradeBox(c.knownGrade);
+    const notes = input(c.notes, 22);
     const status = el('span'); const save = el('button', {}, 'Save');
     save.addEventListener('click', async function () {
       const body = { category: cat.value || null, title: title.value || null, expect: exp.value || null,
-        physicalMm: { left: L.value, right: R.value, top: T.value, bottom: B.value }, knownPsaGrade: known.value || null, notes: notes.value || null };
+        physicalMm: { left: L.value, right: R.value, top: T.value, bottom: B.value }, knownGrade: known.read(), notes: notes.value || null };
       const r = await fetch('/api/deck/cards/' + encodeURIComponent(idIn.value), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (x) { return x.json(); });
-      status.textContent = r.ok ? ' saved' : ' ' + r.error;
+      status.textContent = r.ok ? ' saved' : ' ' + (r.error || 'failed');
     });
     const mmTd = el('td'); [L, R, T, B].forEach(function (x) { mmTd.appendChild(x); });
     [idIn, cat, title, exp].forEach(function (x) { const td = el('td'); td.appendChild(x); tr.appendChild(td); });
     tr.appendChild(mmTd);
-    [known, notes].forEach(function (x) { const td = el('td'); td.appendChild(x); tr.appendChild(td); });
+    const knownTd = el('td'); knownTd.appendChild(known.box); tr.appendChild(knownTd);
+    [notes].forEach(function (x) { const td = el('td'); td.appendChild(x); tr.appendChild(td); });
     const td = el('td'); td.appendChild(save); td.appendChild(status); tr.appendChild(td);
     cb.appendChild(tr);
   }

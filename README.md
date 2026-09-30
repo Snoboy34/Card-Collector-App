@@ -102,10 +102,13 @@ phone-like captures.
 
 Test deck: a fixed benchmark deck (`TD-01`…) registered on `/deck`
 (`data/test_deck.json`) with per-scan labels in `data/scan_labels.json`
-(deck card, pre-submission, PSA grade). `/api/grade` accepts `deckId` and
-`preSubmission`. `/deck/report` and `node scripts/deck_report.js
-[--candidate <checkout>]` show the latest result per deck card vs the latest
-from a different engine, per-category pass rates, and PSA ground truth. Every
+(deck card, pre-submission, intended grader, and the returned grade).
+`/api/grade` accepts `deckId`, `preSubmission`, and `intendedGrader`.
+`/deck/report` and `node scripts/deck_report.js [--candidate <checkout>]`
+show the latest result per deck card vs the latest from a different engine,
+per-category pass rates, and ground truth per grading company (PSA, BGS, SGC,
+CGC, TAG, Other). Companies are not averaged together. A slab with no number
+is still listed. Every
 saved grade is stamped with `engine` (`ENGINE_VERSION` + git commit). See
 `docs/test-deck-protocol.md`.
 
