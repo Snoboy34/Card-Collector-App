@@ -16,18 +16,41 @@
 const FLIP_INSTRUCTION = 'Turn the card over left to right. Keep the same edge at the top of the frame. Leave background showing on all four sides.';
 
 /**
- * PSA Gem Mint 10 reverse centering, strict end of the published tolerance.
- * This is a comparison, not a centering sub-grade. Grades below 10 are not
- * given a reverse score: the passage below states the 10 only.
+ * PSA reverse centering, strict end of each published whole-grade tolerance.
+ * Comparison only. This never sets the centering sub-grade.
  *
- * Source, checked 2026-09-30: PSA Grading Standards, Gem Mint (10),
+ * Source, confirmed 2026-10-01 from screenshots of each grade slide:
  * https://www.psacard.com/gradingstandards
- * "The image must be centered on the card within a tolerance not to exceed
- * approximately 55/45 percent on the front, and 75/25 percent on the reverse."
- * The live page was behind a bot check; the sentence is the Gem Mint 10
- * paragraph from that URL.
+ * Recorded in docs/test-deck-protocol.md.
+ *
+ *   10 = 75/25
+ *    9 = 90/10
+ *    8 = 90/10
+ *    7 = 90/10
+ *    6 = 90/10
+ *    5 = 90/10
+ *    4 = 90/10
+ *    3 = 90/10
+ *    2 = 90/10
+ *
+ * Half-point grades 2.5–9.5 focus on centering and do not publish a
+ * separate ratio. Rows are best grade first. Shared bounds stay listed;
+ * the first row the measured share meets is the best grade that share allows.
  */
-const PSA_GEM_MINT_10_BACK_MAX_SHARE = 75;
+const PSA_BACK_CENTERING_TABLE = [
+  { grade: 10, maxShare: 75 },
+  { grade: 9, maxShare: 90 },
+  { grade: 8, maxShare: 90 },
+  { grade: 7, maxShare: 90 },
+  { grade: 6, maxShare: 90 },
+  { grade: 5, maxShare: 90 },
+  { grade: 4, maxShare: 90 },
+  { grade: 3, maxShare: 90 },
+  { grade: 2, maxShare: 90 }
+];
+
+/** Strict end of the Gem Mint 10 reverse row (75/25). */
+const PSA_GEM_MINT_10_BACK_MAX_SHARE = PSA_BACK_CENTERING_TABLE[0].maxShare;
 const COPYRIGHT_RE = /©|\(c\)|copyright/i;
 const YEAR_RE = /\b(?:19|20)\d{2}\b/;
 
@@ -73,11 +96,26 @@ function inspectLines(lines) {
 }
 
 /**
- * Drop the front-table centering score from a back report. Border
- * measurements already on the report stay. A missing or front report is
- * not passed here.
- * @param {object} report
+ * Best published PSA whole grade whose reverse tolerance covers `worstShare`.
+ * Not a centering sub-grade. A share past every row is judged and allows
+ * no grade in the table.
+ *
+ * @param {number|null} worstShare larger border share, 0–100
+ * @returns {{ judged: boolean, grade: number|null, maxShare: number|null, worstShare: number|null }}
  */
+function bestPsaBackGrade(worstShare) {
+  if (typeof worstShare !== 'number' || !isFinite(worstShare)) {
+    return { judged: false, grade: null, maxShare: null, worstShare: null };
+  }
+  for (let i = 0; i < PSA_BACK_CENTERING_TABLE.length; i++) {
+    const row = PSA_BACK_CENTERING_TABLE[i];
+    if (worstShare <= row.maxShare + 1e-9) {
+      return { judged: true, grade: row.grade, maxShare: row.maxShare, worstShare: worstShare };
+    }
+  }
+  return { judged: true, grade: null, maxShare: null, worstShare: worstShare };
+}
+
 /**
  * @param {number|null} worstShare larger border share, 0–100
  * @returns {{ judged: boolean, within: boolean|null, maxShare: number, worstShare: number|null }}
@@ -94,6 +132,12 @@ function psaGemMint10Back(worstShare) {
   };
 }
 
+/**
+ * Drop the front-table centering score from a back report. Border
+ * measurements already on the report stay. A missing or front report is
+ * not passed here.
+ * @param {object} report
+ */
 function unscoreBack(report) {
   if (!report) return report;
   report.side = 'back';
@@ -121,9 +165,11 @@ function unscoreBack(report) {
 
 module.exports = {
   FLIP_INSTRUCTION,
+  PSA_BACK_CENTERING_TABLE,
   PSA_GEM_MINT_10_BACK_MAX_SHARE,
   parseCopyrightYear,
   inspectLines,
+  bestPsaBackGrade,
   psaGemMint10Back,
   unscoreBack
 };
