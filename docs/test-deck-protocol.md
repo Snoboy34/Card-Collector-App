@@ -68,13 +68,57 @@ Per card:
 
 The report's pass/fail is the latest front. A back is measured (borders, low-confidence
 edges) and its centering sub-grade stays blank. The back row also says whether the
-worst share is within PSA's published Gem Mint 10 reverse tolerance of 75/25
-(https://www.psacard.com/gradingstandards). That line is not a centering score. A copyright line in the bottom half
+worst share is within PSA's Gem Mint 10 reverse tolerance of 75/25, and the best
+whole grade that share allows from the reverse table below. That line is not a
+centering score. A copyright line in the bottom half
 of the back text stores the year and records that image-left is the front's right.
 A copyright line in the top half flags the back upside down and does not apply that
 map. No copyright line leaves the map unapplied and the year blank.
 
 Missed the ID on the phone? Assign it afterwards on `/deck` (recent scans table).
+
+## PSA centering source
+
+Confirmed 2026-10-01 from screenshots of each grade slide on
+https://www.psacard.com/gradingstandards. Each figure is the strict end of
+the published "approximately X/Y or better." Half-point grades from 2.5
+through 9.5 focus on centering and do not publish a separate ratio.
+
+Front, `PSA_FRONT_CENTERING_TABLE` in `services/grading_engine.js`. Checked
+against this table on 2026-10-01: the ratios match. Grades 4 and 2 repeat
+the 85/15 and 90/10 bounds, so those rows keep the best grade the bound
+allows (5 and 3). A share past 90/10 scores 1.
+
+| Grade | Front |
+|---|---|
+| 10 | 55/45 |
+| 9 | 60/40 |
+| 8 | 65/35 |
+| 7 | 70/30 |
+| 6 | 80/20 |
+| 5 | 85/15 |
+| 4 | 85/15 |
+| 3 | 90/10 |
+| 2 | 90/10 |
+
+Back, `PSA_BACK_CENTERING_TABLE` in `services/back_scan.js`. The deck
+report's back line is a comparison only. It reports the best grade in this
+table whose reverse tolerance covers the measured worst share. It does not
+set the centering sub-grade. A share inside 75 allows 10. A share inside 90
+allows 9, because grades 9 through 2 all publish 90/10. Past 90/10, the line
+says the back allows none.
+
+| Grade | Back |
+|---|---|
+| 10 | 75/25 |
+| 9 | 90/10 |
+| 8 | 90/10 |
+| 7 | 90/10 |
+| 6 | 90/10 |
+| 5 | 90/10 |
+| 4 | 90/10 |
+| 3 | 90/10 |
+| 2 | 90/10 |
 
 ## After an engine change (release gate)
 

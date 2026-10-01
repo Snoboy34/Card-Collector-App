@@ -80,10 +80,16 @@ function rulerRatios(mm) {
 
 function psaBackComparison(scan) {
   const share = scan && scan.result ? scan.result.worstShare : null;
-  const verdict = backScan.psaGemMint10Back(share);
-  if (!verdict.judged) return 'PSA 10 reverse (75/25): centering —';
-  return 'PSA 10 reverse (75/25): worst share ' + fmt(verdict.worstShare) +
-    (verdict.within ? ' (within)' : ' (outside)');
+  const gem = backScan.psaGemMint10Back(share);
+  if (!gem.judged) return 'PSA 10 reverse (75/25): centering —';
+  const best = backScan.bestPsaBackGrade(share);
+  let allows = 'none';
+  if (best.grade != null) {
+    allows = String(best.grade) + ' (' + best.maxShare + '/' + (100 - best.maxShare) + ')';
+  }
+  return 'PSA 10 reverse (75/25): worst share ' + fmt(gem.worstShare) +
+    (gem.within ? ' (within)' : ' (outside)') +
+    '; best grade the back allows: ' + allows;
 }
 
 function backNote(scan) {

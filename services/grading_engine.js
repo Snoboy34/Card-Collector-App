@@ -181,8 +181,15 @@ function clampLabGrade(value) {
  * (larger share on either axis), never an average, so a perfect T/B cannot
  * rescue a blown L/R.
  *
+ * Confirmed 2026-10-01 from screenshots of each grade slide on
+ * https://www.psacard.com/gradingstandards (docs/test-deck-protocol.md).
+ * Front: 10 = 55/45, 9 = 60/40, 8 = 65/35, 7 = 70/30, 6 = 80/20,
+ * 5 = 85/15, 4 = 85/15, 3 = 90/10, 2 = 90/10. Half-point grades 2.5–9.5
+ * focus on centering and are not separate rows.
+ *
  * PSA publishes each grade as "approximately X/Y or better on the front";
- * this uses the strict end of each published range:
+ * this uses the strict end of each published range. A shared bound keeps
+ * the best grade that bound allows:
  *   worst share <= 55  → 10   (55/45)
  *   worst share <= 60  →  9   (60/40)
  *   worst share <= 65  →  8   (65/35)
@@ -191,7 +198,8 @@ function clampLabGrade(value) {
  *   worst share <= 85  →  5   (85/15; PSA 4 has the same front bound)
  *   worst share <= 90  →  3   (90/10; PSA 2 has the same front bound)
  *   otherwise          →  1
- * Back centering (PSA 75/25 for a 10) is not measured.
+ * Back centering is not a sub-grade. The comparison line uses
+ * PSA_BACK_CENTERING_TABLE in services/back_scan.js.
  *
  * @param {{ left: number, right: number }} leftRightRatio
  * @param {{ top: number, bottom: number }} topBottomRatio

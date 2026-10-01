@@ -78,6 +78,18 @@ async function run() {
   assert('PSA 10 reverse 75/25 is within at 75 and outside past it',
     backScan.psaGemMint10Back(75).within === true && backScan.psaGemMint10Back(75.1).within === false &&
     backScan.psaGemMint10Back(null).judged === false);
+  const backRows = backScan.PSA_BACK_CENTERING_TABLE.map(function (row) {
+    return row.grade + ':' + row.maxShare;
+  }).join(',');
+  assert('back table is the 2026-10-01 reverse tolerances, best grade first',
+    backRows === '10:75,9:90,8:90,7:90,6:90,5:90,4:90,3:90,2:90', backRows);
+  assert('75/25 allows PSA 10', backScan.bestPsaBackGrade(75).grade === 10 &&
+    backScan.bestPsaBackGrade(75).maxShare === 75);
+  assert('just past 75/25 allows PSA 9', backScan.bestPsaBackGrade(75.1).grade === 9 &&
+    backScan.bestPsaBackGrade(90).grade === 9);
+  assert('past 90/10 allows no published back grade',
+    backScan.bestPsaBackGrade(90.1).judged === true && backScan.bestPsaBackGrade(90.1).grade === null);
+  assert('an unmeasured back is not given a PSA grade', backScan.bestPsaBackGrade(null).judged === false);
   const only = backScan.inspectLines(['© 1989 Score']);
   assert('a single copyright line stores the year and does not guess orientation',
     only.copyrightYear === 1989 && only.upsideDown === null && only.applied === false, only);
@@ -174,6 +186,9 @@ async function run() {
       /copyright 2020/.test(report.text), report.text);
     assert('deck report compares the back to PSA 10 reverse 75/25 and does not score it',
       /PSA 10 reverse \(75\/25\):/.test(report.text) && row.back.result.cen == null, report.text);
+    assert('deck report names the best PSA grade the back allows',
+      /PSA 10 reverse \(75\/25\): worst share [\d.]+ \((within|outside)\); best grade the back allows: (10 \(75\/25\)|9 \(90\/10\)|none)/.test(report.text) &&
+      row.back.result.cen == null, report.text);
     const labels = store.loadLabels().scans;
     assert('front label keeps side front', labels[frontId] && labels[frontId].side === 'front' && labels[frontId].pairId === frontId, labels[frontId]);
   } finally {
