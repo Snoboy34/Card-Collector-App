@@ -8,6 +8,9 @@
  *   node scripts/dump_scans.js            # last 10, oldest first
  *   node scripts/dump_scans.js 25         # last 25
  *   node scripts/dump_scans.js 10 8260d8  # only scanIds starting with 8260d8
+ *   node scripts/dump_scans.js --deck TD-01
+ *                                         # every scan of that deck card, including
+ *                                         # ones outside the last-N window
  *   node scripts/dump_scans.js --audit BF3F8126 DD872A45
  *                                         # duplicates + where each id lives
  *   JUDGE_DATA_DIR=/other/data node scripts/dump_scans.js
@@ -131,6 +134,12 @@ function metadataLines(cap, srv) {
   return out;
 }
 
+function sidePair(entry) {
+  const side = entry && entry.side ? '  ' + entry.side : '';
+  const pair = entry && entry.pairId ? '  pair ' + entry.pairId : '';
+  return side + pair;
+}
+
 function formatGraded(item) {
   const r = item.gradingReport || {};
   const diag = r.centeringDiagnostics || {};
@@ -142,6 +151,7 @@ function formatGraded(item) {
   const out = [];
   out.push('── ' + id.slice(0, 8).toUpperCase() + '  ' + localTime(item.createdAt) + '  graded  ' + id +
     (item.deckId ? '  deck ' + item.deckId : '') +
+    sidePair(item) +
     (item.engine ? '  engine ' + item.engine.version + (item.engine.commit ? ' (' + item.engine.commit + ')' : '') : '') +
     (tilt ? '  tilt P ' + num(tilt.pitchDeg) + '° R ' + num(tilt.rollDeg) + '°' : ''));
   metadataLines(item.captureMetadata, item.serverMetadata).forEach(function (l) { out.push(l); });
@@ -172,7 +182,8 @@ function formatGraded(item) {
 function formatFailed(entry) {
   const id = String(entry.scanId || '');
   const out = [];
-  out.push('── ' + id.slice(0, 8).toUpperCase() + '  ' + localTime(entry.timestamp) + '  CARD NOT FOUND  ' + id);
+  out.push('── ' + id.slice(0, 8).toUpperCase() + '  ' + localTime(entry.timestamp) + '  CARD NOT FOUND  ' + id +
+    (entry.deckId ? '  deck ' + entry.deckId : '') + sidePair(entry));
   metadataLines(entry.captureMetadata, entry.serverMetadata).forEach(function (l) { out.push(l); });
   detectionBlock(entry.diagnostics).forEach(function (l) { out.push(l); });
   out.push('reject  ' + (entry.reason || '—'));
@@ -215,25 +226,64 @@ function loadFailedEntries(dataDir) {
   return dedupeSorted(readJsonl(path.join(dataDir, 'failed_scans.jsonl')), 'timestamp');
 }
 
-function formatScans(dataDir, count, idPrefix) {
+function loadLabelMap(dataDir) {
+  const raw = readJson(path.join(dataDir, 'scan_labels.json'), { scans: {} });
+  const scans = raw.scans || {};
+  const byId = {};
+  Object.keys(scans).forEach(function (key) { byId[String(key).toLowerCase()] = scans[key]; });
+  return byId;
+}
+
+function labelOf(entry, labels) {
+  return labels && labels[idOf(entry)] || null;
+}
+
+function deckIdOf(entry, labels) {
+  if (entry && entry.deckId) return String(entry.deckId).toUpperCase();
+  const lab = labelOf(entry, labels);
+  return lab && lab.deckId ? String(lab.deckId).toUpperCase() : '';
+}
+
+function applyLabelFields(entry, labels) {
+  const lab = labelOf(entry, labels);
+  if (!lab) return entry;
+  if (!entry.deckId && lab.deckId) entry.deckId = lab.deckId;
+  if (!entry.side && lab.side) entry.side = lab.side;
+  if (!entry.pairId && lab.pairId) entry.pairId = lab.pairId;
+  return entry;
+}
+
+function formatScans(dataDir, count, idPrefix, deckId) {
+  const labels = loadLabelMap(dataDir);
   const graded = loadGradedItems(dataDir).map(function (item) {
-    return { time: timeOf(item.createdAt), id: idOf(item), text: function () { return formatGraded(item); } };
+    applyLabelFields(item, labels);
+    return {
+      time: timeOf(item.createdAt), id: idOf(item), deck: deckIdOf(item, labels),
+      text: function () { return formatGraded(item); }
+    };
   });
   const gradedIds = new Set(graded.map(function (g) { return g.id; }));
   const failed = loadFailedEntries(dataDir)
     .filter(function (entry) { return !gradedIds.has(idOf(entry)); })
     .map(function (entry) {
-      return { time: timeOf(entry.timestamp), id: idOf(entry), text: function () { return formatFailed(entry); } };
+      applyLabelFields(entry, labels);
+      return {
+        time: timeOf(entry.timestamp), id: idOf(entry), deck: deckIdOf(entry, labels),
+        text: function () { return formatFailed(entry); }
+      };
     });
   let all = graded.concat(failed);
   if (idPrefix) {
     const p = String(idPrefix).toLowerCase();
     all = all.filter(function (e) { return e.id.indexOf(p) === 0; });
   }
+  const wantDeck = deckId ? String(deckId).toUpperCase() : '';
+  if (wantDeck) all = all.filter(function (e) { return e.deck === wantDeck; });
   all.sort(function (a, b) { return a.time - b.time || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
-  const picked = all.slice(-count);
-  if (!picked.length) return 'No scans found in ' + dataDir;
-  const header = '# ' + picked.length + ' most recent of ' + all.length + ' scans, oldest first · ' + dataDir;
+  const picked = wantDeck ? all : all.slice(-count);
+  if (!picked.length) return 'No scans found in ' + dataDir + (wantDeck ? ' for ' + wantDeck : '');
+  const header = '# ' + picked.length + (wantDeck ? ' ' + wantDeck : ' most recent') +
+    ' of ' + all.length + ' scans, oldest first · ' + dataDir;
   return header + '\n\n' + picked.map(function (e) { return e.text(); }).join('\n\n');
 }
 
@@ -294,14 +344,25 @@ function formatScanById(dataDir, scanId) {
   return failed.length ? formatFailed(failed[failed.length - 1]) : null;
 }
 
+function parseDumpArgs(argv) {
+  const out = { deck: null, audit: false, rest: [] };
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--audit') { out.audit = true; continue; }
+    if (argv[i] === '--deck') { out.deck = argv[i + 1] || ''; i += 1; continue; }
+    out.rest.push(argv[i]);
+  }
+  return out;
+}
+
 if (require.main === module) {
   const dataDir = process.env.JUDGE_DATA_DIR || path.join(__dirname, '..', 'data');
-  if (process.argv[2] === '--audit') {
-    console.log(auditScans(dataDir, process.argv.slice(3)));
+  const args = parseDumpArgs(process.argv.slice(2));
+  if (args.audit) {
+    console.log(auditScans(dataDir, args.rest));
   } else {
-    const count = Number(process.argv[2]) > 0 ? Number(process.argv[2]) : 10;
-    const idPrefix = process.argv[3] || null;
-    console.log(formatScans(dataDir, count, idPrefix));
+    const count = Number(args.rest[0]) > 0 ? Number(args.rest[0]) : 10;
+    const idPrefix = args.rest[1] || null;
+    console.log(formatScans(dataDir, count, idPrefix, args.deck));
   }
 }
 

@@ -68,7 +68,8 @@ function resultFromReport(report) {
     surface: r.subGrades ? r.subGrades.surface : null,
     finalScore: r.finalScore != null ? r.finalScore : null,
     mm: m.borderWidthsMm || null,
-    lowConfidenceEdges: m.lowConfidenceEdges || (r.cardDetection && r.cardDetection.lowConfidenceEdges) || []
+    lowConfidenceEdges: m.lowConfidenceEdges || (r.cardDetection && r.cardDetection.lowConfidenceEdges) || [],
+    borderVoteLowConfidenceEdges: m.borderVoteLowConfidenceEdges || []
   };
 }
 
@@ -120,6 +121,9 @@ function resultLine(label, res, extra) {
   }
   if (res.lowConfidenceEdges && res.lowConfidenceEdges.length) {
     line += '  low-confidence cut: ' + res.lowConfidenceEdges.join(', ');
+  }
+  if (res.borderVoteLowConfidenceEdges && res.borderVoteLowConfidenceEdges.length) {
+    line += '  low-confidence border: ' + res.borderVoteLowConfidenceEdges.join(', ');
   }
   return line + (extra ? '  ' + extra : '');
 }

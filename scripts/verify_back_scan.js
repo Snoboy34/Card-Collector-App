@@ -191,6 +191,13 @@ async function run() {
       row.back.result.cen == null, report.text);
     const labels = store.loadLabels().scans;
     assert('front label keeps side front', labels[frontId] && labels[frontId].side === 'front' && labels[frontId].pairId === frontId, labels[frontId]);
+    const dump = require('./dump_scans');
+    const backDump = dump.formatGraded(item);
+    assert('dump prints back side and pairId',
+      backDump.indexOf(' back ') !== -1 && backDump.indexOf('pair ' + frontId) !== -1, backDump.split('\n')[0]);
+    const deckDump = dump.formatScans(process.env.JUDGE_DATA_DIR, 1, null, 'TD-11');
+    assert('dump --deck prints every side of that card, not only the last scan',
+      deckDump.indexOf(frontId) !== -1 && deckDump.indexOf(item.scanId) !== -1, deckDump);
   } finally {
     server.close();
     fs.rmSync(tmp, { recursive: true, force: true });

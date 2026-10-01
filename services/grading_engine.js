@@ -75,7 +75,7 @@ const backScan = require('./back_scan');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.09.29-cut-wide';
+const ENGINE_VERSION = '2026.10.01-border-band';
 
 let sharp = null;
 try {
@@ -110,30 +110,44 @@ const PSA10_CENTERING_MIN = 40.0;
 const PSA10_CENTERING_MAX = 60.0;
 
 /**
- * A printed border is a straight ink edge. Reliability uses the tightest
- * window of BORDER_SAMPLE_MIN_HITS hits (not max−min of all 7), so one
- * nameplate / photo step does not fail a real white frame.
+ * A printed border is a straight ink edge, any color. Reliability uses the
+ * tightest window of BORDER_SAMPLE_MIN_HITS hits (not max−min of every
+ * line), so one nameplate step does not fail a real frame.
  *
- * 12px at maxDim 900 is ~1.3% of the card — a nameplate can step that far
- * into a real ink frame. Star Rookie / Faulk neon-crop "frames" agreed
- * geometrically. Live 12px rescans showed their cut→photo band is as flat
- * as (or flatter than) a real white frame after normalize+blur, so texture
- * cannot be the discriminator. A vintage white frame is paper-white on the
- * un-normalized scan; a 90s photo-inset surround is not.
+ * Session exposure lock makes raw grey meaningful. The gate is no longer
+ * "paper-white, grey ≥ 165" — that rejected every non-white border. A band
+ * is a frame when it is uniform, distinct from the backdrop and from the
+ * interior, and the lines agree. Brightness alone is not a color.
+ *
+ * Median widths under 12px (643×900-equivalent) are still cut-edge slivers
+ * unless the lines agree tightly and the band passes that same check.
+ * 1.15 mm is about 11px here and is a real off-center border.
  */
 const BORDER_SAMPLE_SPREAD_MAX_PX = 12;
-/** Of the 7 attempted lines, at least this many must form the consensus window. */
+/** Of the attempted lines, at least this many must form the consensus window. */
 const BORDER_SAMPLE_MIN_HITS = 5;
-/** Median width below this is cut-edge AA / mat bleed, not a printed frame. */
+/** Default floor. Thinner than this needs the thin-border exception. */
 const BORDER_MIN_MEDIAN_WIDTH_PX = 12;
+/** Thinnest median still accepted when the lines agree and the band is real. */
+const BORDER_THIN_MIN_PX = 8;
+/** Thin exception: most of the 15 voting lines, not a 5-hit accident. */
+const BORDER_THIN_MIN_HITS = 12;
+/** Thin exception: the agreeing lines stay inside this spread. */
+const BORDER_THIN_MAX_SPREAD_PX = 6;
 /**
- * Un-normalized greyscale mean inside the putative border band.
- * Empirically this camera's neon-crop AE writes both white stock and
- * dark surrounds into ~105–152, so WHITE_BAND_MIN_GREY never fires on
- * live scans. The cutoff is frozen (not used as a new threshold) so
- * accept/reject stays unchanged while band-vs-interior is collected.
+ * Raw (un-normalized) stddev inside the border band. Chrome and full-bleed
+ * art sit well above this; flat ink, including a nameplate on one edge, does
+ * not. One noisy edge is allowed.
  */
-const WHITE_BAND_MIN_GREY = 165;
+const BORDER_BAND_UNIFORM_MAX = 28;
+/** How many edges may exceed the uniform cap before the frame is rejected. */
+const BORDER_BAND_NONUNIFORM_MAX = 1;
+/**
+ * Raw grey separation. With exposure lock, a real border is not the same
+ * grey as the pink backdrop or as the interior. 18 is enough for white
+ * stock on pink paper and for a colored border on either.
+ */
+const BORDER_BAND_DISTINCT_GREY = 18;
 /** BGS 10 centering window (48/52 — near 50/50). */
 const BGS10_CENTERING_MIN = 48.0;
 const BGS10_CENTERING_MAX = 52.0;
@@ -892,7 +906,8 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
       EDGE_GROUP_GAP_PX + 'px (' + hits.length + ' hits)');
     return Object.assign(base, {
       width: null, samples: hits.map(function (h) { return h.width; }).sort(function (x, y) { return x - y; }),
-      bandStddev: null, baseline: null, paperBandMean: null, paperBaseline: null
+      bandStddev: null, baseline: null, paperBandMean: null, paperBandStddev: null, paperBaseline: null,
+      groupCount: 0, hitCount: hits.length, voteLowConfidence: false
     });
   }
   group.forEach(function (h) { h.line.inGroup = true; });
@@ -900,13 +915,21 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
   const width = median(widths);
   const outliers = hits.length - group.length;
   if (outliers > 0) flags.push(edge + ': ' + outliers + ' line(s) outside the agreeing group');
-  if (profileWidth != null && Math.abs(profileWidth - width) > pr.profileAgree) {
+  const profileDisagrees = profileWidth != null && Math.abs(profileWidth - width) > pr.profileAgree;
+  if (profileDisagrees) {
     flags.push(edge + ': straight-edge profile ' + round2(profileWidth / pr.scale) + 'px disagrees with voted ' +
       round2(width / pr.scale) + 'px');
+  }
+  // The outermost agreeing group can be the smaller cluster (6 lines at the
+  // outer step, 9 at the real border). That is not a vote to score.
+  const minority = group.length * 2 <= hits.length;
+  if (minority) {
+    flags.push(edge + ': chosen group is a minority (' + group.length + ' of ' + hits.length + ' hits)');
   }
 
   const stddevs = [];
   const paperMeans = [];
+  const paperStddevs = [];
   const paperBaselines = [];
   const baselines = [];
   group.forEach(function (h) {
@@ -917,6 +940,8 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
       const paperProfile = linearProfile(paperSample, h.along, pr.lineHalfWidth, alongMax, length);
       const pm = bandMean(paperProfile, h.width);
       if (pm != null) paperMeans.push(pm);
+      const psd = bandStddev(paperProfile, h.width);
+      if (psd != null) paperStddevs.push(psd);
       let pb = 0;
       for (let d = pr.minInward; d < pr.minInward + pr.baselinePx; d++) pb += paperProfile[d];
       paperBaselines.push(pb / pr.baselinePx);
@@ -929,7 +954,11 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
     bandStddev: stddevs.length ? median(sortNum(stddevs)) : null,
     baseline: baselines.length ? median(sortNum(baselines)) : null,
     paperBandMean: paperMeans.length ? median(sortNum(paperMeans)) : null,
-    paperBaseline: paperBaselines.length ? median(sortNum(paperBaselines)) : null
+    paperBandStddev: paperStddevs.length ? median(sortNum(paperStddevs)) : null,
+    paperBaseline: paperBaselines.length ? median(sortNum(paperBaselines)) : null,
+    groupCount: group.length,
+    hitCount: hits.length,
+    voteLowConfidence: minority || profileDisagrees
   });
 }
 
@@ -992,6 +1021,15 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel, o
     top: topScan.paperBaseline,
     bottom: bottomScan.paperBaseline
   };
+  const paperBandStddev = {
+    left: leftScan.paperBandStddev,
+    right: rightScan.paperBandStddev,
+    top: topScan.paperBandStddev,
+    bottom: bottomScan.paperBandStddev
+  };
+  const voteLowConfidenceEdges = ['left', 'right', 'top', 'bottom'].filter(function (edge) {
+    return ({ left: leftScan, right: rightScan, top: topScan, bottom: bottomScan })[edge].voteLowConfidence;
+  });
 
   const detected = leftW != null && rightW != null && topW != null && bottomW != null;
 
@@ -1027,7 +1065,9 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel, o
       bandStddev: bandStddev,
       baselines: baselines,
       paperBandMean: paperBandMean,
-      paperBaselines: paperBaselines
+      paperBandStddev: paperBandStddev,
+      paperBaselines: paperBaselines,
+      voteLowConfidenceEdges: voteLowConfidenceEdges
     };
   }
 
@@ -1050,7 +1090,9 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel, o
     bandStddev: bandStddev,
     baselines: baselines,
     paperBandMean: paperBandMean,
-    paperBaselines: paperBaselines
+    paperBandStddev: paperBandStddev,
+    paperBaselines: paperBaselines,
+    voteLowConfidenceEdges: voteLowConfidenceEdges
   };
 }
 
@@ -1185,6 +1227,27 @@ function consensusRangePx(samples, windowSize) {
   return best;
 }
 
+function finiteOrNull(value) {
+  return typeof value === 'number' && isFinite(value) ? value : null;
+}
+
+/**
+ * A width under the 12px floor is still a printed border when most lines
+ * agree and the raw band is separated from both the table and the interior.
+ * Missing backdrop or interior means the band is not confirmed, so the
+ * floor stays.
+ */
+function thinBorderAllowed(hits, medianWidth, consensus, bandGrey, interiorMean, backdropGrey) {
+  if (medianWidth == null || !isFinite(medianWidth)) return false;
+  if (medianWidth < BORDER_THIN_MIN_PX || medianWidth >= BORDER_MIN_MEDIAN_WIDTH_PX) return false;
+  if (hits < BORDER_THIN_MIN_HITS) return false;
+  if (consensus == null || consensus > BORDER_THIN_MAX_SPREAD_PX) return false;
+  if (bandGrey == null || interiorMean == null || backdropGrey == null) return false;
+  if (Math.abs(bandGrey - interiorMean) < BORDER_BAND_DISTINCT_GREY) return false;
+  if (Math.abs(bandGrey - backdropGrey) < BORDER_BAND_DISTINCT_GREY) return false;
+  return true;
+}
+
 /**
  * Gate for "this is a real printed frame" vs "artwork / photo-edge guess".
  *
@@ -1192,16 +1255,18 @@ function consensusRangePx(samples, windowSize) {
  *   - any edge has fewer than BORDER_SAMPLE_MIN_HITS successful lines
  *   - the tightest BORDER_SAMPLE_MIN_HITS-hit window on any edge exceeds
  *     BORDER_SAMPLE_SPREAD_MAX_PX (outliers are ignored)
- *   - any edge's median width is below BORDER_MIN_MEDIAN_WIDTH_PX
- *   - any edge's un-normalized band mean is below WHITE_BAND_MIN_GREY
- *     (navy / foil surround, not paper-white ink)
+ *   - any edge's median width is below BORDER_MIN_MEDIAN_WIDTH_PX, unless
+ *     it is a thin real border (lines agree and the band is uniform and
+ *     distinct from the backdrop and the interior)
+ *   - the raw border band is not uniform (more than one edge), or is not
+ *     distinct from the backdrop or the interior, when those samples exist
  *   - measurePrintCentering already failed (detected === false)
  *
  * A box that touches the photo edge is a hard reject unless this still was
  * cropped to the neon alignment frame (`alignmentCrop`). After that crop the
- * image edges ARE the cut. Borderless 90s cards (Star Rookie, Faulk) still
- * find a rectangular photo inset that agrees geometrically and can look
- * flat after normalize. Paper-white on the raw scan is the discriminator.
+ * image edges ARE the cut. Color is not a gate: a blue or yellow frame is
+ * a frame. A borderless or chrome card stays undetectable because its band
+ * is not a uniform strip distinct from both the table and the printed interior.
  *
  * @returns {{ accepted: boolean, thresholdPx: number, minHits: number, minMedianWidthPx: number, sampleRangePx: object, consensusRangePx: object, edgeTouchesImage: object, reasons: string[] }}
  */
@@ -1245,8 +1310,12 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
   const bandStddev = measurement.bandStddev || {};
   const baselines = measurement.baselines || {};
   const paperBandMean = measurement.paperBandMean || {};
+  const paperBandStddev = measurement.paperBandStddev || {};
   const paperBaselines = measurement.paperBaselines || {};
+  const interiorMean = finiteOrNull(opts.interiorGrey && opts.interiorGrey.mean);
+  const backdropGrey = finiteOrNull(opts.backdrop && opts.backdrop.grey);
   const edges = ['left', 'right', 'top', 'bottom'];
+  const nonUniform = [];
   for (let i = 0; i < edges.length; i++) {
     const edge = edges[i];
     const hits = (samples[edge] && samples[edge].length) || 0;
@@ -1259,19 +1328,39 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
         'px exceeds ' + BORDER_SAMPLE_SPREAD_MAX_PX + 'px'
       );
     }
+    const bandGrey = finiteOrNull(paperBandMean[edge]) != null
+      ? paperBandMean[edge]
+      : finiteOrNull(paperBaselines[edge]);
+    const thinAgreed = thinBorderAllowed(hits, medianWidth, consensusRange[edge], bandGrey, interiorMean, backdropGrey);
     if (medianWidth != null && typeof medianWidth === 'number' && isFinite(medianWidth) &&
-        medianWidth < BORDER_MIN_MEDIAN_WIDTH_PX) {
+        medianWidth < BORDER_MIN_MEDIAN_WIDTH_PX && !thinAgreed) {
       reasons.push(
         edge + ' median width ' + round2(medianWidth) +
         'px is below ' + BORDER_MIN_MEDIAN_WIDTH_PX + 'px'
       );
     }
-    if (paperBandMean[edge] != null && paperBandMean[edge] < WHITE_BAND_MIN_GREY) {
+    const rawSd = finiteOrNull(paperBandStddev[edge]);
+    if (rawSd != null && rawSd > BORDER_BAND_UNIFORM_MAX) nonUniform.push(edge);
+    if (bandGrey != null && interiorMean != null &&
+        Math.abs(bandGrey - interiorMean) < BORDER_BAND_DISTINCT_GREY) {
       reasons.push(
-        edge + ' paper-band grey ' + round2(paperBandMean[edge]) +
-        ' is below ' + WHITE_BAND_MIN_GREY + ' (not a white printed frame)'
+        edge + ' border band grey ' + round2(bandGrey) +
+        ' is not distinct from the interior (' + round2(interiorMean) + ')'
       );
     }
+    if (bandGrey != null && backdropGrey != null &&
+        Math.abs(bandGrey - backdropGrey) < BORDER_BAND_DISTINCT_GREY) {
+      reasons.push(
+        edge + ' border band grey ' + round2(bandGrey) +
+        ' is not distinct from the background (' + round2(backdropGrey) + ')'
+      );
+    }
+  }
+  if (nonUniform.length > BORDER_BAND_NONUNIFORM_MAX) {
+    reasons.push(
+      'border band is not uniform on ' + nonUniform.join(', ') +
+      ' (raw stddev above ' + BORDER_BAND_UNIFORM_MAX + ')'
+    );
   }
 
   const baselineVals = edges.map(function (edge) { return baselines[edge]; }).filter(function (v) {
@@ -1401,8 +1490,13 @@ function describeBorderSource(args) {
     bandStddev: args.bandStddev,
     baselines: args.baselines,
     paperBandMean: args.paperBandMean,
+    paperBandStddev: args.paperBandStddev,
     paperBaselines: args.paperBaselines
-  }, { alignmentCrop: Boolean(args.alignmentCrop) });
+  }, {
+    alignmentCrop: Boolean(args.alignmentCrop),
+    interiorGrey: args.interiorGrey,
+    backdrop: args.backdrop
+  });
 
   const bandVsInterior = args.bandVsInterior ||
     describeBandVsInterior(args.paperBandMean, args.interiorGrey);
@@ -1496,8 +1590,10 @@ function buildCenteringDiagnostics(width, height, box, centeringMeasurement, ext
     bandStddev: centeringMeasurement.bandStddev,
     baselines: centeringMeasurement.baselines,
     paperBandMean: centeringMeasurement.paperBandMean,
+    paperBandStddev: centeringMeasurement.paperBandStddev,
     paperBaselines: centeringMeasurement.paperBaselines,
     interiorGrey: extra.interiorGrey || centeringMeasurement.interiorGrey,
+    backdrop: extra.backdrop || null,
     bandVsInterior: extra.bandVsInterior || centeringMeasurement.bandVsInterior,
     alignmentCrop: Boolean(extra.alignmentCrop),
     warped: Boolean(extra.warped),
@@ -2027,6 +2123,45 @@ const CUT_RUNNER_UP_MAX_PX = 3;
 const CUT_RUNNER_UP_WIDE_RATIO = 0.8;
 const SERVER_DETECT_DIM = 900;
 
+/**
+ * Mean color just outside the refined quad. Image y grows downward and the
+ * quad is clockwise on screen, so the outward normal is (dy, -dx).
+ * @returns {{ grey: number, count: number }|null}
+ */
+function sampleBackdrop(decoded, quad) {
+  if (!decoded || !quad || !decoded.data) return null;
+  const ch = decoded.channels || 3;
+  const w = decoded.width;
+  const h = decoded.height;
+  const data = decoded.data;
+  const sides = [[quad.tl, quad.tr], [quad.tr, quad.br], [quad.br, quad.bl], [quad.bl, quad.tl]];
+  let sum = 0;
+  let n = 0;
+  for (let s = 0; s < sides.length; s++) {
+    const a = sides[s][0];
+    const b = sides[s][1];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const ox = dy / len;
+    const oy = -dx / len;
+    for (let step = 1; step <= 8; step++) {
+      const t = step / 9;
+      const x = Math.round(a[0] + dx * t + ox * 10);
+      const y = Math.round(a[1] + dy * t + oy * 10);
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      const i = (y * w + x) * ch;
+      const grey = ch >= 3
+        ? 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+        : data[i];
+      sum += grey;
+      n += 1;
+    }
+  }
+  if (!n) return null;
+  return { grey: sum / n, count: n };
+}
+
 function cutConfidence(cutSteps, scale) {
   const out = {};
   ['left', 'right', 'top', 'bottom'].forEach(function (e) {
@@ -2043,6 +2178,30 @@ function cutConfidence(cutSteps, scale) {
     };
   });
   return out;
+}
+
+/**
+ * A minority line group, or a straight-edge profile that disagrees with the
+ * vote, is not a centering score. Widths and ratios stay. The edge is marked
+ * low-confidence. This does not touch a cut-edge runner-up flag by itself.
+ */
+function withholdUntrustedBorderVote(report, measurement) {
+  const vote = (measurement && measurement.voteLowConfidenceEdges) || [];
+  if (!vote.length || !report || !report.subGrades) return report;
+  report.subGrades.centering = null;
+  report.centering = null;
+  report.finalScore = null;
+  report.weighted = null;
+  report.isGemMint = false;
+  report.incomplete = true;
+  const note = 'centering withheld — ' + vote.join(', ') +
+    ' border vote is a minority or the straight-edge profile disagrees';
+  report.incompleteReason = report.incompleteReason ? (report.incompleteReason + '; ' + note) : note;
+  report.notes = report.incompleteReason;
+  report.primaryFlawDescription = report.incompleteReason;
+  if (!report.centeringMetrics) report.centeringMetrics = {};
+  report.centeringMetrics.borderVoteLowConfidenceEdges = vote.slice();
+  return report;
 }
 
 /** Low-confidence cut edges → edge flags and centeringMetrics. Values untouched. */
@@ -2227,6 +2386,7 @@ async function locateCard(buffer, options) {
   detection.lowConfidenceEdges = detection.edgeCutConfidence
     ? ['left', 'right', 'top', 'bottom'].filter(function (e) { return detection.edgeCutConfidence[e].lowConfidence; })
     : [];
+  detection.backdrop = sampleBackdrop(decoded, q);
   detection.quadSource = accepted.source;
   // quad = tightened corners actually warped; rawQuad = detector output.
   detection.rawQuad = accepted.source === 'native' ? detection.nativeQuadRaw : detection.serverQuadRaw;
@@ -2487,7 +2647,7 @@ async function gradeBuffer(buffer, options) {
     const corners = null;
     const borderReliability = assessPrintBorderReliability(
       centeringBox, width, height, centeringMeasurement,
-      { alignmentCrop: true }
+      { alignmentCrop: true, interiorGrey: interiorGrey, backdrop: cardDetection.backdrop }
     );
     // eslint-disable-next-line no-console
     console.log(
@@ -2568,7 +2728,8 @@ async function gradeBuffer(buffer, options) {
           alignmentCrop: true,
           warped: true,
           interiorGrey: interiorGrey,
-          bandVsInterior: bandVsInterior
+          bandVsInterior: bandVsInterior,
+          backdrop: cardDetection.backdrop
         })
       };
       if (options.debug) {
@@ -2651,9 +2812,12 @@ async function gradeBuffer(buffer, options) {
         alignmentCrop: true,
         warped: true,
         interiorGrey: interiorGrey,
-        bandVsInterior: bandVsInterior
+        bandVsInterior: bandVsInterior,
+        backdrop: cardDetection.backdrop
       })
     };
+
+    withholdUntrustedBorderVote(report, centeringMeasurement);
 
     if (options.debug) {
       report.debug = {
@@ -2715,5 +2879,9 @@ module.exports = {
   BORDER_SAMPLE_SPREAD_MAX_PX,
   BORDER_SAMPLE_MIN_HITS,
   BORDER_MIN_MEDIAN_WIDTH_PX,
-  WHITE_BAND_MIN_GREY
+  BORDER_THIN_MIN_PX,
+  BORDER_THIN_MIN_HITS,
+  BORDER_THIN_MAX_SPREAD_PX,
+  BORDER_BAND_UNIFORM_MAX,
+  BORDER_BAND_DISTINCT_GREY
 };

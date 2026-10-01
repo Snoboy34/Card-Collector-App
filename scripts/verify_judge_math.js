@@ -267,7 +267,57 @@ assertHint('undetected hint', undetectedHint.hint, 'undetected');
 assertEq('spread threshold is 12px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 12);
 assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
 assertEq('min median width is 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
-assertEq('paper-white band floor is 165', g.WHITE_BAND_MIN_GREY, 165);
+assertEq('thin border floor is 8px', g.BORDER_THIN_MIN_PX, 8);
+assertEq('thin border needs 12 agreeing lines', g.BORDER_THIN_MIN_HITS, 12);
+assert('color is not a grey floor', g.WHITE_BAND_MIN_GREY === undefined);
+
+const bandBox = { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 };
+const tightSamples = {
+  left: [29.2, 29.5, 29.8, 30, 30.1, 30.2, 30.4, 30.5, 30.6, 30.7, 30.8, 31],
+  right: [29.1, 29.4, 29.7, 30, 30, 30.2, 30.3, 30.4, 30.5, 30.6, 30.8, 31],
+  top: [29.3, 29.6, 29.9, 30, 30.1, 30.2, 30.3, 30.4, 30.5, 30.6, 30.7, 30.9],
+  bottom: [29, 29.4, 29.6, 29.8, 30, 30.1, 30.2, 30.3, 30.4, 30.5, 30.7, 31]
+};
+const coloredBand = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 30, right: 30, top: 30, bottom: 30 },
+  samples: tightSamples,
+  paperBandMean: { left: 48, right: 52, top: 46, bottom: 50 },
+  paperBandStddev: { left: 4, right: 3, top: 5, bottom: 4 }
+}, { alignmentCrop: true, interiorGrey: { mean: 140 }, backdrop: { grey: 170 } });
+assert('colored band distinct from interior and background is accepted', coloredBand.accepted === true, coloredBand.reasons);
+
+const sameAsInterior = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 30, right: 30, top: 30, bottom: 30 },
+  samples: tightSamples,
+  paperBandMean: { left: 138, right: 142, top: 136, bottom: 140 }
+}, { alignmentCrop: true, interiorGrey: { mean: 140 }, backdrop: { grey: 180 } });
+assert('band matching the interior is rejected', sameAsInterior.accepted === false);
+assert('band matching the interior names that', sameAsInterior.reasons.join(' ').indexOf('not distinct from the interior') !== -1);
+
+const thinReal = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 40, right: 36, top: 32, bottom: 11.1 },
+  samples: {
+    left: tightSamples.left,
+    right: tightSamples.right,
+    top: tightSamples.top,
+    bottom: [9.4, 9.7, 10.0, 10.2, 10.5, 10.8, 11.0, 11.2, 11.4, 11.6, 11.9, 12.2, 12.4, 12.6, 12.8]
+  },
+  paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
+}, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
+assert('agreeing 11px bottom is accepted', thinReal.accepted === true, thinReal.reasons);
+
+const chromeBand = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 40, right: 38, top: 36, bottom: 42 },
+  samples: tightSamples,
+  paperBandStddev: { left: 40, right: 36, top: 44, bottom: 38 },
+  paperBandMean: { left: 120, right: 130, top: 110, bottom: 125 }
+}, { alignmentCrop: true, interiorGrey: { mean: 70 }, backdrop: { grey: 180 } });
+assert('non-uniform chrome band is rejected', chromeBand.accepted === false);
+assert('chrome names the band', chromeBand.reasons.join(' ').indexOf('not uniform') !== -1);
 
 const brightBandVsDarkArt = g.describeBandVsInterior(
   { left: 200, right: 198, top: 204, bottom: 196 },
@@ -673,9 +723,9 @@ const starRookieNavyHint = g.describeBorderSource({
   detected: true,
   alignmentCrop: true
 });
-assert('Star Rookie navy surround rejected', starRookieNavy.accepted === false);
-assert('Star Rookie names not a white printed frame', starRookieNavy.reasons.join(' ').indexOf('not a white printed frame') !== -1);
-assertHint('Star Rookie navy hint is undetected', starRookieNavyHint.hint, 'undetected');
+assert('dark band is not rejected for color alone', starRookieNavy.accepted === true);
+assert('dark band does not cite a white-frame rule', starRookieNavy.reasons.join(' ').indexOf('not a white printed frame') === -1);
+assertHint('Star Rookie navy hint is a printed frame without an interior sample', starRookieNavyHint.hint, 'likely-printed-frame');
 
 const flatInkNameplate = g.assessPrintBorderReliability(
   starRookieBox,
@@ -728,9 +778,8 @@ const faulkNavyHint = g.describeBorderSource({
   detected: true,
   alignmentCrop: true
 });
-assert('Faulk navy surround rejected', faulkNavy.accepted === false);
-assertHint('Faulk navy hint is undetected', faulkNavyHint.hint, 'undetected');
-assert('Faulk hint is not printed-frame', faulkNavyHint.hint !== 'likely-printed-frame');
+assert('Faulk navy surround is not rejected for color alone', faulkNavy.accepted === true);
+assertHint('Faulk navy hint is a printed frame without an interior sample', faulkNavyHint.hint, 'likely-printed-frame');
 
 // iMac confirmation trio (Faulk, then Star Rookie, then the real white-border).
 // The live Node log still printed threshold=8px and omitted bandStddev — that
@@ -837,7 +886,7 @@ const live12FaulkPaper = g.assessPrintBorderReliability(
   }),
   { alignmentCrop: true }
 );
-assert('live 12px Faulk paper-white rejected', live12FaulkPaper.accepted === false);
+assert('live 12px Faulk dark band is not rejected for color alone', live12FaulkPaper.accepted === true);
 
 const live12StarRookie = g.assessPrintBorderReliability(
   liveConfirmBox,
@@ -1318,8 +1367,8 @@ async function makeWhiteBorderNameplatePng() {
   }).png().toBuffer();
 }
 
-/** Flat navy surround + rectangular photo — the live Faulk shape.
- *  Geometry agrees and the band is flat; paper-white must still reject. */
+/** Flat navy surround + rectangular photo. A uniform colored margin distinct
+ *  from the interior and the table is a border, not a white-only reject. */
 async function makeFlatNavyInsetPng() {
   let sharpLib = null;
   try { sharpLib = require('sharp'); } catch (e) { return null; }
@@ -1363,17 +1412,13 @@ async function runFlatNavyInsetCheck() {
     process.exitCode = 1;
     return;
   }
-  assertUndetectedNoFrameHint('flat-navy inset', report);
+  assertCenteringOnlyReport('flat-navy colored border', report);
   const reliability = report.centeringDiagnostics && report.centeringDiagnostics.borderReliability;
   const reasons = reliability && reliability.reasons ? reliability.reasons.join(' ') : '';
-  assert('flat-navy names not a white printed frame',
-    reasons.indexOf('not a white printed frame') !== -1);
-  const paper = reliability && reliability.paperBandMean;
-  assert('flat-navy paper means are below the white floor',
-    paper && paper.left < g.WHITE_BAND_MIN_GREY && paper.right < g.WHITE_BAND_MIN_GREY);
+  assert('flat-navy is not rejected for being non-white',
+    reasons.indexOf('not a white printed frame') === -1 && reasons.indexOf('below 165') === -1, reasons);
   const navyBvi = report.centeringDiagnostics.bandVsInterior;
   assert('flat-navy diagnostic ratio exists', Boolean(navyBvi && navyBvi.min != null));
-  assert('flat-navy band is not brighter than interior', navyBvi.min < 1.05);
 }
 
 async function runBusyInsetBorderlessCheck() {
@@ -1398,11 +1443,11 @@ async function runBusyInsetBorderlessCheck() {
   assertUndetectedNoFrameHint('busy-inset borderless', report);
   const reliability = report.centeringDiagnostics && report.centeringDiagnostics.borderReliability;
   const reasons = reliability && reliability.reasons ? reliability.reasons.join(' ') : '';
-  assert('busy-inset names texture, paper-white, or miss',
-    reasons.indexOf('textured art') !== -1 ||
-    reasons.indexOf('not a white printed frame') !== -1 ||
-    reasons.indexOf('cut-edge ink greys') !== -1 ||
-    reasons.indexOf('did not resolve') !== -1);
+  assert('busy-inset names a non-uniform band or a miss',
+    reasons.indexOf('not uniform') !== -1 ||
+    reasons.indexOf('not distinct') !== -1 ||
+    reasons.indexOf('did not resolve') !== -1 ||
+    reasons.indexOf('consensus range') !== -1, reasons);
 }
 
 async function runWhiteBorderNameplateCheck() {
@@ -1424,7 +1469,18 @@ async function runWhiteBorderNameplateCheck() {
     process.exitCode = 1;
     return;
   }
-  assertCenteringOnlyReport('nameplate white-border', report);
+  assert('nameplate white-border centering detected', report.printCenteringDetected === true);
+  assert('nameplate white-border SUR not measured', report.subGrades.surface === null);
+  assert('nameplate white-border EDG not measured', report.subGrades.edges === null);
+  assert('nameplate white-border CRN not measured', report.subGrades.corners === null);
+  assert('nameplate white-border no final grade without SUR/EDG', report.finalScore === null && report.incomplete === true);
+  const nameplateVote = (report.centeringMetrics && report.centeringMetrics.borderVoteLowConfidenceEdges) || [];
+  if (nameplateVote.length) {
+    assert('nameplate minority top vote withholds CEN',
+      report.subGrades.centering === null && nameplateVote.indexOf('top') !== -1, nameplateVote);
+  } else {
+    assert('nameplate white-border has CEN', typeof report.subGrades.centering === 'number', report.subGrades);
+  }
   assertHint('nameplate white-border hint is printed-frame', report.centeringDiagnostics.hint, 'likely-printed-frame');
   const npBvi = report.centeringDiagnostics.bandVsInterior;
   assert('nameplate diagnostic ratio exists', Boolean(npBvi && npBvi.min != null));

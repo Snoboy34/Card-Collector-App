@@ -187,6 +187,53 @@ async function run() {
   assert('pattern B: T/B ≈ 46/54 and L/R ≈ 57/43',
     late.tb && near(late.tb.top, 46.2, 1) && late.lr && near(late.lr.left, 57.1, 1), { tb: late.tb, lr: late.lr });
 
+  // Colored border on pink. Grey-below-165 must not reject it.
+  const blue = await gradeCard({
+    paint: function (x, y, b, inBorder) { return inBorder ? [30, 70, 170] : null; }
+  });
+  const blueReasons = ((blue.report.centeringDiagnostics || {}).borderReliability || {}).reasons || [];
+  assert('blue border is measured and scored',
+    blue.report.printCenteringDetected === true && typeof blue.report.subGrades.centering === 'number',
+    { widths: blue.widths, reasons: blueReasons, cen: blue.report.subGrades && blue.report.subGrades.centering });
+  assert('blue border is not a white-frame reject',
+    blueReasons.join(' ').indexOf('white printed') === -1 && blueReasons.join(' ').indexOf('below 165') === -1, blueReasons);
+
+  // 1.15 mm class. A hard white-to-dark step is what the cut refiner locks onto,
+  // so this border is only slightly lighter than the interior: the cut stays
+  // on the pink table, and the ~11px band is the frame.
+  const thin = await gradeCard({
+    borders: { bottom: 11 },
+    paint: function (x, y, b, inBorder) {
+      return inBorder ? [230, 230, 228] : [180, 170, 160];
+    }
+  });
+  const thinReasons = ((thin.report.centeringDiagnostics || {}).borderReliability || {}).reasons || [];
+  assert('11px bottom is accepted', thin.report.printCenteringDetected === true && near(thin.widths.bottom, 11, 1.5),
+    { widths: thin.widths, reasons: thinReasons });
+  assert('11px bottom keeps a centering score', typeof thin.report.subGrades.centering === 'number', thin.report.subGrades);
+
+  // 6 lines at ~25px vs 9 at ~42px. The outer group is a minority; do not score it.
+  const split = await gradeCard({
+    paint: function (x, y, b, inBorder) {
+      const span0 = Math.floor(H * 0.2);
+      const span1 = Math.floor(H * 0.8);
+      if (y < span0 || y >= span1) return null;
+      const narrow = y < span0 + (span1 - span0) * 0.4;
+      const edge = narrow ? 25 : 42;
+      if (x < edge) return WHITE;
+      if (x < 70) return DARK;
+      return null;
+    }
+  });
+  const splitLow = (split.report.centeringMetrics && split.report.centeringMetrics.borderVoteLowConfidenceEdges) || [];
+  assert('split left edge is low-confidence', splitLow.indexOf('left') !== -1, {
+    low: splitLow, flags: split.flags, widths: split.widths, lines: (split.report.centeringDiagnostics || {}).sampleLines
+  });
+  assert('split vote withholds the centering score',
+    split.report.subGrades && split.report.subGrades.centering === null, split.report.subGrades);
+  assert('split vote still reports the measured widths',
+    split.widths.left != null && split.widths.right != null, split.widths);
+
   if (failures) {
     console.error(failures + ' top-edge check(s) failed.');
     process.exit(1);
