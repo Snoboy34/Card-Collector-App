@@ -1,0 +1,53 @@
+{
+  "noted": "2026-10-03 phone photos, in the order they were sent, read as TD-01 through TD-06. Correct a title on /deck if an ID is different. The gate uses these expect values for a scan that is labeled with the ID. A card.expect set on /deck is what deck_report uses; this file is the TD check in npm run gate.",
+  "cards": [
+    {
+      "id": "TD-01",
+      "title": "Saniya Rivers 2024 Donruss Rated Rookie",
+      "category": "white-modern",
+      "expect": "measured",
+      "backExpect": "measured",
+      "notes": "White border, blue and red inner frame. Front and back should both measure."
+    },
+    {
+      "id": "TD-02",
+      "title": "Nick Lodolo Cincinnati Reds",
+      "category": "white-modern",
+      "expect": "measured",
+      "backExpect": "measured",
+      "notes": "White border. The front's left edge has a dark REDS nameplate inside the border. A minority vote withholds CEN and still counts as measured."
+    },
+    {
+      "id": "TD-03",
+      "title": "Larvitar Journey Together 080/159",
+      "category": "tcg-pokemon",
+      "expect": "measured",
+      "backExpect": "measured",
+      "notes": "Silver-grey front border and a blue Pokémon back. The back is a real colored border and must measure, not be rejected for brightness."
+    },
+    {
+      "id": "TD-04",
+      "title": "Dan Fouts 1981 Topps",
+      "category": "colored-border",
+      "expect": "offcenter",
+      "backExpect": "measured",
+      "notes": "Yellow front border. The session measured a consistent 1.15 mm bottom on the front; that is a real off-center card (worst axis worse than 60/40). The grey back border should measure."
+    },
+    {
+      "id": "TD-05",
+      "title": "Marshall Faulk 1995 Upper Deck",
+      "category": "borderless",
+      "expect": "undetectable",
+      "backExpect": "undetectable",
+      "notes": "Full-bleed front and back. Both sides stay undetectable."
+    },
+    {
+      "id": "TD-06",
+      "title": "Dana Evans 2025 Select",
+      "category": "chrome-foil",
+      "expect": "undetectable",
+      "backExpect": "measured",
+      "notes": "Chrome front runs to the edge and must stay undetectable. The back has a white border and should measure."
+    }
+  ]
+}

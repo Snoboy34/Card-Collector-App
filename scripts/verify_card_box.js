@@ -355,8 +355,9 @@ async function run() {
     assert('422 debug.json records card not found + quadSource none',
       failDebug.cardNotFound === true && failDebug.cardDetection.quadSource === 'none');
     assert('failed-scans log points at the debug dir', logged.debugDir === path.join('scans', failScanId), logged.debugDir);
-    assert('200 writes debug.json and oriented.jpg',
-      fs.existsSync(path.join(okDir, 'debug.json')) && fs.existsSync(path.join(okDir, 'oriented.jpg')));
+    assert('200 writes debug.json, oriented.jpg, and overlay.jpg',
+      fs.existsSync(path.join(okDir, 'debug.json')) && fs.existsSync(path.join(okDir, 'oriented.jpg')) &&
+      fs.existsSync(path.join(okDir, 'overlay.jpg')));
     const okDebug = JSON.parse(fs.readFileSync(path.join(okDir, 'debug.json'), 'utf8'));
     assert('debug.json has raw + tightened quad', okDebug.cardDetection.rawQuad && okDebug.cardDetection.quad);
     assert('debug.json has 15 per-line samples per edge',
@@ -372,7 +373,12 @@ async function run() {
     const cyan = oriented.data[px] < 90 && oriented.data[px + 1] > 170 && oriented.data[px + 2] > 190;
     assert('oriented.jpg draws the cyan inner top line at the measured width', cyan,
       [oriented.data[px], oriented.data[px + 1], oriented.data[px + 2]]);
-    assert('report points at the debug dir', rep.debugArtifacts && rep.debugArtifacts.dir === path.join('scans', okScanId));
+    assert('report points at the debug dir and the overlay',
+      rep.debugArtifacts && rep.debugArtifacts.dir === path.join('scans', okScanId) &&
+      rep.debugArtifacts.overlayJpg === path.join('scans', okScanId, 'overlay.jpg'));
+    assert('422 writes no overlay.jpg', !fs.existsSync(path.join(failDir, 'overlay.jpg')));
+    const overlay = await sharp(path.join(okDir, 'overlay.jpg')).metadata();
+    assert('overlay.jpg is a jpeg of the decoded photo', overlay.format === 'jpeg' && overlay.width >= 100 && overlay.height >= 100, overlay);
 
     // Dashboard: no invented prices, count only fully graded cards.
     const statsRes = await fetch(base + '/api/stats');
@@ -395,8 +401,36 @@ async function run() {
     assert('GET /scans/<id>/oriented.jpg serves the JPEG',
       img.status === 200 && /image\/jpeg/.test(img.headers.get('content-type')) &&
       imgBytes[0] === 0xff && imgBytes[1] === 0xd8, img.status);
+    const overlayRes = await fetch(base + '/scans/' + okScanId + '/overlay.jpg');
+    const overlayBytes = Buffer.from(await overlayRes.arrayBuffer());
+    const scanDebug = require('../services/scan_debug');
+    const svg = scanDebug.buildOverlaySvg({
+      width: 100, height: 140,
+      quad: { tl: [5, 5], tr: [90, 5], br: [90, 130], bl: [5, 130] },
+      homography: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+      warp: { width: 100, height: 140 },
+      measurement: {
+        widths: { left: 8, right: null, top: null, bottom: null },
+        voteLowConfidenceEdges: ['left'],
+        sampleLines: {
+          left: [
+            { at: 40, pos: 8, inGroup: true },
+            { at: 70, pos: 22, inGroup: false },
+            { at: 90, pos: null, inGroup: false }
+          ],
+          right: [], top: [], bottom: []
+        }
+      },
+      lowConfidenceEdges: ['top']
+    });
+    assert('overlay marks chosen, agreeing, rejected, miss, and low-confidence edges',
+      svg.indexOf('#00dcff') !== -1 && svg.indexOf('#ffe000') !== -1 && svg.indexOf('#ff2bd6') !== -1 &&
+      svg.indexOf('#ff2828') !== -1 && svg.indexOf('LOW CUT top') !== -1 && svg.indexOf('LOW VOTE left') !== -1, svg.slice(0, 200));
+    assert('GET /scans/<id>/overlay.jpg serves the JPEG',
+      overlayRes.status === 200 && /image\/jpeg/.test(overlayRes.headers.get('content-type')) &&
+      overlayBytes[0] === 0xff && overlayBytes[1] === 0xd8, overlayRes.status);
     const other = await fetch(base + '/scans/' + okScanId + '/server.js');
-    assert('only oriented.jpg / debug.json are served from scans/', other.status === 404, other.status);
+    assert('other scan files are not served', other.status === 404, other.status);
     const oneScan = await (await fetch(base + '/api/debug/scan/' + okScanId)).json();
     assert('GET /api/debug/scan/<id> returns that scan block',
       oneScan.ok && oneScan.text.indexOf(okScanId.slice(0, 8).toUpperCase()) !== -1 &&

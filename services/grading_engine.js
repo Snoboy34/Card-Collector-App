@@ -2406,7 +2406,14 @@ async function locateCard(buffer, options) {
     pxPerMm: round2(centerH / CARD_HEIGHT_MM),
     scale: Math.round(centerScale * 10000) / 10000
   };
-  return { found: true, detection: detection, warped: warped, centeringWarped: centeringWarped };
+  return {
+    found: true,
+    detection: detection,
+    warped: warped,
+    centeringWarped: centeringWarped,
+    decoded: decoded,
+    quad: q
+  };
 }
 
 /**
@@ -2527,7 +2534,8 @@ async function gradeBuffer(buffer, options) {
     return gradeResult;
   }
 
-  // Stage B: scans/<scanId>/debug.json (+ oriented.jpg when a card was warped).
+  // Stage B: scans/<scanId>/debug.json, oriented.jpg (warped card), and
+  // overlay.jpg (the decoded photo with the quad and sample lines).
   async function attachScanDebug(gradeResult, ctx) {
     if (!options.scansRoot || !options.scanId) return gradeResult;
     const c = ctx || {};
@@ -2539,7 +2547,11 @@ async function gradeBuffer(buffer, options) {
         warped: c.warped || null,
         centeringBox: c.centeringBox || null,
         measurement: c.measurement || null,
-        borderReliability: c.borderReliability || null
+        borderReliability: c.borderReliability || null,
+        photo: c.photo || null,
+        quad: c.quad || null,
+        homography: c.homography || null,
+        lowConfidenceEdges: c.lowConfidenceEdges || null
       });
     } catch (err) {
       console.error('[scan-debug] persist failed', options.scanId, err && err.message);
@@ -2666,6 +2678,17 @@ async function gradeBuffer(buffer, options) {
         : '')
     );
 
+    const debugCtx = {
+      warped: warped,
+      centeringBox: centeringBox,
+      measurement: centeringMeasurement,
+      borderReliability: borderReliability,
+      photo: located.decoded,
+      quad: located.quad,
+      homography: warped.homography,
+      lowConfidenceEdges: cardDetection.lowConfidenceEdges
+    };
+
     // Failed print-border detection is UNKNOWN, not 50/50. Do not feed
     // fabricated ratios into evaluateMultiPhaseCondition — that scorer has
     // no "undetected" state and would emit a fake Gem centering sub-grade.
@@ -2750,10 +2773,7 @@ async function gradeBuffer(buffer, options) {
           edgesWhiteningCount
         };
       }
-      return deliver(applyDetectorTrust(report), {
-        warped: warped, centeringBox: centeringBox,
-        measurement: centeringMeasurement, borderReliability: borderReliability
-      });
+      return deliver(applyDetectorTrust(report), debugCtx);
     }
 
     const judged = evaluateMultiPhaseCondition(
@@ -2837,10 +2857,7 @@ async function gradeBuffer(buffer, options) {
       };
     }
 
-    return deliver(applyDetectorTrust(report), {
-      warped: warped, centeringBox: centeringBox,
-      measurement: centeringMeasurement, borderReliability: borderReliability
-    });
+    return deliver(applyDetectorTrust(report), debugCtx);
   } catch (err) {
     return returnGrade(fallbackReport('grading engine error: ' + (err && err.message ? err.message : String(err))));
   }

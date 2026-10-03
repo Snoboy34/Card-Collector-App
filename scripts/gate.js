@@ -88,6 +88,69 @@ async function compareStep(o) {
   };
 }
 
+function loadTdExpectations() {
+  const file = path.join(ROOT, 'fixtures', 'td_expectations.json');
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
+/**
+ * TD-01..TD-06 outcomes from fixtures/td_expectations.json. Checks stored
+ * results already loaded by deck_report (no second re-grade). A data dir
+ * that has none of these cards skips, so synthetic gate fixtures are not
+ * required to be the phone deck. --require-data fails a missing card.
+ */
+function tdStep(o) {
+  const deck = require('../services/test_deck');
+  const seed = loadTdExpectations();
+  const rep = o._deckReport;
+  const byId = {};
+  ((rep && rep.rows) || []).forEach(function (r) { byId[r.deckId] = r; });
+  const failures = [];
+  const seen = [];
+  const missing = [];
+  seed.cards.forEach(function (card) {
+    const row = byId[card.id];
+    const front = row && row.latest;
+    const back = row && row.back;
+    if (!front && !back) {
+      missing.push(card.id);
+      if (o.requireData) failures.push(card.id + ' not scanned');
+      return;
+    }
+    seen.push(card.id);
+    if (front) {
+      const pass = deck.judgeExpectation(card.expect, front.result);
+      if (!pass) {
+        failures.push(card.id + ' front expected ' + card.expect + ', got ' + front.result.status);
+      }
+    } else if (o.requireData) {
+      failures.push(card.id + ' front not scanned');
+    }
+    if (back && card.backExpect) {
+      const pass = deck.judgeExpectation(card.backExpect, back.result);
+      if (!pass) failures.push(card.id + ' back expected ' + card.backExpect + ', got ' + back.result.status);
+    } else if (!back && card.backExpect && o.requireData) {
+      failures.push(card.id + ' back not scanned');
+    }
+  });
+  if (!seen.length) {
+    const status = o.requireData ? 'FAIL' : 'SKIP';
+    return {
+      step: 'td_deck',
+      status: status,
+      detail: 'TD-01..TD-06 not in this data',
+      failures: o.requireData ? failures : []
+    };
+  }
+  return {
+    step: 'td_deck',
+    status: failures.length ? 'FAIL' : 'PASS',
+    detail: seen.length + ' of ' + seed.cards.length + ' TD cards in this data' +
+      (missing.length ? ' · missing ' + missing.join(', ') : ''),
+    failures: failures
+  };
+}
+
 async function deckStep(o) {
   const { buildDeckReport } = require('./deck_report');
   const rep = await buildDeckReport({ dataDir: o.dataDir, uploadsDir: o.uploadsDir, candidateDir: o.candidateDir });
@@ -99,6 +162,7 @@ async function deckStep(o) {
   const stored = judged.filter(function (r) { return r.latest.pass; }).length;
   const cand = judged.filter(function (r) { return r.candidate && r.candidate.pass; }).length;
   const lost = judged.filter(function (r) { return r.latest.pass && !(r.candidate && r.candidate.pass); });
+  o._deckReport = rep;
   const failures = [];
   if (cand < stored) failures.push('candidate passes ' + cand + ' of ' + judged.length + ' deck cards, stored ' + stored + ' (lost: ' + lost.map(function (r) { return r.deckId; }).join(', ') + ')');
   return {
@@ -126,16 +190,19 @@ async function gate(options) {
     const why = 'no saved scans at ' + path.join(o.dataDir, 'database.json');
     steps.push({ step: 'compare_finders', status: status, detail: why, failures: o.requireData ? [why] : [] });
     steps.push({ step: 'deck_report', status: status, detail: why, failures: o.requireData ? [why] : [] });
+    steps.push({ step: 'td_deck', status: status, detail: why, failures: o.requireData ? [why] : [] });
   } else {
     const quiet = function (fn) {
       return async function () {
         try { return await fn(o); } catch (err) {
-          return { step: fn === compareStep ? 'compare_finders' : 'deck_report', status: 'FAIL', detail: 'threw', failures: [String(err && err.message || err)] };
+          const step = fn === compareStep ? 'compare_finders' : (fn === deckStep ? 'deck_report' : 'td_deck');
+          return { step: step, status: 'FAIL', detail: 'threw', failures: [String(err && err.message || err)] };
         }
       };
     };
     steps.push(await quiet(compareStep)());
     steps.push(await quiet(deckStep)());
+    steps.push(await quiet(tdStep)());
   }
 
   const ok = steps.every(function (s) { return s.status !== 'FAIL'; });
