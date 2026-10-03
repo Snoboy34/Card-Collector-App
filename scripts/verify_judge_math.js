@@ -268,7 +268,9 @@ assertEq('spread threshold is 12px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 12);
 assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
 assertEq('min median width is 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
 assertEq('thin border floor is 8px', g.BORDER_THIN_MIN_PX, 8);
+assertEq('anchored thin floor is the 6px inward guard', g.BORDER_THIN_ANCHORED_MIN_PX, 6);
 assertEq('thin border needs 12 agreeing lines', g.BORDER_THIN_MIN_HITS, 12);
+assertEq('grey-versus-pink color gap is 40', g.BORDER_BAND_DISTINCT_RGB, 40);
 assert('color is not a grey floor', g.WHITE_BAND_MIN_GREY === undefined);
 
 const bandBox = { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 };
@@ -308,6 +310,77 @@ const thinReal = g.assessPrintBorderReliability(bandBox, 643, 900, {
   paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
 }, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
 assert('agreeing 11px bottom is accepted', thinReal.accepted === true, thinReal.reasons);
+
+const greyInk = { r: 152, g: 150, b: 148 };
+const pinkMat = { r: 214, g: 118, b: 162 };
+const silverInk = { r: 186, g: 188, b: 192 };
+const thinEdge = [6.1, 6.2, 6.2, 6.3, 6.3, 6.4, 6.4, 6.5, 6.5, 6.6, 6.6, 6.7];
+const greyOnPink = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 28, right: 30, top: 27, bottom: 29 },
+  samples: tightSamples,
+  paperBandMean: { left: 150, right: 151, top: 149, bottom: 150 },
+  paperBandStddev: { left: 4, right: 4, top: 5, bottom: 4 },
+  paperBandRgb: { left: greyInk, right: greyInk, top: greyInk, bottom: greyInk }
+}, {
+  alignmentCrop: true,
+  interiorGrey: { mean: 48, rgb: { r: 36, g: 42, b: 58 } },
+  backdrop: { grey: 150, r: pinkMat.r, g: pinkMat.g, b: pinkMat.b }
+});
+assert('grey border on a pink mat is accepted by color', greyOnPink.accepted === true, greyOnPink.reasons);
+
+const silverOnPink = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 26, right: 28, top: 24, bottom: 27 },
+  samples: tightSamples,
+  paperBandMean: { left: 186, right: 188, top: 184, bottom: 187 },
+  paperBandStddev: { left: 6, right: 5, top: 7, bottom: 6 },
+  paperBandRgb: { left: silverInk, right: silverInk, top: silverInk, bottom: silverInk }
+}, {
+  alignmentCrop: true,
+  interiorGrey: { mean: 184, rgb: { r: 70, g: 120, b: 200 } },
+  backdrop: { grey: 186, r: pinkMat.r, g: pinkMat.g, b: pinkMat.b }
+});
+assert('silver border whose grey matches the pink mat is accepted by color', silverOnPink.accepted === true, silverOnPink.reasons);
+
+const sameColor = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 30, right: 30, top: 30, bottom: 30 },
+  samples: tightSamples,
+  paperBandMean: { left: 140, right: 142, top: 138, bottom: 141 },
+  paperBandRgb: {
+    left: { r: 140, g: 138, b: 136 },
+    right: { r: 142, g: 140, b: 138 },
+    top: { r: 138, g: 136, b: 134 },
+    bottom: { r: 141, g: 139, b: 137 }
+  }
+}, {
+  alignmentCrop: true,
+  interiorGrey: { mean: 140, rgb: { r: 141, g: 139, b: 137 } },
+  backdrop: { grey: 180, r: 200, g: 170, b: 160 }
+});
+assert('band matching the interior in grey and color is still rejected', sameColor.accepted === false, sameColor.reasons);
+
+const anchoredThin = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 32, right: 30, top: 28, bottom: 6.4 },
+  samples: {
+    left: tightSamples.left,
+    right: tightSamples.right,
+    top: tightSamples.top,
+    bottom: thinEdge
+  },
+  paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
+}, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
+assert('one 6px edge on an otherwise full frame is accepted', anchoredThin.accepted === true, anchoredThin.reasons);
+
+const allThin = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 6.4, right: 6.5, top: 6.3, bottom: 6.4 },
+  samples: { left: thinEdge, right: thinEdge, top: thinEdge, bottom: thinEdge },
+  paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
+}, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
+assert('a sliver on every side stays rejected', allThin.accepted === false, allThin.reasons);
 
 const chromeBand = g.assessPrintBorderReliability(bandBox, 643, 900, {
   detected: true,

@@ -125,6 +125,55 @@ async function run() {
   assert('front centering sub-grade is still present',
     front.subGrades && typeof front.subGrades.centering === 'number', front.subGrades);
 
+  const cmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'judge-cmp-'));
+  const cmpData = path.join(cmpRoot, 'data');
+  const cmpUploads = path.join(cmpRoot, 'uploads');
+  fs.mkdirSync(cmpData, { recursive: true });
+  fs.mkdirSync(cmpUploads, { recursive: true });
+  fs.writeFileSync(path.join(cmpUploads, 'front.jpg'), jpeg.jpeg);
+  fs.writeFileSync(path.join(cmpUploads, 'back.jpg'), jpeg.jpeg);
+  const cmpFrontId = 'aaaaaaaa-1111-4000-8000-000000000001';
+  const cmpBackId = 'bbbbbbbb-2222-4000-8000-000000000002';
+  function cmpItem(id, side, file, at) {
+    return {
+      scanId: id,
+      id: id,
+      side: side,
+      createdAt: at,
+      imagePath: file,
+      gradingReport: {
+        cardDetection: {
+          quadSource: 'native',
+          rawQuad: JSON.parse(jpeg.quad),
+          photoWidth: jpeg.width,
+          photoHeight: jpeg.height
+        }
+      }
+    };
+  }
+  fs.writeFileSync(path.join(cmpData, 'database.json'), JSON.stringify({
+    inventory: [
+      cmpItem(cmpFrontId, 'front', 'front.jpg', '2026-10-03T00:00:00.000Z'),
+      cmpItem(cmpBackId, 'back', 'back.jpg', '2026-10-03T00:01:00.000Z')
+    ]
+  }));
+  const compared = await require('./compare_finders').compareFinders({
+    currentDir: path.join(__dirname, '..'),
+    candidateDir: path.join(__dirname, '..'),
+    dataDir: cmpData,
+    uploadsDir: cmpUploads,
+    n: 5
+  });
+  const cmpBack = compared.results.find(function (r) { return r.scanId === cmpBackId; });
+  const cmpFront = compared.results.find(function (r) { return r.scanId === cmpFrontId; });
+  assert('compare_finders marks the back row',
+    cmpBack && cmpBack.side === 'back' && compared.text.indexOf('  back  ') !== -1, compared.text);
+  assert('compare_finders leaves the back centering sub-grade blank',
+    cmpBack && cmpBack.current.cen == null && cmpBack.candidate.cen == null, cmpBack);
+  assert('compare_finders still scores a front',
+    cmpFront && cmpFront.side === 'front' && typeof cmpFront.candidate.cen === 'number', cmpFront);
+  fs.rmSync(cmpRoot, { recursive: true, force: true });
+
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'judge-back-'));
   process.env.JUDGE_DATA_DIR = path.join(tmp, 'data');
   process.env.JUDGE_UPLOADS_DIR = path.join(tmp, 'uploads');

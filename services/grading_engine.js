@@ -148,6 +148,19 @@ const BORDER_BAND_NONUNIFORM_MAX = 1;
  * stock on pink paper and for a colored border on either.
  */
 const BORDER_BAND_DISTINCT_GREY = 18;
+/**
+ * Euclidean RGB distance. A grey border and a pink mat can share a
+ * luminance (both near 150) and still be different colors. 40 is a clear
+ * hue gap and above channel noise on a flat ink band.
+ */
+const BORDER_BAND_DISTINCT_RGB = 40;
+/**
+ * Thinnest single edge still accepted when the other three edges are
+ * already full borders. The finder cannot report anything inside the 6px
+ * inward guard, so this is that guard: one skinny side of a real frame,
+ * not a sliver around a borderless card.
+ */
+const BORDER_THIN_ANCHORED_MIN_PX = 6;
 /** BGS 10 centering window (48/52 — near 50/50). */
 const BGS10_CENTERING_MIN = 48.0;
 const BGS10_CENTERING_MAX = 52.0;
@@ -1156,6 +1169,92 @@ function measureInteriorGrey(getPixel, cardWidth, cardHeight, widths) {
   };
 }
 
+function rgbAt(data, w, h, ch, x, y) {
+  if (x < 0 || y < 0 || x >= w || y >= h || !data) return null;
+  const i = (y * w + x) * ch;
+  return { r: data[i], g: ch >= 3 ? data[i + 1] : data[i], b: ch >= 3 ? data[i + 2] : data[i] };
+}
+
+/**
+ * Mean RGB of the same window bandMean uses: skip 4px of cut-edge slop
+ * and the last 2px of the inner step. `widths` are 643×900-equivalent px;
+ * `scale` lifts them onto this raster.
+ */
+function sampleEdgeBandRgb(rgb, widths, scale) {
+  const out = { left: null, right: null, top: null, bottom: null };
+  if (!rgb || !rgb.data || !widths) return out;
+  const s = scale > 0 ? scale : 1;
+  const w = rgb.width;
+  const h = rgb.height;
+  const ch = rgb.channels || 3;
+  const data = rgb.data;
+  ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+    const width643 = widths[edge];
+    if (width643 == null || !isFinite(width643)) return;
+    const widthHi = width643 * s;
+    const start = 4;
+    const end = Math.max(start + 4, Math.floor(widthHi) - 2);
+    if (end - start < 4) return;
+    const horizontal = edge === 'left' || edge === 'right';
+    const alongMax = horizontal ? h : w;
+    const a0 = Math.floor(alongMax * EDGE_SPAN_START);
+    const a1 = Math.floor(alongMax * EDGE_SPAN_END);
+    const step = Math.max(1, Math.floor((a1 - a0) / 24));
+    let sr = 0;
+    let sg = 0;
+    let sb = 0;
+    let n = 0;
+    for (let a = a0; a < a1; a += step) {
+      for (let d = start; d < end; d++) {
+        let x;
+        let y;
+        if (edge === 'left') { x = d; y = a; }
+        else if (edge === 'right') { x = w - 1 - d; y = a; }
+        else if (edge === 'top') { x = a; y = d; }
+        else { x = a; y = h - 1 - d; }
+        const p = rgbAt(data, w, h, ch, x, y);
+        if (!p) continue;
+        sr += p.r;
+        sg += p.g;
+        sb += p.b;
+        n += 1;
+      }
+    }
+    if (n) out[edge] = { r: sr / n, g: sg / n, b: sb / n };
+  });
+  return out;
+}
+
+/** Interior RGB on the same inset rectangle measureInteriorGrey uses. */
+function sampleInteriorRgb(rgb, widths, scale) {
+  if (!rgb || !rgb.data) return null;
+  const s = scale > 0 ? scale : 1;
+  const scaled = {};
+  ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+    const v = widths && widths[edge];
+    scaled[edge] = (v != null && isFinite(v)) ? v * s : null;
+  });
+  const rect = measureInteriorGrey(function () { return 128; }, rgb.width, rgb.height, scaled).rect;
+  const ch = rgb.channels || 3;
+  let sr = 0;
+  let sg = 0;
+  let sb = 0;
+  let n = 0;
+  const step = 4;
+  for (let y = rect.top; y <= rect.bottom; y += step) {
+    for (let x = rect.left; x <= rect.right; x += step) {
+      const p = rgbAt(rgb.data, rgb.width, rgb.height, ch, x, y);
+      if (!p) continue;
+      sr += p.r;
+      sg += p.g;
+      sb += p.b;
+      n += 1;
+    }
+  }
+  if (!n) return null;
+  return { r: sr / n, g: sg / n, b: sb / n };
+}
+
 /**
  * paperBandMean[edge] / interior.mean for each side. Diagnostic only.
  */
@@ -1231,20 +1330,51 @@ function finiteOrNull(value) {
   return typeof value === 'number' && isFinite(value) ? value : null;
 }
 
+function rgbOf(color) {
+  if (!color) return null;
+  const r = finiteOrNull(color.r);
+  const g = finiteOrNull(color.g);
+  const b = finiteOrNull(color.b);
+  if (r == null || g == null || b == null) return null;
+  return { r: r, g: g, b: b };
+}
+
+function rgbDistance(a, b) {
+  const left = rgbOf(a);
+  const right = rgbOf(b);
+  if (!left || !right) return null;
+  const dr = left.r - right.r;
+  const dg = left.g - right.g;
+  const db = left.b - right.b;
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+/**
+ * Distinct by luminance, or by color when the greys collide. A missing
+ * sample on both channels is not distinct.
+ */
+function bandIsDistinct(bandGrey, otherGrey, bandRgb, otherRgb) {
+  if (bandGrey != null && otherGrey != null &&
+      Math.abs(bandGrey - otherGrey) >= BORDER_BAND_DISTINCT_GREY) return true;
+  const dist = rgbDistance(bandRgb, otherRgb);
+  return dist != null && dist >= BORDER_BAND_DISTINCT_RGB;
+}
+
 /**
  * A width under the 12px floor is still a printed border when most lines
- * agree and the raw band is separated from both the table and the interior.
- * Missing backdrop or interior means the band is not confirmed, so the
- * floor stays.
+ * agree and the band is separated from both the table and the interior
+ * (by grey, or by color when the greys match). One edge of a frame whose
+ * other three edges are already full borders may be as thin as the inward
+ * guard. A card that is thin on every side stays rejected.
  */
-function thinBorderAllowed(hits, medianWidth, consensus, bandGrey, interiorMean, backdropGrey) {
+function thinBorderAllowed(hits, medianWidth, consensus, bandGrey, interiorMean, backdropGrey, bandRgb, interiorRgb, backdropRgb, anchored) {
   if (medianWidth == null || !isFinite(medianWidth)) return false;
-  if (medianWidth < BORDER_THIN_MIN_PX || medianWidth >= BORDER_MIN_MEDIAN_WIDTH_PX) return false;
+  const floor = anchored ? BORDER_THIN_ANCHORED_MIN_PX : BORDER_THIN_MIN_PX;
+  if (medianWidth < floor || medianWidth >= BORDER_MIN_MEDIAN_WIDTH_PX) return false;
   if (hits < BORDER_THIN_MIN_HITS) return false;
   if (consensus == null || consensus > BORDER_THIN_MAX_SPREAD_PX) return false;
-  if (bandGrey == null || interiorMean == null || backdropGrey == null) return false;
-  if (Math.abs(bandGrey - interiorMean) < BORDER_BAND_DISTINCT_GREY) return false;
-  if (Math.abs(bandGrey - backdropGrey) < BORDER_BAND_DISTINCT_GREY) return false;
+  if (!bandIsDistinct(bandGrey, interiorMean, bandRgb, interiorRgb)) return false;
+  if (!bandIsDistinct(bandGrey, backdropGrey, bandRgb, backdropRgb)) return false;
   return true;
 }
 
@@ -1313,9 +1443,22 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
   const paperBandStddev = measurement.paperBandStddev || {};
   const paperBaselines = measurement.paperBaselines || {};
   const interiorMean = finiteOrNull(opts.interiorGrey && opts.interiorGrey.mean);
+  const interiorRgb = rgbOf(opts.interiorGrey && opts.interiorGrey.rgb);
   const backdropGrey = finiteOrNull(opts.backdrop && opts.backdrop.grey);
+  const backdropRgb = rgbOf(opts.backdrop);
+  const paperBandRgb = measurement.paperBandRgb || {};
   const edges = ['left', 'right', 'top', 'bottom'];
   const nonUniform = [];
+  function edgeAnchored(edge) {
+    let solid = 0;
+    for (let k = 0; k < edges.length; k++) {
+      if (edges[k] === edge) continue;
+      const sibling = widths[edges[k]];
+      if (sibling != null && typeof sibling === 'number' && isFinite(sibling) &&
+          sibling >= BORDER_MIN_MEDIAN_WIDTH_PX) solid += 1;
+    }
+    return solid >= 3;
+  }
   for (let i = 0; i < edges.length; i++) {
     const edge = edges[i];
     const hits = (samples[edge] && samples[edge].length) || 0;
@@ -1331,7 +1474,11 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
     const bandGrey = finiteOrNull(paperBandMean[edge]) != null
       ? paperBandMean[edge]
       : finiteOrNull(paperBaselines[edge]);
-    const thinAgreed = thinBorderAllowed(hits, medianWidth, consensusRange[edge], bandGrey, interiorMean, backdropGrey);
+    const bandRgb = rgbOf(paperBandRgb[edge]);
+    const thinAgreed = thinBorderAllowed(
+      hits, medianWidth, consensusRange[edge], bandGrey, interiorMean, backdropGrey,
+      bandRgb, interiorRgb, backdropRgb, edgeAnchored(edge)
+    );
     if (medianWidth != null && typeof medianWidth === 'number' && isFinite(medianWidth) &&
         medianWidth < BORDER_MIN_MEDIAN_WIDTH_PX && !thinAgreed) {
       reasons.push(
@@ -1342,14 +1489,14 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
     const rawSd = finiteOrNull(paperBandStddev[edge]);
     if (rawSd != null && rawSd > BORDER_BAND_UNIFORM_MAX) nonUniform.push(edge);
     if (bandGrey != null && interiorMean != null &&
-        Math.abs(bandGrey - interiorMean) < BORDER_BAND_DISTINCT_GREY) {
+        !bandIsDistinct(bandGrey, interiorMean, bandRgb, interiorRgb)) {
       reasons.push(
         edge + ' border band grey ' + round2(bandGrey) +
         ' is not distinct from the interior (' + round2(interiorMean) + ')'
       );
     }
     if (bandGrey != null && backdropGrey != null &&
-        Math.abs(bandGrey - backdropGrey) < BORDER_BAND_DISTINCT_GREY) {
+        !bandIsDistinct(bandGrey, backdropGrey, bandRgb, backdropRgb)) {
       reasons.push(
         edge + ' border band grey ' + round2(bandGrey) +
         ' is not distinct from the background (' + round2(backdropGrey) + ')'
@@ -2136,6 +2283,9 @@ function sampleBackdrop(decoded, quad) {
   const data = decoded.data;
   const sides = [[quad.tl, quad.tr], [quad.tr, quad.br], [quad.br, quad.bl], [quad.bl, quad.tl]];
   let sum = 0;
+  let sr = 0;
+  let sg = 0;
+  let sb = 0;
   let n = 0;
   for (let s = 0; s < sides.length; s++) {
     const a = sides[s][0];
@@ -2151,15 +2301,19 @@ function sampleBackdrop(decoded, quad) {
       const y = Math.round(a[1] + dy * t + oy * 10);
       if (x < 0 || y < 0 || x >= w || y >= h) continue;
       const i = (y * w + x) * ch;
-      const grey = ch >= 3
-        ? 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
-        : data[i];
+      const r = data[i];
+      const g = ch >= 3 ? data[i + 1] : r;
+      const bch = ch >= 3 ? data[i + 2] : r;
+      const grey = ch >= 3 ? 0.299 * r + 0.587 * g + 0.114 * bch : r;
       sum += grey;
+      sr += r;
+      sg += g;
+      sb += bch;
       n += 1;
     }
   }
   if (!n) return null;
-  return { grey: sum / n, count: n };
+  return { grey: sum / n, r: sr / n, g: sg / n, b: sb / n, count: n };
 }
 
 function cutConfidence(cutSteps, scale) {
@@ -2647,6 +2801,17 @@ async function gradeBuffer(buffer, options) {
     const interiorGrey = measureInteriorGrey(
       getPaperPixel, centeringBox.width, centeringBox.height, centeringMeasurement.widths
     );
+    const warpScale = (cardDetection.centeringWarp && cardDetection.centeringWarp.scale) || 1;
+    const rgbSource = located.centeringWarped && located.centeringWarped.data &&
+      (located.centeringWarped.channels || 3) >= 3
+      ? located.centeringWarped
+      : null;
+    if (rgbSource) {
+      centeringMeasurement.paperBandRgb = sampleEdgeBandRgb(
+        rgbSource, centeringMeasurement.widths, warpScale
+      );
+      interiorGrey.rgb = sampleInteriorRgb(rgbSource, centeringMeasurement.widths, warpScale);
+    }
     const bandVsInterior = describeBandVsInterior(
       centeringMeasurement.paperBandMean, interiorGrey
     );
@@ -2897,8 +3062,10 @@ module.exports = {
   BORDER_SAMPLE_MIN_HITS,
   BORDER_MIN_MEDIAN_WIDTH_PX,
   BORDER_THIN_MIN_PX,
+  BORDER_THIN_ANCHORED_MIN_PX,
   BORDER_THIN_MIN_HITS,
   BORDER_THIN_MAX_SPREAD_PX,
   BORDER_BAND_UNIFORM_MAX,
-  BORDER_BAND_DISTINCT_GREY
+  BORDER_BAND_DISTINCT_GREY,
+  BORDER_BAND_DISTINCT_RGB
 };

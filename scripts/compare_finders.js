@@ -4,9 +4,11 @@
  * Re-grade the last N saved scans with two border finders side by side:
  *   --current   checkout whose services/grading_engine.js is live (the iMac server)
  *   --candidate checkout to compare (default: this script's own checkout)
- * Uses each scan's stored upload and saved quad. Read-only: no scanId or
- * scans root is passed, so neither engine writes debug artifacts, and
- * database.json / failed_scans.jsonl are only read.
+ * Uses each scan's stored upload and saved quad. A back is marked on the
+ * row and re-graded with side=back, so the centering sub-grade stays blank
+ * the way the server leaves it. Widths and ratios stay. Read-only: no
+ * scanId or scans root is passed, so neither engine writes debug artifacts,
+ * and database.json / failed_scans.jsonl are only read.
  *
  * Usage:
  *   node scripts/compare_finders.js --current /path/to/live/checkout \
@@ -80,6 +82,11 @@ async function gradeQuietly(engine, buffer, opts) {
   }
 }
 
+function scanSide(item) {
+  const report = (item && item.gradingReport) || {};
+  return item && item.side === 'back' || report.side === 'back' ? 'back' : 'front';
+}
+
 function summarizeRun(report) {
   const diag = (report && report.centeringDiagnostics) || {};
   const w = diag.printBorderWidths || {};
@@ -131,7 +138,10 @@ async function compareFinders(options) {
   const n = options.n || 10;
   const current = loadEngine(currentDir);
   const candidate = loadEngine(candidateDir);
-  const items = dumpScans.loadGradedItems(dataDir).slice(-n);
+  const labels = dumpScans.loadLabelMap(dataDir);
+  const items = dumpScans.loadGradedItems(dataDir).map(function (item) {
+    return dumpScans.applyLabelFields(item, labels);
+  }).slice(-n);
 
   const lines = [];
   const results = [];
@@ -149,13 +159,16 @@ async function compareFinders(options) {
     }
     const buffer = fs.readFileSync(file);
     const q = quadOptions(report);
-    const a = summarizeRun(await gradeQuietly(current, buffer, q.opts));
-    const b = summarizeRun(await gradeQuietly(candidate, buffer, q.opts));
-    lines.push('── ' + id.slice(0, 8).toUpperCase() + '  ' + (item.createdAt || '') + '  quad ' + q.label);
+    const side = scanSide(item);
+    const gradeOpts = Object.assign({}, q.opts);
+    if (side === 'back') gradeOpts.side = 'back';
+    const a = summarizeRun(await gradeQuietly(current, buffer, gradeOpts));
+    const b = summarizeRun(await gradeQuietly(candidate, buffer, gradeOpts));
+    lines.push('── ' + id.slice(0, 8).toUpperCase() + '  ' + (item.createdAt || '') + '  ' + side + '  quad ' + q.label);
     lines.push(pad('', 10) + pad('L', 7) + pad('R', 7) + pad('T', 7) + pad('B', 7) + pad('L/R', 12) + pad('T/B', 12) + pad('CEN', 5) + 'warp');
     lines.push(rowText('current', a));
     lines.push(rowText('candidate', b));
-    results.push({ scanId: id, current: a, candidate: b });
+    results.push({ scanId: id, side: side, current: a, candidate: b });
   }
 
   const graded = results.filter(function (r) { return !r.skipped; });
@@ -195,4 +208,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { compareFinders, loadEngine, quadOptions, gradeQuietly, summarizeRun };
+module.exports = { compareFinders, loadEngine, quadOptions, gradeQuietly, summarizeRun, scanSide };

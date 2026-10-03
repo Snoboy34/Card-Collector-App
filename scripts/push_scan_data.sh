@@ -97,6 +97,9 @@ fs.writeFileSync(path, JSON.stringify(doc, null, 2) + "\n");
 ' "$REPO/data/scan_repo.json"
 
 cd "$REPO"
+# The first push of a session failed with HTTP 400 once the pack passed
+# about 152 MB. A larger HTTP buffer lets that pack through.
+git config http.postBuffer 524288000
 git add -A
 if git diff --cached --quiet; then
   echo "Nothing new to push."

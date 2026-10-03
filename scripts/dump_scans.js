@@ -368,5 +368,5 @@ if (require.main === module) {
 
 module.exports = {
   formatScans, formatScanById, formatGraded, formatFailed,
-  loadGradedItems, loadFailedEntries, auditScans
+  loadGradedItems, loadFailedEntries, loadLabelMap, applyLabelFields, auditScans
 };
