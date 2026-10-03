@@ -86,6 +86,8 @@ async function run() {
     /runs identical/.test(step(ok, 'compare_finders').detail), step(ok, 'compare_finders'));
   assert('deck_report PASS, 2 of 2 kept', step(ok, 'deck_report').status === 'PASS' &&
     /candidate 2 of 2/.test(step(ok, 'deck_report').detail), step(ok, 'deck_report'));
+  assert('td_deck PASS for the two white cards that measure', step(ok, 'td_deck').status === 'PASS' &&
+    /2 of 6/.test(step(ok, 'td_deck').detail), step(ok, 'td_deck'));
 
   const broken = makeBrokenCandidate(root);
   const bad = await gate({ skipSuites: true, dataDir: d.dataDir, uploadsDir: d.uploadsDir, candidateDir: broken, currentDir: ROOT });
@@ -100,7 +102,82 @@ async function run() {
   fs.mkdirSync(empty, { recursive: true });
   const skip = await gate({ skipSuites: true, dataDir: empty });
   assert('no data → SKIP, gate still passes', skip.ok === true && step(skip, 'compare_finders').status === 'SKIP' &&
-    step(skip, 'deck_report').status === 'SKIP', skip.steps);
+    step(skip, 'deck_report').status === 'SKIP' && step(skip, 'td_deck').status === 'SKIP', skip.steps);
+
+  const tdRoot = path.join(root, 'td');
+  const tdData = path.join(tdRoot, 'data');
+  const tdUploads = path.join(tdRoot, 'uploads');
+  fs.mkdirSync(tdData, { recursive: true });
+  fs.mkdirSync(tdUploads, { recursive: true });
+  const tdCap = await capture(701);
+  fs.writeFileSync(path.join(tdUploads, 'td050000-0000-4000-8000-000000000001.jpg'), tdCap.jpeg);
+  fs.writeFileSync(path.join(tdUploads, 'td050000-0000-4000-8000-000000000002.jpg'), tdCap.jpeg);
+  const tdStore = deck.createStore(tdData);
+  const measured = {
+    centeringMetrics: { leftRightRatio: { left: 55, right: 45 }, topBottomRatio: { top: 52, bottom: 48 } },
+    subGrades: { centering: 9 }
+  };
+  const undetectable = { centeringMetrics: {}, subGrades: { centering: null }, incomplete: true, centeringUndetected: true };
+  function tdItem(scanId, report) {
+    return { scanId: scanId, createdAt: '2026-10-03T00:00:00Z', imagePath: 'uploads/' + scanId + '.jpg',
+      engine: { version: g.ENGINE_VERSION }, gradingReport: report };
+  }
+  tdStore.labelScan('td050000-0000-4000-8000-000000000001', { deckId: 'TD-05', side: 'front' });
+  tdStore.labelScan('td050000-0000-4000-8000-000000000002', { deckId: 'TD-05', side: 'back' });
+  fs.writeFileSync(path.join(tdData, 'database.json'), JSON.stringify({ inventory: [
+    tdItem('td050000-0000-4000-8000-000000000001', measured),
+    tdItem('td050000-0000-4000-8000-000000000002', measured)
+  ] }));
+  const tdBad = await gate({ skipSuites: true, dataDir: tdData, uploadsDir: tdUploads });
+  assert('td_deck FAIL when a borderless card measures', tdBad.ok === false && step(tdBad, 'td_deck').status === 'FAIL' &&
+    /TD-05 front expected undetectable/.test(step(tdBad, 'td_deck').failures.join(' ')) &&
+    /TD-05 back expected undetectable/.test(step(tdBad, 'td_deck').failures.join(' ')), step(tdBad, 'td_deck'));
+  fs.writeFileSync(path.join(tdData, 'database.json'), JSON.stringify({ inventory: [
+    tdItem('td050000-0000-4000-8000-000000000001', undetectable),
+    tdItem('td050000-0000-4000-8000-000000000002', undetectable)
+  ] }));
+  const tdOk = await gate({ skipSuites: true, dataDir: tdData, uploadsDir: tdUploads });
+  assert('td_deck PASS when TD-05 front and back stay undetectable', tdOk.ok === true && step(tdOk, 'td_deck').status === 'PASS', step(tdOk, 'td_deck'));
+
+  const wRoot = path.join(root, 'td02');
+  const wData = path.join(wRoot, 'data');
+  const wUploads = path.join(wRoot, 'uploads');
+  fs.mkdirSync(wData, { recursive: true });
+  fs.mkdirSync(wUploads, { recursive: true });
+  fs.writeFileSync(path.join(wUploads, 'td020000-0000-4000-8000-000000000001.jpg'), tdCap.jpeg);
+  const wStore = deck.createStore(wData);
+  wStore.labelScan('td020000-0000-4000-8000-000000000001', { deckId: 'TD-02', side: 'front' });
+  const withheld = {
+    centeringMetrics: {
+      leftRightRatio: { left: 55, right: 45 },
+      topBottomRatio: { top: 52, bottom: 48 },
+      borderVoteLowConfidenceEdges: ['left']
+    },
+    subGrades: { centering: null },
+    incomplete: true
+  };
+  const forced = {
+    centeringMetrics: {
+      leftRightRatio: { left: 55, right: 45 },
+      topBottomRatio: { top: 52, bottom: 48 },
+      borderVoteLowConfidenceEdges: ['left']
+    },
+    subGrades: { centering: 9 }
+  };
+  fs.writeFileSync(path.join(wData, 'database.json'), JSON.stringify({ inventory: [
+    tdItem('td020000-0000-4000-8000-000000000001', withheld)
+  ] }));
+  const wOk = await gate({ skipSuites: true, dataDir: wData, uploadsDir: wUploads });
+  assert('td_deck PASS when TD-02 front is withheld on a low-confidence edge', wOk.ok === true &&
+    step(wOk, 'td_deck').status === 'PASS', step(wOk, 'td_deck'));
+  fs.writeFileSync(path.join(wData, 'database.json'), JSON.stringify({ inventory: [
+    tdItem('td020000-0000-4000-8000-000000000001', forced)
+  ] }));
+  const wBad = await gate({ skipSuites: true, dataDir: wData, uploadsDir: wUploads });
+  assert('td_deck FAIL when a low-confidence TD-02 front still has a centering number', wBad.ok === false &&
+    step(wBad, 'td_deck').status === 'FAIL' &&
+    /TD-02 front expected measured or withheld, low-confidence edge/.test(step(wBad, 'td_deck').failures.join(' ')) &&
+    /CEN 9 on a low-confidence edge \(left\)/.test(step(wBad, 'td_deck').failures.join(' ')), step(wBad, 'td_deck'));
   const req = await gate({ skipSuites: true, dataDir: empty, requireData: true });
   assert('no data + --require-data → GATE FAIL', req.ok === false && step(req, 'compare_finders').status === 'FAIL', req.steps);
 

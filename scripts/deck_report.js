@@ -52,7 +52,10 @@ function resultFromReport(report) {
   const tb = m.topBottomRatio ? m.topBottomRatio.top : null;
   const measured = lr != null && tb != null;
   const reasons = (diag.borderReliability && diag.borderReliability.reasons) || [];
+  const voteLow = m.borderVoteLowConfidenceEdges || [];
+  const cen = r.subGrades ? r.subGrades.centering : null;
   let status = measured ? 'measured' : 'undetectable';
+  if (measured && voteLow.length && cen == null) status = 'withheld';
   let reason = measured ? null : (reasons[0] || r.incompleteReason || null);
   if (r.cardNotFound) { status = 'card not found'; reason = r.cardNotFoundReason || 'card not found'; }
   return {
@@ -62,7 +65,7 @@ function resultFromReport(report) {
     lr: lr,
     tb: tb,
     worstShare: measured ? 50 + Math.max(Math.abs(lr - 50), Math.abs(tb - 50)) : null,
-    cen: r.subGrades ? r.subGrades.centering : null,
+    cen: cen,
     corners: r.subGrades ? r.subGrades.corners : null,
     edges: r.subGrades ? r.subGrades.edges : null,
     surface: r.subGrades ? r.subGrades.surface : null,

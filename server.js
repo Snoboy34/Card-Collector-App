@@ -655,7 +655,11 @@ function localNetworkOnly(req, res, next) {
   return res.status(403).type('text/plain').send('Debug views are local-network only.');
 }
 
-const DEBUG_ARTIFACT_FILES = { 'oriented.jpg': 'image/jpeg', 'debug.json': 'application/json' };
+const DEBUG_ARTIFACT_FILES = {
+  'oriented.jpg': 'image/jpeg',
+  'overlay.jpg': 'image/jpeg',
+  'debug.json': 'application/json'
+};
 
 app.get('/scans/:scanId/:file', localNetworkOnly, (req, res) => {
   const scanId = grading.normalizeScanId(req.params.scanId);
@@ -796,6 +800,7 @@ app.get('/deck', localNetworkOnly, (req, res) => {
 <p><a href="/deck/report">Deck report</a> · <a href="/debug/recent?n=10">Recent scans dump</a></p>
 <style>
   .scan { border-bottom:1px solid #223; padding:8px 0; }
+  .scan img { max-width:320px; height:auto; display:block; margin:6px 0; background:#000; }
   .row { display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; margin:4px 0; }
   label.f { font-size:12px; color:#9fb3c8; display:flex; flex-direction:column; gap:2px; }
   label.q { font-size:13px; color:#e6edf3; display:flex; gap:4px; align-items:center; }
@@ -889,6 +894,12 @@ app.get('/deck', localNetworkOnly, (req, res) => {
     const l = deck.labels[s.scanId] || {};
     const wrap = el('div', { className: 'scan' });
     wrap.appendChild(el('div', {}, (s.time || '') + '  ' + s.scanId.slice(0, 8).toUpperCase() + '  ' + (s.summary || '')));
+    if (s.overlay) {
+      const img = el('img', { src: s.overlay, alt: 'Border overlay for ' + s.scanId.slice(0, 8) });
+      const link = el('a', { href: s.overlay, target: '_blank' }, 'Open overlay');
+      wrap.appendChild(img);
+      wrap.appendChild(link);
+    }
     const deckIn = input(l.deckId, 6); deckIn.placeholder = 'TD-01';
     const pre = el('input', { type: 'checkbox', checked: Boolean(l.preSubmission) });
     const intended = select(deck.graders, l.intendedGrader);
@@ -950,15 +961,21 @@ app.get('/deck', localNetworkOnly, (req, res) => {
 
 app.get('/api/deck/recent-scans', localNetworkOnly, (req, res) => {
   const n = Math.max(1, Math.min(100, Number(req.query.n) || 30));
+  function overlayFor(scanId) {
+    if (!scanId || !fs.existsSync(path.join(SCANS_DIR, scanId, 'overlay.jpg'))) return null;
+    return '/scans/' + scanId + '/overlay.jpg';
+  }
   const graded = dumpScans.loadGradedItems(DATA_DIR).map(function (item) {
+    const scanId = String(item.scanId || item.id);
     const r = deckReport.resultFromReport(item.gradingReport);
     return {
-      scanId: String(item.scanId || item.id), time: item.createdAt,
+      scanId: scanId, time: item.createdAt, overlay: overlayFor(scanId),
       summary: r.measured ? 'L/R ' + r.lr.toFixed(1) + ' T/B ' + r.tb.toFixed(1) + ' CEN ' + (r.cen == null ? '—' : r.cen) : r.status
     };
   });
   const failed = dumpScans.loadFailedEntries(DATA_DIR).map(function (e) {
-    return { scanId: String(e.scanId), time: e.timestamp, summary: 'card not found' };
+    const scanId = String(e.scanId);
+    return { scanId: scanId, time: e.timestamp, summary: 'card not found', overlay: overlayFor(scanId) };
   });
   const all = graded.concat(failed).sort(function (a, b) { return Date.parse(b.time) - Date.parse(a.time); }).slice(0, n);
   return res.json({ ok: true, scans: all });

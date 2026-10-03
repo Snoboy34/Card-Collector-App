@@ -120,6 +120,12 @@ says the back allows none.
 | 3 | 90/10 |
 | 2 | 90/10 |
 
+## Scan data and the TD deck
+
+The six cards photographed on 2026-10-03 are TD-01 through TD-06 in that order. Expected outcomes live in `fixtures/td_expectations.json` and are checked by the `td_deck` step of `npm run gate` once the private scan repo is checked out. Setup and the iMac push script are in `docs/scan-data.md`.
+
+Each grade also writes `scans/<scanId>/overlay.jpg`: the photo, the card quad, every sample line, the chosen border in cyan, rejected lines in magenta, misses in red, and low-confidence edges in orange. `/deck` shows that image on the recent-scan row. The push script includes it.
+
 ## After an engine change (release gate)
 
 On the iMac, with the candidate checked out in a worktree (see README):

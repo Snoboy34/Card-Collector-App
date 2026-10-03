@@ -34,6 +34,8 @@ npm run start:lan  # https://<en0-ip>:5000  (self-signed; required for phone cam
 npm run test:judge # formula regression (no image I/O)
 ```
 
+Scan uploads, saved grades, and debug overlays go to a private repo, not this one. After a session on the iMac run `bash scripts/push_scan_data.sh`. One-time setup and the gate command that checks TD-01..TD-06 are in `docs/scan-data.md`.
+
 `start:lan` reads the Mac's current Wi-Fi address with `ipconfig getifaddr en0`
 (never a hardcoded IP), mints a self-signed cert whose SAN covers that address,
 and serves HTTPS so Safari will grant `getUserMedia`. Open the printed
