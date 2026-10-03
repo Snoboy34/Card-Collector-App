@@ -13,9 +13,9 @@
       "id": "TD-02",
       "title": "Nick Lodolo Cincinnati Reds",
       "category": "white-modern",
-      "expect": "measured",
+      "expect": ["measured", "withheld"],
       "backExpect": "measured",
-      "notes": "White border. The front's left edge has a dark REDS nameplate inside the border. A minority vote withholds CEN and still counts as measured."
+      "notes": "White border. The front's left edge has a dark REDS nameplate inside the border. A confident vote may measure. A minority vote must come back withheld, low-confidence edge, with no centering number."
     },
     {
       "id": "TD-03",

@@ -138,6 +138,46 @@ async function run() {
   ] }));
   const tdOk = await gate({ skipSuites: true, dataDir: tdData, uploadsDir: tdUploads });
   assert('td_deck PASS when TD-05 front and back stay undetectable', tdOk.ok === true && step(tdOk, 'td_deck').status === 'PASS', step(tdOk, 'td_deck'));
+
+  const wRoot = path.join(root, 'td02');
+  const wData = path.join(wRoot, 'data');
+  const wUploads = path.join(wRoot, 'uploads');
+  fs.mkdirSync(wData, { recursive: true });
+  fs.mkdirSync(wUploads, { recursive: true });
+  fs.writeFileSync(path.join(wUploads, 'td020000-0000-4000-8000-000000000001.jpg'), tdCap.jpeg);
+  const wStore = deck.createStore(wData);
+  wStore.labelScan('td020000-0000-4000-8000-000000000001', { deckId: 'TD-02', side: 'front' });
+  const withheld = {
+    centeringMetrics: {
+      leftRightRatio: { left: 55, right: 45 },
+      topBottomRatio: { top: 52, bottom: 48 },
+      borderVoteLowConfidenceEdges: ['left']
+    },
+    subGrades: { centering: null },
+    incomplete: true
+  };
+  const forced = {
+    centeringMetrics: {
+      leftRightRatio: { left: 55, right: 45 },
+      topBottomRatio: { top: 52, bottom: 48 },
+      borderVoteLowConfidenceEdges: ['left']
+    },
+    subGrades: { centering: 9 }
+  };
+  fs.writeFileSync(path.join(wData, 'database.json'), JSON.stringify({ inventory: [
+    tdItem('td020000-0000-4000-8000-000000000001', withheld)
+  ] }));
+  const wOk = await gate({ skipSuites: true, dataDir: wData, uploadsDir: wUploads });
+  assert('td_deck PASS when TD-02 front is withheld on a low-confidence edge', wOk.ok === true &&
+    step(wOk, 'td_deck').status === 'PASS', step(wOk, 'td_deck'));
+  fs.writeFileSync(path.join(wData, 'database.json'), JSON.stringify({ inventory: [
+    tdItem('td020000-0000-4000-8000-000000000001', forced)
+  ] }));
+  const wBad = await gate({ skipSuites: true, dataDir: wData, uploadsDir: wUploads });
+  assert('td_deck FAIL when a low-confidence TD-02 front still has a centering number', wBad.ok === false &&
+    step(wBad, 'td_deck').status === 'FAIL' &&
+    /TD-02 front expected measured or withheld, low-confidence edge/.test(step(wBad, 'td_deck').failures.join(' ')) &&
+    /CEN 9 on a low-confidence edge \(left\)/.test(step(wBad, 'td_deck').failures.join(' ')), step(wBad, 'td_deck'));
   const req = await gate({ skipSuites: true, dataDir: empty, requireData: true });
   assert('no data + --require-data → GATE FAIL', req.ok === false && step(req, 'compare_finders').status === 'FAIL', req.steps);
 

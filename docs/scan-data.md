@@ -61,6 +61,6 @@ JUDGE_UPLOADS_DIR=/tmp/judge-scans/uploads \
 
 `npm run gate` then re-grades the saved uploads (`compare_finders`), scores the deck registry (`deck_report`), and checks TD-01 through TD-06 against `fixtures/td_expectations.json` (`td_deck`).
 
-Those six expectations come from the 2026-10-03 phone photos, in the order they were sent, plus the session notes (colored back must measure, thin front is off-center, borderless and the chrome front stay undetectable). If an ID is on the wrong card, fix the title on `/deck`. The expect column in the fixtures file is what `td_deck` checks.
+Those six expectations come from the 2026-10-03 phone photos, in the order they were sent, plus the session notes (colored back must measure, thin front is off-center, borderless and the chrome front stay undetectable). TD-02's front accepts either a measured centering number or `withheld, low-confidence edge`. A minority vote with a centering number fails that check. If an ID is on the wrong card, fix the title on `/deck`. The expect column in the fixtures file is what `td_deck` checks.
 
 With no scan checkout, `td_deck` prints SKIP and the gate still passes. `--require-data` fails when the six cards are missing.

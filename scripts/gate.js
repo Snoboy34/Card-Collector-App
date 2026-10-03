@@ -93,6 +93,43 @@ function loadTdExpectations() {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+function tdExpectList(expect) {
+  return Array.isArray(expect) ? expect : [expect];
+}
+
+function tdExpectLabel(expect) {
+  return tdExpectList(expect).map(function (one) {
+    return one === 'withheld' ? 'withheld, low-confidence edge' : one;
+  }).join(' or ');
+}
+
+/** What the stored front or back actually did, for the gate line. */
+function tdGot(result) {
+  const low = (result && result.borderVoteLowConfidenceEdges) || [];
+  if (low.length && result.cen != null) {
+    return 'CEN ' + result.cen + ' on a low-confidence edge (' + low.join(', ') + ')';
+  }
+  if (low.length && result.cen == null && result.measured) {
+    return 'withheld, low-confidence edge (' + low.join(', ') + ')';
+  }
+  return result ? result.status : 'missing';
+}
+
+/**
+ * A low-confidence border vote is never a centering number. `withheld`
+ * passes only in that state (widths kept, CEN null). Any other name uses
+ * the deck's judgeExpectation.
+ */
+function tdExpectPass(expect, result) {
+  const deck = require('../services/test_deck');
+  const low = (result.borderVoteLowConfidenceEdges || []).length > 0;
+  if (low && result.cen != null) return false;
+  return tdExpectList(expect).some(function (one) {
+    if (one === 'withheld') return low && result.cen == null && result.measured === true;
+    return deck.judgeExpectation(one, result) === true;
+  });
+}
+
 /**
  * TD-01..TD-06 outcomes from fixtures/td_expectations.json. Checks stored
  * results already loaded by deck_report (no second re-grade). A data dir
@@ -100,7 +137,6 @@ function loadTdExpectations() {
  * required to be the phone deck. --require-data fails a missing card.
  */
 function tdStep(o) {
-  const deck = require('../services/test_deck');
   const seed = loadTdExpectations();
   const rep = o._deckReport;
   const byId = {};
@@ -119,16 +155,16 @@ function tdStep(o) {
     }
     seen.push(card.id);
     if (front) {
-      const pass = deck.judgeExpectation(card.expect, front.result);
+      const pass = tdExpectPass(card.expect, front.result);
       if (!pass) {
-        failures.push(card.id + ' front expected ' + card.expect + ', got ' + front.result.status);
+        failures.push(card.id + ' front expected ' + tdExpectLabel(card.expect) + ', got ' + tdGot(front.result));
       }
     } else if (o.requireData) {
       failures.push(card.id + ' front not scanned');
     }
     if (back && card.backExpect) {
-      const pass = deck.judgeExpectation(card.backExpect, back.result);
-      if (!pass) failures.push(card.id + ' back expected ' + card.backExpect + ', got ' + back.result.status);
+      const pass = tdExpectPass(card.backExpect, back.result);
+      if (!pass) failures.push(card.id + ' back expected ' + tdExpectLabel(card.backExpect) + ', got ' + tdGot(back.result));
     } else if (!back && card.backExpect && o.requireData) {
       failures.push(card.id + ' back not scanned');
     }
