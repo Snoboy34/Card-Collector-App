@@ -226,7 +226,7 @@ async function buildDeckReport(opts) {
     if (latestBack) {
       row.back = {
         scanId: latestBack.scanId, result: latestBack.result, edgeMap: latestBack.edgeMap || null,
-        copyrightYear: latestBack.copyrightYear || null
+        copyrightYear: latestBack.copyrightYear || null, item: latestBack.item || null
       };
     }
     if (!latest) {
@@ -244,7 +244,7 @@ async function buildDeckReport(opts) {
       return { pass: pass, text: (pass == null ? '' : pass ? 'PASS' : 'FAIL') + (rulerNote ? '  ' + rulerNote : '') };
     }
     const l = describe(latest);
-    row.latest = { scanId: latest.scanId, result: latest.result, pass: l.pass, engine: latest.engine };
+    row.latest = { scanId: latest.scanId, result: latest.result, pass: l.pass, engine: latest.engine, item: latest.item || null };
     lines.push('  ' + localTime(latest.time) + '  ' + latest.scanId.slice(0, 8).toUpperCase() + '  ' + engineLabel(latest.engine) +
       '  family ' + (latest.familyId || '—') + '  (' + scans.length + ' scan' + (scans.length === 1 ? '' : 's') + ')' +
       '  background ' + (latest.background || 'unspecified'));
