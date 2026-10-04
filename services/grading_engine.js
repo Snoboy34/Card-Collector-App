@@ -75,7 +75,7 @@ const backScan = require('./back_scan');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.01-border-band';
+const ENGINE_VERSION = '2026.10.04-evidence-border';
 
 let sharp = null;
 try {
@@ -119,21 +119,23 @@ const PSA10_CENTERING_MAX = 60.0;
  * is a frame when it is uniform, distinct from the backdrop and from the
  * interior, and the lines agree. Brightness alone is not a color.
  *
- * Median widths under 12px (643×900-equivalent) are still cut-edge slivers
- * unless the lines agree tightly and the band passes that same check.
- * 1.15 mm is about 11px here and is a real off-center border.
+ * There is no pixel-width minimum and no one-thin-edge exception. A border
+ * is accepted when the lines agree and the band is distinct from the
+ * background and the interior. The straight-edge profile has to agree with
+ * that vote before a centering number is scored; a disagreement keeps the
+ * widths and withholds the number. Anything thinner than half a millimetre
+ * is still a cut-edge sliver. 1.15 mm is about 11px on the 643×900 warp
+ * and is a real border.
  */
 const BORDER_SAMPLE_SPREAD_MAX_PX = 12;
 /** Of the attempted lines, at least this many must form the consensus window. */
 const BORDER_SAMPLE_MIN_HITS = 5;
-/** Default floor. Thinner than this needs the thin-border exception. */
-const BORDER_MIN_MEDIAN_WIDTH_PX = 12;
-/** Thinnest median still accepted when the lines agree and the band is real. */
-const BORDER_THIN_MIN_PX = 8;
-/** Thin exception: most of the 15 voting lines, not a 5-hit accident. */
-const BORDER_THIN_MIN_HITS = 12;
-/** Thin exception: the agreeing lines stay inside this spread. */
-const BORDER_THIN_MAX_SPREAD_PX = 6;
+/**
+ * Thinnest median still accepted, in millimetres on the real card.
+ * Half a millimetre is under the 6px inward guard (~0.6 mm), so the finder
+ * cannot report a sliver and this floor only rejects one if it does.
+ */
+const BORDER_MIN_WIDTH_MM = 0.5;
 /**
  * Raw (un-normalized) stddev inside the border band. Chrome and full-bleed
  * art sit well above this; flat ink, including a nameplate on one edge, does
@@ -154,13 +156,6 @@ const BORDER_BAND_DISTINCT_GREY = 18;
  * hue gap and above channel noise on a flat ink band.
  */
 const BORDER_BAND_DISTINCT_RGB = 40;
-/**
- * Thinnest single edge still accepted when the other three edges are
- * already full borders. The finder cannot report anything inside the 6px
- * inward guard, so this is that guard: one skinny side of a real frame,
- * not a sliver around a borderless card.
- */
-const BORDER_THIN_ANCHORED_MIN_PX = 6;
 /** BGS 10 centering window (48/52 — near 50/50). */
 const BGS10_CENTERING_MIN = 48.0;
 const BGS10_CENTERING_MAX = 52.0;
@@ -822,9 +817,10 @@ function linearProfile(sample, along, halfWidth, alongMax, length) {
  *      survives; a logo or glare patch covering <50% of the span does not.
  *   2. Trigger from the border's own noise (4σ of the first pixels, 8–40),
  *      never from art deeper inside the card.
- *   3. 15 lines vote; the outermost group of hits that agree (≤3px gaps,
- *      ≥40% of lines) is the border. Lines outside it are listed as
- *      outliers instead of failing the whole edge.
+ *   3. 15 lines vote. A group is ≥40% of lines within 3px. The group that
+ *      agrees with the straight-edge profile wins; otherwise the outermost
+ *      group is kept and marked low-confidence. Lines outside the group are
+ *      outliers, not a failed edge.
  *   4. Nothing deeper than 12% of the card dimension counts as a border,
  *      and nothing within 6px of the cut does either.
  * Returns null width if no group qualifies — never a fake 50/50.
@@ -880,32 +876,108 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
     medianProfile[d] = sorted[Math.floor(sorted.length / 2)];
   }
   const profileHit = detectBorderStep(medianProfile, trigger, maxDepth, pr);
-  const profileWidth = profileHit ? profileHit.width : null;
+  let profileWidth = profileHit ? profileHit.width : null;
+  // The per-line trigger is 4σ of every pixel in the band, so one noisy
+  // line caps it at 40 and a real but quiet step (silver against a bright
+  // interior) is skipped. The median profile is already the straight edge;
+  // its own baseline noise is the trigger for that step.
+  const profileNoise = [];
+  for (let d = pr.minInward; d < pr.minInward + pr.baselinePx && d < medianProfile.length; d++) {
+    profileNoise.push(medianProfile[d]);
+  }
+  const profileSigma = stddev(profileNoise) || 0;
+  const smoothTrigger = Math.max(EDGE_TRIGGER_MIN, Math.min(trigger, EDGE_TRIGGER_SIGMA * profileSigma || EDGE_TRIGGER_MIN));
+  const smoothHit = smoothTrigger < trigger - 0.5
+    ? detectBorderStep(medianProfile, smoothTrigger, maxDepth, pr)
+    : null;
+  const smoothWidth = smoothHit ? smoothHit.width : null;
 
-  // 15 voting lines.
-  const lines = [];
-  const hits = [];
-  for (let k = 0; k < EDGE_LINE_COUNT; k++) {
-    const along = a0 + Math.round(k * (a1 - 1 - a0) / (EDGE_LINE_COUNT - 1));
-    const lineProfile = linearProfile(sample, along, pr.lineHalfWidth, alongMax, length);
-    const hit = detectBorderStep(lineProfile, trigger, maxDepth, pr);
-    const line = { at: along, pos: hit ? round2(hit.width) : null, threshold: round2(trigger), inGroup: false };
-    lines.push(line);
-    if (hit) hits.push({ width: hit.width, baseline: hit.baseline, line: line, along: along, profile: lineProfile });
+  function scanLines(lineTrigger) {
+    const lines = [];
+    const hits = [];
+    for (let k = 0; k < EDGE_LINE_COUNT; k++) {
+      const along = a0 + Math.round(k * (a1 - 1 - a0) / (EDGE_LINE_COUNT - 1));
+      const lineProfile = linearProfile(sample, along, pr.lineHalfWidth, alongMax, length);
+      const hit = detectBorderStep(lineProfile, lineTrigger, maxDepth, pr);
+      const line = { at: along, pos: hit ? round2(hit.width) : null, threshold: round2(lineTrigger), inGroup: false };
+      lines.push(line);
+      if (hit) hits.push({ width: hit.width, baseline: hit.baseline, line: line, along: along, profile: lineProfile });
+    }
+    return { lines: lines, hits: hits };
   }
 
-  const flags = [];
-  const sortedHits = hits.slice().sort(function (x, y) { return x.width - y.width; });
+  function collectGroups(hits) {
+    const sortedHits = hits.slice().sort(function (x, y) { return x.width - y.width; });
+    const groups = [];
+    let start = 0;
+    for (let i = 1; i <= sortedHits.length; i++) {
+      if (i === sortedHits.length || sortedHits[i].width - sortedHits[i - 1].width > pr.groupGap) {
+        if (i - start >= minGroup) groups.push(sortedHits.slice(start, i));
+        start = i;
+      }
+    }
+    return groups;
+  }
+
+  function groupMedian(group) {
+    return median(group.map(function (h) { return h.width; }));
+  }
+
+  // Prefer a group the straight-edge profile agrees with. The outermost
+  // cluster can be a highlight in front of the real frame.
+  function pickGroup(groups, target) {
+    if (!groups.length) return null;
+    if (target == null) return groups[0];
+    for (let i = 0; i < groups.length; i++) {
+      if (Math.abs(groupMedian(groups[i]) - target) <= pr.profileAgree) return groups[i];
+    }
+    return null;
+  }
+
   const minGroup = Math.ceil(EDGE_LINE_COUNT * EDGE_GROUP_MIN_FRAC);
-  let group = null;
-  let start = 0;
-  for (let i = 1; i <= sortedHits.length; i++) {
-    if (i === sortedHits.length || sortedHits[i].width - sortedHits[i - 1].width > pr.groupGap) {
-      if (i - start >= minGroup) { group = sortedHits.slice(start, i); break; }
-      start = i;
+
+  function profileWindow(a, b) {
+    const i0 = Math.max(0, Math.floor(a));
+    const i1 = Math.min(medianProfile.length, Math.ceil(b));
+    if (i1 - i0 < 2) return null;
+    let sum = 0;
+    for (let i = i0; i < i1; i++) sum += medianProfile[i];
+    return sum / (i1 - i0);
+  }
+
+  let scanned = scanLines(trigger);
+  let lines = scanned.lines;
+  let hits = scanned.hits;
+  let groups = collectGroups(hits);
+  let group = pickGroup(groups, profileWidth);
+  if (!group && groups.length && profileWidth == null) group = groups[0];
+  // A capped per-line trigger skips a quiet border and steps again inside
+  // the art. Re-vote at the median profile's own noise only when no line
+  // group exists yet, the new group sits on that quieter straight edge, and
+  // the band in front of it is a different grey from the strip the capped
+  // trigger crossed. A wiggle inside one hologram band does not qualify.
+  const triggerCapped = trigger >= EDGE_TRIGGER_MAX - 0.5;
+  if (!group && groups.length === 0 && triggerCapped && smoothWidth != null && profileWidth != null &&
+      profileWidth - smoothWidth > pr.profileAgree) {
+    const again = scanLines(smoothTrigger);
+    const agreed = pickGroup(collectGroups(again.hits), smoothWidth);
+    if (agreed) {
+      const band = profileWindow(pr.minInward, smoothWidth);
+      const between = profileWindow(smoothWidth, profileWidth);
+      if (band != null && between != null &&
+          Math.abs(band - between) >= BORDER_BAND_DISTINCT_GREY) {
+        lines = again.lines;
+        hits = again.hits;
+        group = agreed;
+        profileWidth = smoothWidth;
+      }
     }
   }
+  // A vote that exists but misses the profile stays, and is low-confidence.
+  // Dropping it would erase a border the lines did agree on.
+  if (!group && groups.length) group = groups[0];
 
+  const flags = [];
   const base = {
     lines: lines,
     attempted: EDGE_LINE_COUNT,
@@ -1360,22 +1432,9 @@ function bandIsDistinct(bandGrey, otherGrey, bandRgb, otherRgb) {
   return dist != null && dist >= BORDER_BAND_DISTINCT_RGB;
 }
 
-/**
- * A width under the 12px floor is still a printed border when most lines
- * agree and the band is separated from both the table and the interior
- * (by grey, or by color when the greys match). One edge of a frame whose
- * other three edges are already full borders may be as thin as the inward
- * guard. A card that is thin on every side stays rejected.
- */
-function thinBorderAllowed(hits, medianWidth, consensus, bandGrey, interiorMean, backdropGrey, bandRgb, interiorRgb, backdropRgb, anchored) {
-  if (medianWidth == null || !isFinite(medianWidth)) return false;
-  const floor = anchored ? BORDER_THIN_ANCHORED_MIN_PX : BORDER_THIN_MIN_PX;
-  if (medianWidth < floor || medianWidth >= BORDER_MIN_MEDIAN_WIDTH_PX) return false;
-  if (hits < BORDER_THIN_MIN_HITS) return false;
-  if (consensus == null || consensus > BORDER_THIN_MAX_SPREAD_PX) return false;
-  if (!bandIsDistinct(bandGrey, interiorMean, bandRgb, interiorRgb)) return false;
-  if (!bandIsDistinct(bandGrey, backdropGrey, bandRgb, backdropRgb)) return false;
-  return true;
+/** 643×900-equivalent pixels per millimetre. Widths are reported in that unit. */
+function borderPxPerMm() {
+  return 900 / CARD_HEIGHT_MM;
 }
 
 /**
@@ -1385,9 +1444,7 @@ function thinBorderAllowed(hits, medianWidth, consensus, bandGrey, interiorMean,
  *   - any edge has fewer than BORDER_SAMPLE_MIN_HITS successful lines
  *   - the tightest BORDER_SAMPLE_MIN_HITS-hit window on any edge exceeds
  *     BORDER_SAMPLE_SPREAD_MAX_PX (outliers are ignored)
- *   - any edge's median width is below BORDER_MIN_MEDIAN_WIDTH_PX, unless
- *     it is a thin real border (lines agree and the band is uniform and
- *     distinct from the backdrop and the interior)
+ *   - any edge's median width is below BORDER_MIN_WIDTH_MM
  *   - the raw border band is not uniform (more than one edge), or is not
  *     distinct from the backdrop or the interior, when those samples exist
  *   - measurePrintCentering already failed (detected === false)
@@ -1449,16 +1506,7 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
   const paperBandRgb = measurement.paperBandRgb || {};
   const edges = ['left', 'right', 'top', 'bottom'];
   const nonUniform = [];
-  function edgeAnchored(edge) {
-    let solid = 0;
-    for (let k = 0; k < edges.length; k++) {
-      if (edges[k] === edge) continue;
-      const sibling = widths[edges[k]];
-      if (sibling != null && typeof sibling === 'number' && isFinite(sibling) &&
-          sibling >= BORDER_MIN_MEDIAN_WIDTH_PX) solid += 1;
-    }
-    return solid >= 3;
-  }
+  const pxPerMm = borderPxPerMm();
   for (let i = 0; i < edges.length; i++) {
     const edge = edges[i];
     const hits = (samples[edge] && samples[edge].length) || 0;
@@ -1475,15 +1523,11 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
       ? paperBandMean[edge]
       : finiteOrNull(paperBaselines[edge]);
     const bandRgb = rgbOf(paperBandRgb[edge]);
-    const thinAgreed = thinBorderAllowed(
-      hits, medianWidth, consensusRange[edge], bandGrey, interiorMean, backdropGrey,
-      bandRgb, interiorRgb, backdropRgb, edgeAnchored(edge)
-    );
     if (medianWidth != null && typeof medianWidth === 'number' && isFinite(medianWidth) &&
-        medianWidth < BORDER_MIN_MEDIAN_WIDTH_PX && !thinAgreed) {
+        medianWidth < BORDER_MIN_WIDTH_MM * pxPerMm) {
       reasons.push(
-        edge + ' median width ' + round2(medianWidth) +
-        'px is below ' + BORDER_MIN_MEDIAN_WIDTH_PX + 'px'
+        edge + ' median width ' + round2(medianWidth / pxPerMm) +
+        'mm is below ' + BORDER_MIN_WIDTH_MM + 'mm'
       );
     }
     const rawSd = finiteOrNull(paperBandStddev[edge]);
@@ -1531,7 +1575,7 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
     accepted: reasons.length === 0,
     thresholdPx: BORDER_SAMPLE_SPREAD_MAX_PX,
     minHits: BORDER_SAMPLE_MIN_HITS,
-    minMedianWidthPx: BORDER_MIN_MEDIAN_WIDTH_PX,
+    minWidthMm: BORDER_MIN_WIDTH_MM,
     sampleRangePx: {
       left: round2(sampleRange.left),
       right: round2(sampleRange.right),
@@ -3060,11 +3104,7 @@ module.exports = {
   MAX_DECODE_DIM,
   BORDER_SAMPLE_SPREAD_MAX_PX,
   BORDER_SAMPLE_MIN_HITS,
-  BORDER_MIN_MEDIAN_WIDTH_PX,
-  BORDER_THIN_MIN_PX,
-  BORDER_THIN_ANCHORED_MIN_PX,
-  BORDER_THIN_MIN_HITS,
-  BORDER_THIN_MAX_SPREAD_PX,
+  BORDER_MIN_WIDTH_MM,
   BORDER_BAND_UNIFORM_MAX,
   BORDER_BAND_DISTINCT_GREY,
   BORDER_BAND_DISTINCT_RGB

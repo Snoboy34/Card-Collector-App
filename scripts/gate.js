@@ -131,12 +131,32 @@ function tdExpectPass(expect, result) {
 }
 
 /**
- * TD-01..TD-06 outcomes from fixtures/td_expectations.json. Checks stored
- * results already loaded by deck_report (no second re-grade). A data dir
- * that has none of these cards skips, so synthetic gate fixtures are not
+ * Re-grade one saved deck scan with the engine under test. The stored
+ * grade is not the result: a before/after only exists if this checkout
+ * measures the upload itself.
+ */
+async function tdRegrade(o, scan, side) {
+  const cmp = require('./compare_finders');
+  const { resultFromReport } = require('./deck_report');
+  if (!o._tdEngine) o._tdEngine = cmp.loadEngine(o.candidateDir);
+  const item = scan && scan.item;
+  if (!item || !item.imagePath) return null;
+  const file = path.join(o.uploadsDir, path.basename(item.imagePath));
+  if (!fs.existsSync(file)) return null;
+  const q = cmp.quadOptions(item.gradingReport || {});
+  const opts = Object.assign({}, q.opts);
+  if (side === 'back') opts.side = 'back';
+  const report = await cmp.gradeQuietly(o._tdEngine, fs.readFileSync(file), opts);
+  return resultFromReport(report);
+}
+
+/**
+ * TD-01..TD-06 outcomes from fixtures/td_expectations.json. Each saved
+ * front and back is re-graded with the candidate engine. A data dir that
+ * has none of these cards skips, so synthetic gate fixtures are not
  * required to be the phone deck. --require-data fails a missing card.
  */
-function tdStep(o) {
+async function tdStep(o) {
   const seed = loadTdExpectations();
   const rep = o._deckReport;
   const byId = {};
@@ -144,31 +164,36 @@ function tdStep(o) {
   const failures = [];
   const seen = [];
   const missing = [];
-  seed.cards.forEach(function (card) {
+  for (let i = 0; i < seed.cards.length; i++) {
+    const card = seed.cards[i];
     const row = byId[card.id];
     const front = row && row.latest;
     const back = row && row.back;
     if (!front && !back) {
       missing.push(card.id);
       if (o.requireData) failures.push(card.id + ' not scanned');
-      return;
+      continue;
     }
     seen.push(card.id);
     if (front) {
-      const pass = tdExpectPass(card.expect, front.result);
-      if (!pass) {
-        failures.push(card.id + ' front expected ' + tdExpectLabel(card.expect) + ', got ' + tdGot(front.result));
+      const result = await tdRegrade(o, front, 'front');
+      if (!result) failures.push(card.id + ' front could not be re-graded');
+      else if (!tdExpectPass(card.expect, result)) {
+        failures.push(card.id + ' front expected ' + tdExpectLabel(card.expect) + ', got ' + tdGot(result));
       }
     } else if (o.requireData) {
       failures.push(card.id + ' front not scanned');
     }
     if (back && card.backExpect) {
-      const pass = tdExpectPass(card.backExpect, back.result);
-      if (!pass) failures.push(card.id + ' back expected ' + tdExpectLabel(card.backExpect) + ', got ' + tdGot(back.result));
+      const result = await tdRegrade(o, back, 'back');
+      if (!result) failures.push(card.id + ' back could not be re-graded');
+      else if (!tdExpectPass(card.backExpect, result)) {
+        failures.push(card.id + ' back expected ' + tdExpectLabel(card.backExpect) + ', got ' + tdGot(result));
+      }
     } else if (!back && card.backExpect && o.requireData) {
       failures.push(card.id + ' back not scanned');
     }
-  });
+  }
   if (!seen.length) {
     const status = o.requireData ? 'FAIL' : 'SKIP';
     return {

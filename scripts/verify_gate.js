@@ -110,34 +110,46 @@ async function run() {
   fs.mkdirSync(tdData, { recursive: true });
   fs.mkdirSync(tdUploads, { recursive: true });
   const tdCap = await capture(701);
+  const tdBlank = await capture(702, { borderMm: { left: 0, right: 0, top: 0, bottom: 0 } });
   fs.writeFileSync(path.join(tdUploads, 'td050000-0000-4000-8000-000000000001.jpg'), tdCap.jpeg);
   fs.writeFileSync(path.join(tdUploads, 'td050000-0000-4000-8000-000000000002.jpg'), tdCap.jpeg);
   const tdStore = deck.createStore(tdData);
-  const measured = {
-    centeringMetrics: { leftRightRatio: { left: 55, right: 45 }, topBottomRatio: { top: 52, bottom: 48 } },
-    subGrades: { centering: 9 }
-  };
-  const undetectable = { centeringMetrics: {}, subGrades: { centering: null }, incomplete: true, centeringUndetected: true };
   function tdItem(scanId, report) {
     return { scanId: scanId, createdAt: '2026-10-03T00:00:00Z', imagePath: 'uploads/' + scanId + '.jpg',
       engine: { version: g.ENGINE_VERSION }, gradingReport: report };
   }
+  const gradedCap = await quietGrade(tdCap.jpeg, {
+    alignmentCrop: true, cardQuad: tdCap.cardQuad, quadImageWidth: tdCap.photoWidth, quadImageHeight: tdCap.photoHeight
+  });
+  // Stored grade says undetectable. td_deck re-grades the white frame and must ignore that.
+  const storedUndetectable = Object.assign({}, gradedCap, {
+    centeringMetrics: {}, subGrades: { centering: null }, incomplete: true, centeringUndetected: true
+  });
   tdStore.labelScan('td050000-0000-4000-8000-000000000001', { deckId: 'TD-05', side: 'front' });
   tdStore.labelScan('td050000-0000-4000-8000-000000000002', { deckId: 'TD-05', side: 'back' });
   fs.writeFileSync(path.join(tdData, 'database.json'), JSON.stringify({ inventory: [
-    tdItem('td050000-0000-4000-8000-000000000001', measured),
-    tdItem('td050000-0000-4000-8000-000000000002', measured)
+    tdItem('td050000-0000-4000-8000-000000000001', storedUndetectable),
+    tdItem('td050000-0000-4000-8000-000000000002', storedUndetectable)
   ] }));
   const tdBad = await gate({ skipSuites: true, dataDir: tdData, uploadsDir: tdUploads });
-  assert('td_deck FAIL when a borderless card measures', tdBad.ok === false && step(tdBad, 'td_deck').status === 'FAIL' &&
+  assert('td_deck FAIL when a re-grade measures a card that must stay undetectable', tdBad.ok === false && step(tdBad, 'td_deck').status === 'FAIL' &&
     /TD-05 front expected undetectable/.test(step(tdBad, 'td_deck').failures.join(' ')) &&
     /TD-05 back expected undetectable/.test(step(tdBad, 'td_deck').failures.join(' ')), step(tdBad, 'td_deck'));
+  fs.writeFileSync(path.join(tdUploads, 'td050000-0000-4000-8000-000000000001.jpg'), tdBlank.jpeg);
+  fs.writeFileSync(path.join(tdUploads, 'td050000-0000-4000-8000-000000000002.jpg'), tdBlank.jpeg);
+  const gradedBlank = await quietGrade(tdBlank.jpeg, {
+    alignmentCrop: true, cardQuad: tdBlank.cardQuad, quadImageWidth: tdBlank.photoWidth, quadImageHeight: tdBlank.photoHeight
+  });
+  const storedMeasured = Object.assign({}, gradedBlank, {
+    centeringMetrics: { leftRightRatio: { left: 55, right: 45 }, topBottomRatio: { top: 52, bottom: 48 } },
+    subGrades: { centering: 9 }, incomplete: false, centeringUndetected: false
+  });
   fs.writeFileSync(path.join(tdData, 'database.json'), JSON.stringify({ inventory: [
-    tdItem('td050000-0000-4000-8000-000000000001', undetectable),
-    tdItem('td050000-0000-4000-8000-000000000002', undetectable)
+    tdItem('td050000-0000-4000-8000-000000000001', storedMeasured),
+    tdItem('td050000-0000-4000-8000-000000000002', storedMeasured)
   ] }));
   const tdOk = await gate({ skipSuites: true, dataDir: tdData, uploadsDir: tdUploads });
-  assert('td_deck PASS when TD-05 front and back stay undetectable', tdOk.ok === true && step(tdOk, 'td_deck').status === 'PASS', step(tdOk, 'td_deck'));
+  assert('td_deck PASS when the re-grade of a borderless card stays undetectable', tdOk.ok === true && step(tdOk, 'td_deck').status === 'PASS', step(tdOk, 'td_deck'));
 
   const wRoot = path.join(root, 'td02');
   const wData = path.join(wRoot, 'data');
@@ -147,34 +159,40 @@ async function run() {
   fs.writeFileSync(path.join(wUploads, 'td020000-0000-4000-8000-000000000001.jpg'), tdCap.jpeg);
   const wStore = deck.createStore(wData);
   wStore.labelScan('td020000-0000-4000-8000-000000000001', { deckId: 'TD-02', side: 'front' });
-  const withheld = {
-    centeringMetrics: {
-      leftRightRatio: { left: 55, right: 45 },
-      topBottomRatio: { top: 52, bottom: 48 },
-      borderVoteLowConfidenceEdges: ['left']
-    },
-    subGrades: { centering: null },
-    incomplete: true
-  };
-  const forced = {
-    centeringMetrics: {
-      leftRightRatio: { left: 55, right: 45 },
-      topBottomRatio: { top: 52, bottom: 48 },
-      borderVoteLowConfidenceEdges: ['left']
-    },
-    subGrades: { centering: 9 }
-  };
+  // Stored grade is the opposite of the engine under test, so a pass/fail
+  // here is the re-grade and not the saved report.
   fs.writeFileSync(path.join(wData, 'database.json'), JSON.stringify({ inventory: [
-    tdItem('td020000-0000-4000-8000-000000000001', withheld)
+    tdItem('td020000-0000-4000-8000-000000000001', Object.assign({}, gradedCap, {
+      centeringMetrics: {
+        leftRightRatio: { left: 55, right: 45 },
+        topBottomRatio: { top: 52, bottom: 48 },
+        borderVoteLowConfidenceEdges: ['left']
+      },
+      subGrades: { centering: 9 }
+    }))
   ] }));
-  const wOk = await gate({ skipSuites: true, dataDir: wData, uploadsDir: wUploads });
-  assert('td_deck PASS when TD-02 front is withheld on a low-confidence edge', wOk.ok === true &&
+  function voteCandidate(name, cen) {
+    const dir = path.join(root, name);
+    fs.mkdirSync(path.join(dir, 'services'), { recursive: true });
+    const real = JSON.stringify(path.join(ROOT, 'services', 'grading_engine.js'));
+    fs.writeFileSync(path.join(dir, 'services', 'grading_engine.js'),
+      'const real = require(' + real + ');\n' +
+      'module.exports = Object.assign({}, real, { gradeBuffer: async function (b, o) {\n' +
+      '  const r = await real.gradeBuffer(b, o);\n' +
+      '  r.centeringMetrics = Object.assign({}, r.centeringMetrics, { borderVoteLowConfidenceEdges: ["left"] });\n' +
+      '  r.subGrades = Object.assign({}, r.subGrades, { centering: ' + cen + ' });\n' +
+      '  return r;\n} });\n');
+    return dir;
+  }
+  const wOk = await gate({
+    skipSuites: true, dataDir: wData, uploadsDir: wUploads, candidateDir: voteCandidate('withhold', 'null')
+  });
+  assert('td_deck PASS when the re-grade withholds TD-02 on a low-confidence edge', wOk.ok === true &&
     step(wOk, 'td_deck').status === 'PASS', step(wOk, 'td_deck'));
-  fs.writeFileSync(path.join(wData, 'database.json'), JSON.stringify({ inventory: [
-    tdItem('td020000-0000-4000-8000-000000000001', forced)
-  ] }));
-  const wBad = await gate({ skipSuites: true, dataDir: wData, uploadsDir: wUploads });
-  assert('td_deck FAIL when a low-confidence TD-02 front still has a centering number', wBad.ok === false &&
+  const wBad = await gate({
+    skipSuites: true, dataDir: wData, uploadsDir: wUploads, candidateDir: voteCandidate('forced', '9')
+  });
+  assert('td_deck FAIL when a low-confidence TD-02 re-grade still has a centering number', wBad.ok === false &&
     step(wBad, 'td_deck').status === 'FAIL' &&
     /TD-02 front expected measured or withheld, low-confidence edge/.test(step(wBad, 'td_deck').failures.join(' ')) &&
     /CEN 9 on a low-confidence edge \(left\)/.test(step(wBad, 'td_deck').failures.join(' ')), step(wBad, 'td_deck'));

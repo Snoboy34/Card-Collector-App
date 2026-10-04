@@ -266,10 +266,7 @@ assertHint('undetected hint', undetectedHint.hint, 'undetected');
 
 assertEq('spread threshold is 12px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 12);
 assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
-assertEq('min median width is 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
-assertEq('thin border floor is 8px', g.BORDER_THIN_MIN_PX, 8);
-assertEq('anchored thin floor is the 6px inward guard', g.BORDER_THIN_ANCHORED_MIN_PX, 6);
-assertEq('thin border needs 12 agreeing lines', g.BORDER_THIN_MIN_HITS, 12);
+assertEq('remaining width floor is half a millimetre', g.BORDER_MIN_WIDTH_MM, 0.5);
 assertEq('grey-versus-pink color gap is 40', g.BORDER_BAND_DISTINCT_RGB, 40);
 assert('color is not a grey floor', g.WHITE_BAND_MIN_GREY === undefined);
 
@@ -372,7 +369,7 @@ const anchoredThin = g.assessPrintBorderReliability(bandBox, 643, 900, {
   },
   paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
 }, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
-assert('one 6px edge on an otherwise full frame is accepted', anchoredThin.accepted === true, anchoredThin.reasons);
+assert('a 6px edge is accepted when the lines agree and the band is distinct', anchoredThin.accepted === true, anchoredThin.reasons);
 
 const allThin = g.assessPrintBorderReliability(bandBox, 643, 900, {
   detected: true,
@@ -380,7 +377,21 @@ const allThin = g.assessPrintBorderReliability(bandBox, 643, 900, {
   samples: { left: thinEdge, right: thinEdge, top: thinEdge, bottom: thinEdge },
   paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
 }, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
-assert('a sliver on every side stays rejected', allThin.accepted === false, allThin.reasons);
+assert('a thin frame on every side is accepted on the same evidence', allThin.accepted === true, allThin.reasons);
+
+const sliver = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 3.1, right: 3.0, top: 3.2, bottom: 2.9 },
+  samples: {
+    left: [3, 3.05, 3.1, 3.1, 3.15, 3.2],
+    right: [2.9, 2.95, 3, 3, 3.05, 3.1],
+    top: [3.1, 3.15, 3.2, 3.2, 3.25, 3.3],
+    bottom: [2.8, 2.85, 2.9, 2.9, 2.95, 3]
+  },
+  paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
+}, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
+assert('a sub-0.5mm sliver stays rejected', sliver.accepted === false, sliver.reasons);
+assert('sliver names the millimetre floor', sliver.reasons.join(' ').indexOf('0.5mm') !== -1);
 
 const chromeBand = g.assessPrintBorderReliability(bandBox, 643, 900, {
   detected: true,
@@ -437,8 +448,9 @@ const edgeTouch = g.assessPrintBorderReliability(
     }
   }
 );
-assert('box touching photo is not enough to reject when samples are tight', edgeTouch.accepted === false);
-assert('thin bottom width is rejected', edgeTouch.reasons.join(' ').indexOf('bottom median width') !== -1);
+assert('photo-edge contact still rejects a tight box', edgeTouch.accepted === false);
+assert('a 0.87mm bottom is above the millimetre floor', edgeTouch.reasons.join(' ').indexOf('0.5mm') === -1);
+assert('photo-edge contact names box.left', edgeTouch.reasons.join(' ').indexOf('box.left touches') !== -1);
 
 const highSpreadInset = g.assessPrintBorderReliability(
   { left: 70, right: 329, top: 80, bottom: 479, width: 260, height: 400 },
@@ -717,7 +729,7 @@ const liveNeonInsetAteBorder = g.assessPrintBorderReliability(
   { alignmentCrop: true }
 );
 assert('neon-crop inset-box (ate T/B white) rejected', liveNeonInsetAteBorder.accepted === false);
-assert('neon-crop inset-box names thin top', liveNeonInsetAteBorder.reasons.join(' ').indexOf('top median width') !== -1);
+assert('neon-crop inset-box names the millimetre floor', liveNeonInsetAteBorder.reasons.join(' ').indexOf('0.5mm') !== -1);
 
 // First live accepted white-border grade after scanning from the neon-crop
 // edges (643×900, box = full JPEG). Must stay accepted.

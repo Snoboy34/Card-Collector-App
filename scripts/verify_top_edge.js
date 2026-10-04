@@ -225,12 +225,16 @@ async function run() {
       return null;
     }
   });
-  const splitLow = (split.report.centeringMetrics && split.report.centeringMetrics.borderVoteLowConfidenceEdges) || [];
-  assert('split left edge is low-confidence', splitLow.indexOf('left') !== -1, {
-    low: splitLow, flags: split.flags, widths: split.widths, lines: (split.report.centeringDiagnostics || {}).sampleLines
-  });
-  assert('split vote withholds the centering score',
-    split.report.subGrades && split.report.subGrades.centering === null, split.report.subGrades);
+  // The straight-edge profile follows the longer run (42px, 9 of 15 lines).
+  // That majority agrees with the profile, so it is a measure. The 25px run
+  // is flagged as outside the group. A minority outermost cluster is what
+  // still withholds.
+  assert('split left edge follows the profile majority', near(split.widths.left, 42, 1.5), split.widths);
+  assert('split outliers stay flagged', split.flags.some(function (f) {
+    return f.indexOf('left:') === 0 && f.indexOf('outside the agreeing group') !== -1;
+  }), split.flags);
+  assert('split majority that agrees with the profile keeps the centering score',
+    split.report.subGrades && split.report.subGrades.centering != null, split.report.subGrades);
   assert('split vote still reports the measured widths',
     split.widths.left != null && split.widths.right != null, split.widths);
 
