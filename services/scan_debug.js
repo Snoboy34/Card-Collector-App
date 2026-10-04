@@ -55,6 +55,8 @@ function buildDebugJson(args) {
     sampleLines: measurement.sampleLines || null,
     leftRightRatio: measurement.leftRightRatio || null,
     topBottomRatio: measurement.topBottomRatio || null,
+    designReferenced: Boolean(measurement.designReferenced),
+    framePoints: measurement.framePoints || null,
     printCenteringDetected: Boolean(measurement.detected),
     borderReliability: args.borderReliability || null,
     lowConfidenceEdges: args.lowConfidenceEdges || [],
@@ -218,7 +220,9 @@ function buildOverlaySvg(args) {
     parts.push('<text x="10" y="' + y + '" font-family="sans-serif" font-size="' + font + '" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke">' + text + '</text>');
     y += font + 6;
   }
-  legend('quad white · chosen cyan · agree yellow · rejected magenta · miss red');
+  legend(measurement.designReferenced
+    ? 'design-referenced L/R · yellow ends · T/B blank'
+    : 'quad white · chosen cyan · agree yellow · rejected magenta · miss red');
   Object.keys(lowEdges).forEach(function (edge) {
     legend('LOW ' + lowEdges[edge].join('+') + ' ' + edge);
   });

@@ -75,7 +75,7 @@ const backScan = require('./back_scan');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.04-evidence-border';
+const ENGINE_VERSION = '2026.10.04-frame';
 
 let sharp = null;
 try {
@@ -1048,6 +1048,443 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
 }
 
 /**
+ * One continuous frame, measured on the photo along the quad normals.
+ * A gap that returns to the same ink is part of the frame (the white line
+ * between Rivers' two blue bands). A station that is only a logo, stamp,
+ * or nameplate is outside the agreeing cluster and is not the width.
+ * A curve that is not level still measures, from its outermost points,
+ * and is marked low-confidence.
+ */
+const FRAME_STATIONS = 8;
+const FRAME_SPAN0 = 0.14;
+const FRAME_SPAN1 = 0.86;
+
+function frameHypot(a, b) {
+  const dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+function frameHue(p) {
+  const m = Math.max(p[0], p[1], p[2], 1);
+  return [p[0] / m, p[1] / m, p[2] / m];
+}
+function frameHueDist(a, b) {
+  const A = frameHue(a), B = frameHue(b);
+  return Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]);
+}
+function frameLum(p) { return 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]; }
+function frameSameInk(a, b) {
+  if (!a || !b) return false;
+  if (frameHypot(a, b) < 36) return true;
+  return frameHueDist(a, b) < 0.16 && Math.abs(frameLum(a) - frameLum(b)) < 45;
+}
+function frameMed(arr) {
+  if (!arr.length) return null;
+  const s = arr.slice().sort(function (a, b) { return a - b; });
+  return s[Math.floor(s.length / 2)];
+}
+function frameMedColor(cols) {
+  return [
+    frameMed(cols.map(function (c) { return c[0]; })),
+    frameMed(cols.map(function (c) { return c[1]; })),
+    frameMed(cols.map(function (c) { return c[2]; }))
+  ];
+}
+function frameSampler(photo, quad) {
+  const ch = photo.channels || 3;
+  const cx = (quad.tl[0] + quad.tr[0] + quad.br[0] + quad.bl[0]) / 4;
+  const cy = (quad.tl[1] + quad.tr[1] + quad.br[1] + quad.bl[1]) / 4;
+  const sides = {
+    top: [quad.tl, quad.tr],
+    right: [quad.tr, quad.br],
+    bottom: [quad.br, quad.bl],
+    left: [quad.bl, quad.tl]
+  };
+  return function (edge, frac) {
+    const seg = sides[edge];
+    const a = seg[0], b = seg[1];
+    const px = a[0] + (b[0] - a[0]) * frac;
+    const py = a[1] + (b[1] - a[1]) * frac;
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy) || 1;
+    let nx = -dy / len, ny = dx / len;
+    if ((cx - px) * nx + (cy - py) * ny < 0) { nx = -nx; ny = -ny; }
+    const alongMm = (edge === 'left' || edge === 'right') ? CARD_HEIGHT_MM : CARD_WIDTH_MM;
+    const ppm = len / alongMm;
+    return function (mm) {
+      const d = mm * ppm;
+      const x = Math.round(px + nx * d);
+      const y = Math.round(py + ny * d);
+      if (x < 0 || y < 0 || x >= photo.width || y >= photo.height) return null;
+      const i = (y * photo.width + x) * ch;
+      return [photo.data[i], photo.data[i + 1] || photo.data[i], photo.data[i + 2] || photo.data[i]];
+    };
+  };
+}
+function frameStationRef(sample) {
+  const cols = [];
+  for (let mm = 0.35; mm <= 1.05; mm += 0.1) {
+    const p = sample(mm);
+    if (p) cols.push(p);
+  }
+  if (cols.length < 3) return null;
+  return frameMedColor(cols);
+}
+function frameRunEnd(sample, ink, fromMm) {
+  let saw = false;
+  let last = null;
+  let broke = 0;
+  const limit = fromMm + 10.5;
+  for (let mm = fromMm; mm <= limit; mm += 0.1) {
+    const p = sample(Math.round(mm * 10) / 10);
+    if (!p) break;
+    if (frameSameInk(p, ink)) { saw = true; last = mm; broke = 0; }
+    else if (saw) {
+      broke += 0.1;
+      if (broke >= 0.3) return last;
+    }
+  }
+  // Ink that is still running past a real border is the design, not a frame.
+  if (!saw || last == null || last > fromMm + 9.3) return null;
+  return last;
+}
+function frameChainEnd(sample, ink) {
+  let cut = 0;
+  let hole = 0;
+  for (let mm = 0.1; mm <= 4.2; mm += 0.1) {
+    const p = sample(-Math.round(mm * 10) / 10);
+    if (p && frameSameInk(p, ink)) { cut = -mm; hole = 0; }
+    else {
+      hole += 0.1;
+      if (hole > 0.45) break;
+    }
+  }
+  const d1 = frameRunEnd(sample, ink, cut);
+  if (d1 == null) return null;
+  let back = null;
+  for (let mm = d1 + 0.25; mm <= d1 + 1.5; mm += 0.1) {
+    const p = sample(Math.round(mm * 10) / 10);
+    if (p && frameSameInk(p, ink)) { back = mm; break; }
+  }
+  let end = d1;
+  if (back != null) {
+    const d2 = frameRunEnd(sample, ink, back);
+    const band = d2 == null ? 99 : (d2 - back);
+    let retAt = null;
+    if (d2 != null && band >= 0.25 && band <= 2.3) {
+      for (let mm = d2 + 0.25; mm <= d2 + 1.5; mm += 0.1) {
+        const p = sample(Math.round(mm * 10) / 10);
+        if (p && frameSameInk(p, ink)) { retAt = mm; break; }
+      }
+      // One return is the inner line of a double frame (Rivers' two blues).
+      // Another return after that, on a short first band, is a texture.
+      if (retAt != null) {
+        let again = false;
+        const d3 = frameRunEnd(sample, ink, retAt);
+        if (d3 != null && (d3 - retAt) <= 2.3) {
+          for (let n = d3 + 0.25; n <= d3 + 1.5; n += 0.1) {
+            const q = sample(Math.round(n * 10) / 10);
+            if (q && frameSameInk(q, ink)) { again = true; break; }
+          }
+        }
+        if (again && (d1 - cut) <= 2.4) return null;
+      } else end = d2;
+    }
+  }
+  const width = Math.round((end - cut) * 10) / 10;
+  if (width < 0.4 || width > 9) return null;
+  return width;
+}
+
+/**
+ * A full-bleed card has no frame. A horizontal design element whose left
+ * and right ends are straight — the name on TD-05 — is an L/R reference
+ * only. Top/bottom stays empty and centering is not scored.
+ */
+function measureDesignReferencedLR(warp) {
+  if (!warp || !warp.data) return null;
+  const w = warp.width, h = warp.height, ch = warp.channels || 3;
+  const ppm = h / CARD_HEIGHT_MM;
+  function at(x, y) {
+    x = Math.round(x); y = Math.round(y);
+    if (x < 0 || y < 0 || x >= w || y >= h) return 0;
+    const i = (y * w + x) * ch;
+    const r = warp.data[i], g = ch >= 3 ? warp.data[i + 1] : r, b = ch >= 3 ? warp.data[i + 2] : r;
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+  }
+  const step = Math.max(1, Math.round(ppm * 0.22));
+  const rows = [];
+  const xInset = Math.round(ppm * 2.5);
+  for (let y = Math.round(h * 0.06); y < h * 0.94; y += step) {
+    const lums = [];
+    for (let x = xInset; x < w - xInset; x += 2) lums.push(at(x, y));
+    if (lums.length < 8) continue;
+    const med = frameMed(lums);
+    const bucketMm = 0.45;
+    const bucketPx = Math.max(2, ppm * bucketMm);
+    const buckets = [];
+    for (let i = 0; i < lums.length; i++) {
+      if (lums[i] < med + 32 || lums[i] < 60) continue;
+      const x = xInset + i * 2;
+      const b = Math.floor(x / bucketPx);
+      buckets[b] = (buckets[b] || 0) + 1;
+    }
+    // The name is the contiguous run of buckets, not an isolated highlight.
+    let bestRun = null;
+    let runStart = null;
+    let runGlyphs = 0;
+    let gap = 0;
+    function consider(end) {
+      if (runStart == null) return;
+      const glyphs = runGlyphs;
+      if (!bestRun || glyphs > bestRun.glyphs) bestRun = { start: runStart, end: end, glyphs: glyphs };
+      runStart = null;
+      runGlyphs = 0;
+      gap = 0;
+    }
+    const maxB = Math.floor((w - xInset) / bucketPx);
+    for (let b = 0; b <= maxB; b++) {
+      if (buckets[b]) {
+        if (runStart == null) runStart = b;
+        runGlyphs += buckets[b];
+        gap = 0;
+      } else if (runStart != null) {
+        gap++;
+        // Letter spacing is a short hole. A wide quiet margin ends the name.
+        if (gap > 6) consider(b - gap + 1);
+      }
+    }
+    consider(maxB + 1);
+    if (!bestRun || bestRun.glyphs < 6) continue;
+    const left = bestRun.start * bucketPx;
+    const right = bestRun.end * bucketPx;
+    const glyphs = bestRun.glyphs;
+    const spanMm = (right - left) / ppm;
+    const insetL = left / ppm;
+    const insetR = (w - 1 - right) / ppm;
+    const density = glyphs / Math.max(1, (right - left) / 2);
+    if (spanMm < 14 || spanMm > CARD_WIDTH_MM * 0.86) continue;
+    if (insetL < 8 || insetR < 8) continue;
+    if (insetL > 32 || insetR > 32) continue;
+    if (density < 0.08 || density > 0.62) continue;
+    rows.push({ y: y, left: left, right: right, insetL: insetL, insetR: insetR });
+  }
+  let best = null;
+  let i = 0;
+  while (i < rows.length) {
+    const group = [rows[i]];
+    let j = i;
+    while (j + 1 < rows.length && rows[j + 1].y - rows[j].y <= ppm * 2.6) {
+      const trial = group.concat([rows[j + 1]]);
+      const lRange = (Math.max.apply(null, trial.map(function (r) { return r.left; })) -
+        Math.min.apply(null, trial.map(function (r) { return r.left; }))) / ppm;
+      const rRange = (Math.max.apply(null, trial.map(function (r) { return r.right; })) -
+        Math.min.apply(null, trial.map(function (r) { return r.right; }))) / ppm;
+      if (lRange > 4 || rRange > 4) break;
+      group.push(rows[j + 1]);
+      j++;
+    }
+    const spanMm = (group[group.length - 1].y - group[0].y) / ppm;
+    if (spanMm >= 1.2 && spanMm <= 8 && group.length >= 2) {
+      const lMm = frameMed(group.map(function (r) { return r.insetL; }));
+      const rMm = frameMed(group.map(function (r) { return r.insetR; }));
+      const score = group.length * Math.min(spanMm, 5);
+      if (!best || score > best.score) {
+        best = { score: score, lMm: lMm, rMm: rMm, rows: group, spanMm: spanMm };
+      }
+    }
+    i = Math.max(j, i) + 1;
+  }
+  return best;
+}
+
+function measureContinuousFrame(photo, quad, warpRgb) {
+  const edges = ['left', 'right', 'top', 'bottom'];
+  function emptyEdgeMap() {
+    return { left: null, right: null, top: null, bottom: null };
+  }
+  const base = {
+    samples: { left: [], right: [], top: [], bottom: [] },
+    sampleLines: { left: [], right: [], top: [], bottom: [] },
+    bandStddev: emptyEdgeMap(),
+    baselines: emptyEdgeMap(),
+    paperBandMean: emptyEdgeMap(),
+    paperBandStddev: emptyEdgeMap(),
+    paperBaselines: emptyEdgeMap(),
+    edgeFlags: [],
+    edgeProfiles: emptyEdgeMap(),
+    voteLowConfidenceEdges: [],
+    frameMeasured: true
+  };
+  if (!photo || !photo.data || !quad || !quad.tl) return null;
+  const sampler = frameSampler(photo, quad);
+  const stations = [];
+  edges.forEach(function (edge) {
+    for (let i = 0; i < FRAME_STATIONS; i++) {
+      const frac = FRAME_SPAN0 + (FRAME_SPAN1 - FRAME_SPAN0) * (i / (FRAME_STATIONS - 1));
+      const sample = sampler(edge, frac);
+      stations.push({ edge: edge, frac: frac, sample: sample, ref: frameStationRef(sample), mm: null, kept: false });
+    }
+  });
+  const refs = stations.filter(function (s) { return s.ref; });
+  let bestInk = null;
+  let bestGroup = [];
+  refs.forEach(function (s) {
+    const group = refs.filter(function (o) { return frameSameInk(s.ref, o.ref); });
+    const sides = {};
+    group.forEach(function (o) { sides[o.edge] = 1; });
+    const sideCount = Object.keys(sides).length;
+    if (sideCount >= 3 && group.length >= 8 &&
+        (sideCount > (bestGroup.sideCount || 0) ||
+          (sideCount === (bestGroup.sideCount || 0) && group.length > bestGroup.length))) {
+      bestGroup = group;
+      bestGroup.sideCount = sideCount;
+      bestInk = frameMedColor(group.map(function (o) { return o.ref; }));
+    }
+  });
+
+  function pxOf(edge, mm) {
+    if (mm == null) return null;
+    const k = (edge === 'left' || edge === 'right') ? (643 / CARD_WIDTH_MM) : (900 / CARD_HEIGHT_MM);
+    return mm * k;
+  }
+  function alongOf(edge, frac) {
+    const span = (edge === 'left' || edge === 'right') ? 900 : 643;
+    return Math.round(frac * (span - 1));
+  }
+
+  if (!bestInk) {
+    return designOrEmpty(base, warpRgb, pxOf, alongOf);
+  }
+  const byEdge = {};
+  edges.forEach(function (edge) { byEdge[edge] = []; });
+  stations.forEach(function (s) {
+    s.mm = frameChainEnd(s.sample, bestInk);
+    byEdge[s.edge].push(s);
+  });
+
+  const widthsMm = {};
+  const lowEdges = [];
+  let frameOk = true;
+  edges.forEach(function (edge) {
+    const mine = byEdge[edge];
+    const vals = mine.map(function (s) { return s.mm; }).filter(function (n) { return n != null; })
+      .sort(function (a, b) { return a - b; });
+    const groups = [];
+    for (let i = 0; i < vals.length; i++) {
+      const g = [];
+      for (let j = i; j < vals.length && vals[j] - vals[i] <= 0.7; j++) g.push(vals[j]);
+      if (g.length >= 2) groups.push(g);
+    }
+    groups.sort(function (a, b) { return b.length - a.length || a[0] - b[0]; });
+    const hits = vals.filter(function (n) { return n >= 0.4; });
+    let width = null;
+    let low = false;
+    let keptVals = [];
+    if (groups.length && groups[0].length >= 2 && groups[0].length >= Math.max(2, hits.length * 0.34)) {
+      keptVals = groups[0];
+      width = frameMed(keptVals);
+      low = keptVals.length < 4 || (keptVals[keptVals.length - 1] - keptVals[0]) > 0.9;
+    } else if (hits.length >= 4) {
+      const sorted = hits.slice().sort(function (a, b) { return a - b; });
+      const range = sorted[sorted.length - 1] - sorted[0];
+      if (range > 1.2) {
+        keptVals = sorted.slice(0, 2);
+        width = frameMed(keptVals);
+        low = true;
+      }
+    }
+    if (width == null) frameOk = false;
+    widthsMm[edge] = width;
+    if (low) lowEdges.push(edge);
+    const lo = keptVals.length ? keptVals[0] - 0.05 : null;
+    const hi = keptVals.length ? keptVals[keptVals.length - 1] + 0.05 : null;
+    mine.forEach(function (s) {
+      const kept = s.mm != null && lo != null && s.mm >= lo && s.mm <= hi;
+      s.kept = kept;
+      base.sampleLines[edge].push({
+        at: alongOf(edge, s.frac),
+        pos: s.mm == null ? null : round2(pxOf(edge, s.mm)),
+        inGroup: kept,
+        threshold: null
+      });
+      if (kept) base.samples[edge].push(pxOf(edge, s.mm));
+    });
+    base.samples[edge].sort(function (a, b) { return a - b; });
+  });
+  base.voteLowConfidenceEdges = lowEdges;
+  base.framePoints = stations.map(function (s) {
+    return { edge: s.edge, frac: round2(s.frac), mm: s.mm, kept: s.kept };
+  });
+  if (!frameOk) {
+    edges.forEach(function (edge) {
+      base.sampleLines[edge] = [];
+      base.samples[edge] = [];
+    });
+    base.voteLowConfidenceEdges = [];
+    base.framePoints = null;
+    return designOrEmpty(base, warpRgb, pxOf, alongOf);
+  }
+
+  const pxW = {
+    left: pxOf('left', widthsMm.left),
+    right: pxOf('right', widthsMm.right),
+    top: pxOf('top', widthsMm.top),
+    bottom: pxOf('bottom', widthsMm.bottom)
+  };
+  const totalH = pxW.left + pxW.right;
+  const totalV = pxW.top + pxW.bottom;
+  lowEdges.forEach(function (edge) {
+    base.edgeFlags.push(edge + ': frame is not parallel to the card edge — low confidence');
+  });
+  return Object.assign(base, {
+    leftRightRatio: { left: (pxW.left / totalH) * 100, right: (pxW.right / totalH) * 100 },
+    topBottomRatio: { top: (pxW.top / totalV) * 100, bottom: (pxW.bottom / totalV) * 100 },
+    detected: true,
+    designReferenced: false,
+    widths: pxW,
+    widthsMm: {
+      left: round2(widthsMm.left),
+      right: round2(widthsMm.right),
+      top: round2(widthsMm.top),
+      bottom: round2(widthsMm.bottom)
+    }
+  });
+}
+
+function designOrEmpty(base, warpRgb, pxOf, alongOf) {
+  const design = measureDesignReferencedLR(warpRgb);
+  if (!design) {
+    return Object.assign(base, {
+      leftRightRatio: null,
+      topBottomRatio: null,
+      detected: false,
+      designReferenced: false,
+      widths: { left: null, right: null, top: null, bottom: null },
+      frameMeasured: false
+    });
+  }
+  const leftPx = pxOf('left', design.lMm);
+  const rightPx = pxOf('right', design.rMm);
+  const total = leftPx + rightPx;
+  design.rows.forEach(function (row) {
+    const fracY = row.y / (warpRgb.height - 1);
+    base.sampleLines.left.push({ at: alongOf('left', fracY), pos: round2(pxOf('left', row.insetL)), inGroup: true, threshold: null });
+    base.sampleLines.right.push({ at: alongOf('right', fracY), pos: round2(pxOf('right', row.insetR)), inGroup: true, threshold: null });
+  });
+  base.samples.left = design.rows.map(function (r) { return pxOf('left', r.insetL); });
+  base.samples.right = design.rows.map(function (r) { return pxOf('right', r.insetR); });
+  return Object.assign(base, {
+    leftRightRatio: { left: (leftPx / total) * 100, right: (rightPx / total) * 100 },
+    topBottomRatio: null,
+    detected: false,
+    designReferenced: true,
+    frameMeasured: false,
+    widths: { left: leftPx, right: rightPx, top: null, bottom: null },
+    widthsMm: { left: round2(design.lMm), right: round2(design.rMm), top: null, bottom: null }
+  });
+}
+
+/**
  * Pixel-perfect print-border centering. Converts the four inward scans into
  * L/R and T/B percentages that sum to 100 per axis — the exact input shape
  * `evaluateMultiPhaseCondition` inherited from CenteringResult.
@@ -1060,6 +1497,10 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
  * @returns {{ leftRightRatio: {left:number, right:number}|null, topBottomRatio: {top:number, bottom:number}|null, detected: boolean, widths: object, samples: object }}
  */
 function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel, options) {
+  if (options && options.photo && options.quad) {
+    const framed = measureContinuousFrame(options.photo, options.quad, options.warpRgb || null);
+    if (framed) return framed;
+  }
   const scale = options && options.scale > 0 ? options.scale : 1;
   const leftScan = findBorderWidth(getPixel, 'left', cardWidth, cardHeight, getPaperPixel, scale);
   const rightScan = findBorderWidth(getPixel, 'right', cardWidth, cardHeight, getPaperPixel, scale);
@@ -1507,13 +1948,17 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
   const edges = ['left', 'right', 'top', 'bottom'];
   const nonUniform = [];
   const pxPerMm = borderPxPerMm();
+  // The continuous-frame finder already kept the agreeing stations and
+  // dropped one-side intrusions. The old 5-hit / 12px window is the vote
+  // this finder replaced.
+  const frameMeasured = Boolean(measurement.frameMeasured) && measurement.detected;
   for (let i = 0; i < edges.length; i++) {
     const edge = edges[i];
     const hits = (samples[edge] && samples[edge].length) || 0;
     const medianWidth = widths[edge];
-    if (hits < BORDER_SAMPLE_MIN_HITS) {
+    if (!frameMeasured && hits < BORDER_SAMPLE_MIN_HITS) {
       reasons.push(edge + ' has ' + hits + ' sample hits (need ' + BORDER_SAMPLE_MIN_HITS + ')');
-    } else if (consensusRange[edge] != null && consensusRange[edge] > BORDER_SAMPLE_SPREAD_MAX_PX) {
+    } else if (!frameMeasured && consensusRange[edge] != null && consensusRange[edge] > BORDER_SAMPLE_SPREAD_MAX_PX) {
       reasons.push(
         edge + ' consensus range ' + round2(consensusRange[edge]) +
         'px exceeds ' + BORDER_SAMPLE_SPREAD_MAX_PX + 'px'
@@ -1530,21 +1975,25 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
         'mm is below ' + BORDER_MIN_WIDTH_MM + 'mm'
       );
     }
-    const rawSd = finiteOrNull(paperBandStddev[edge]);
-    if (rawSd != null && rawSd > BORDER_BAND_UNIFORM_MAX) nonUniform.push(edge);
-    if (bandGrey != null && interiorMean != null &&
-        !bandIsDistinct(bandGrey, interiorMean, bandRgb, interiorRgb)) {
-      reasons.push(
-        edge + ' border band grey ' + round2(bandGrey) +
-        ' is not distinct from the interior (' + round2(interiorMean) + ')'
-      );
-    }
-    if (bandGrey != null && backdropGrey != null &&
-        !bandIsDistinct(bandGrey, backdropGrey, bandRgb, backdropRgb)) {
-      reasons.push(
-        edge + ' border band grey ' + round2(bandGrey) +
-        ' is not distinct from the background (' + round2(backdropGrey) + ')'
-      );
+    // The continuous frame already required one ink that ends. The band
+    // grey below is the diagnostic ratio, not a second vote on that ink.
+    if (!frameMeasured) {
+      const rawSd = finiteOrNull(paperBandStddev[edge]);
+      if (rawSd != null && rawSd > BORDER_BAND_UNIFORM_MAX) nonUniform.push(edge);
+      if (bandGrey != null && interiorMean != null &&
+          !bandIsDistinct(bandGrey, interiorMean, bandRgb, interiorRgb)) {
+        reasons.push(
+          edge + ' border band grey ' + round2(bandGrey) +
+          ' is not distinct from the interior (' + round2(interiorMean) + ')'
+        );
+      }
+      if (bandGrey != null && backdropGrey != null &&
+          !bandIsDistinct(bandGrey, backdropGrey, bandRgb, backdropRgb)) {
+        reasons.push(
+          edge + ' border band grey ' + round2(bandGrey) +
+          ' is not distinct from the background (' + round2(backdropGrey) + ')'
+        );
+      }
     }
   }
   if (nonUniform.length > BORDER_BAND_NONUNIFORM_MAX) {
@@ -1676,6 +2125,7 @@ function describeBorderSource(args) {
 
   const reliability = assessPrintBorderReliability(box, imageWidth, imageHeight, {
     detected: detected,
+    frameMeasured: args.frameMeasured,
     widths: widths,
     samples: samples,
     bandStddev: args.bandStddev,
@@ -1791,7 +2241,8 @@ function buildCenteringDiagnostics(width, height, box, centeringMeasurement, ext
     sampleLines: centeringMeasurement.sampleLines || null,
     edgeFlags: centeringMeasurement.edgeFlags || [],
     edgeProfiles: centeringMeasurement.edgeProfiles || null,
-    detected: centeringMeasurement.detected
+    detected: centeringMeasurement.detected,
+    frameMeasured: centeringMeasurement.frameMeasured
   });
 }
 
@@ -2619,9 +3070,14 @@ async function locateCard(buffer, options) {
  * 643×900-equivalent px (same unit as every other detector and threshold);
  * ratios are unit-free; borderWidthsMm uses the known card size.
  */
-async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, getPaper643, box643) {
+async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, getPaper643, box643, photoMeasure) {
+  const frameOpts = photoMeasure && photoMeasure.photo && photoMeasure.quad
+    ? { photo: photoMeasure.photo, quad: photoMeasure.quad, warpRgb: centeringWarped }
+    : null;
   let measurement;
-  if (!warpInfo || warpInfo.height === box643.height) {
+  if (frameOpts) {
+    measurement = measurePrintCentering(getPixel643, box643.width, box643.height, getPaper643, frameOpts);
+  } else if (!warpInfo || warpInfo.height === box643.height) {
     measurement = measurePrintCentering(getPixel643, box643.width, box643.height, getPaper643);
   } else {
     const scale = warpInfo.height / box643.height;
@@ -2839,7 +3295,8 @@ async function gradeBuffer(buffer, options) {
     };
 
     const centeringMeasurement = await measureCenteringOnWarp(
-      located.centeringWarped, cardDetection.centeringWarp, getPixel, getPaperPixel, centeringBox
+      located.centeringWarped, cardDetection.centeringWarp, getPixel, getPaperPixel, centeringBox,
+      { photo: located.decoded, quad: located.quad }
     );
     const lowConfidenceEdges = applyCutConfidence(centeringMeasurement, cardDetection);
     const interiorGrey = measureInteriorGrey(
@@ -2855,6 +3312,19 @@ async function gradeBuffer(buffer, options) {
         rgbSource, centeringMeasurement.widths, warpScale
       );
       interiorGrey.rgb = sampleInteriorRgb(rgbSource, centeringMeasurement.widths, warpScale);
+      // The frame finder measures geometry. The band grey is only the
+      // diagnostic ratio (white frame brighter than the interior).
+      if (centeringMeasurement.frameMeasured && centeringMeasurement.detected) {
+        const bandRgb = centeringMeasurement.paperBandRgb || {};
+        if (!centeringMeasurement.paperBandMean) {
+          centeringMeasurement.paperBandMean = { left: null, right: null, top: null, bottom: null };
+        }
+        ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+          const p = bandRgb[edge];
+          if (!p || centeringMeasurement.paperBandMean[edge] != null) return;
+          centeringMeasurement.paperBandMean[edge] = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+        });
+      }
     }
     const bandVsInterior = describeBandVsInterior(
       centeringMeasurement.paperBandMean, interiorGrey
@@ -2906,9 +3376,14 @@ async function gradeBuffer(buffer, options) {
     if (!centeringMeasurement.detected || !borderReliability.accepted) {
       const surfacePhase = scoreSurfacePhase(surface);
       const edgeScore = scoreEdgesPhase(edgesWhiteningCount);
-      const incompleteReason = !centeringMeasurement.detected
-        ? 'centering undetectable — no printed border found'
-        : 'centering undetectable — print-border samples do not agree on a printed frame';
+      const designLR = centeringMeasurement.designReferenced && centeringMeasurement.leftRightRatio
+        ? centeringMeasurement.leftRightRatio
+        : null;
+      const incompleteReason = designLR
+        ? 'centering design-referenced — left/right only, no printed frame'
+        : (!centeringMeasurement.detected
+          ? 'centering undetectable — no printed border found'
+          : 'centering undetectable — print-border samples do not agree on a printed frame');
       const report = {
         centering: null,
         corners: null,
@@ -2936,9 +3411,10 @@ async function gradeBuffer(buffer, options) {
         incompleteReason: incompleteReason,
         printCenteringDetected: false,
         centeringMetrics: {
-          leftRightRatio: null,
+          leftRightRatio: designLR,
           topBottomRatio: null,
           detected: false,
+          designReferenced: Boolean(designLR),
           borderWidthsMm: centeringMeasurement.widthsMm,
           centeringWarp: centeringMeasurement.centeringWarp,
           lowConfidenceEdges: lowConfidenceEdges

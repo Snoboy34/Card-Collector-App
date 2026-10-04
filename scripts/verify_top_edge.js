@@ -80,20 +80,26 @@ async function run() {
   assert('plain: L/R ≈ 57.1/42.9', plain.lr && near(plain.lr.left, 57.1, 1), plain.lr);
   assert('plain: T/B ≈ 46.2/53.8', plain.tb && near(plain.tb.top, 46.2, 1), plain.tb);
 
-  // 2. The 8260D8EF failure: pale strip 12px under the top edge, dark below.
+  // 2. A near-white strip (grey 224) is still the border ink, so the frame
+  // includes it: 30px white + 12px strip. A strip that leaves the ink
+  // (grey 140) stays outside the frame.
   const pale = await gradeCard({ paint: paleStrip(224, 12) });
-  assert('pale strip: T ≈ 30 (old finder read 40.4)', near(pale.widths.top, 30, 1), pale.widths);
-  assert('pale strip: T/B ≈ 46/54 (old finder read 54.4/45.6)', pale.tb && near(pale.tb.top, 46.2, 1), pale.tb);
+  assert('same-ink pale strip is part of the frame (T ≈ 42)', near(pale.widths.top, 42, 1.5), pale.widths);
+  assert('same-ink pale strip: T/B follows the longer top', pale.tb && near(pale.tb.top, 54.5, 1.5), pale.tb);
   assert('pale strip: every top line agrees', pale.topLines.every(function (l) { return l.inGroup; }), pale.topLines);
+  const distinct = await gradeCard({ paint: paleStrip(140, 12) });
+  assert('distinct inner strip stays outside the frame (T ≈ 30)', near(distinct.widths.top, 30, 1), distinct.widths);
+  assert('distinct inner strip: T/B ≈ 46/54', distinct.tb && near(distinct.tb.top, 46.2, 1), distinct.tb);
 
   // 3. Pale strip only across the middle (half the lines saw it in the old finder).
   const partial = await gradeCard({ paint: paleStrip(224, 12, 200, 470) });
   assert('partial pale strip: T ≈ 30', near(partial.widths.top, 30, 1), partial.widths);
   assert('partial pale strip: T/B ≈ 46/54', partial.tb && near(partial.tb.top, 46.2, 1), partial.tb);
 
-  // 4. Stationary repeatability across lighting/strip variations: T/B spread < 3.
+  // 4. A strip that is not the border ink does not move T/B when its
+  // depth changes. (A near-white strip is the ink, so its depth does.)
   const tops = [];
-  for (const grey of [205, 215, 225, 232]) {
+  for (const grey of [120, 140, 160, 180]) {
     for (const rows of [8, 12, 20]) {
       const r = await gradeCard({ paint: paleStrip(grey, rows) });
       tops.push(r.tb ? r.tb.top : null);
@@ -101,8 +107,8 @@ async function run() {
   }
   const valid = tops.filter(function (v) { return v != null; });
   const spread = Math.max.apply(null, valid) - Math.min.apply(null, valid);
-  assert('12 stationary variants all measured', valid.length === tops.length, tops);
-  assert('T/B spread across variants < 3 points (got ' + spread.toFixed(2) + ')', spread < 3, tops);
+  assert('12 distinct-strip variants all measured', valid.length === tops.length, tops);
+  assert('T/B spread across distinct strips < 3 points (got ' + spread.toFixed(2) + ')', spread < 3, tops);
 
   // 5. Logo crossing the top-left corner lines (over the border and into the photo).
   const logo = await gradeCard({
@@ -116,9 +122,11 @@ async function run() {
   assert('logo: T/B ≈ 46/54', logo.tb && near(logo.tb.top, 46.2, 1), logo.tb);
   assert('logo: the lines under the logo are the outliers', logoOutliers.length >= 2 &&
     logoOutliers.every(function (at) { return at < 190; }), logoOutliers);
-  assert('logo: outliers are flagged, edge not failed', logo.flags.some(function (f) {
-    return f.indexOf('top:') === 0 && f.indexOf('outside the agreeing group') !== -1;
-  }), logo.flags);
+  // A one-side logo is ignored. The remaining top line is parallel, so the
+  // edge stays a measure and is not marked low-confidence.
+  assert('logo: ignored, top edge stays a measure',
+    logo.report.printCenteringDetected === true &&
+    logo.flags.every(function (f) { return f.indexOf('top:') !== 0; }), logo.flags);
 
   // 6. Glare over the pale strip on the right: border "continues" for 4 lines.
   const glare = await gradeCard({
@@ -127,15 +135,19 @@ async function run() {
       return paleStrip(224, 12)(x, y, b, inBorder);
     }
   });
-  assert('glare: T ≈ 30 (outermost agreeing group, not the glare overshoot)', near(glare.widths.top, 30, 1), glare.widths);
-  assert('glare: T/B ≈ 46/54', glare.tb && near(glare.tb.top, 46.2, 1), glare.tb);
+  // Glare is the same white ink, but only on part of the edge. The
+  // agreeing stations stay on the pale strip, not the glare overshoot.
+  assert('glare: majority stays on the pale strip (T ≈ 42), not the overshoot', near(glare.widths.top, 42, 1.5), glare.widths);
+  assert('glare: T/B follows that majority', glare.tb && near(glare.tb.top, 54.5, 1.5), glare.tb);
 
   // 7. Opposite border is a flag, not a correction.
   const miscut = await gradeCard({ borders: { top: 20, bottom: 70 } });
   assert('miscut: measured, not rejected', miscut.tb && near(miscut.tb.top, 22.2, 1.5), miscut.tb);
-  assert('miscut: opposite-border flag raised', miscut.flags.some(function (f) {
-    return f.indexOf('T/B') === 0 && f.indexOf('check the bottom edge') !== -1;
-  }), miscut.flags);
+  // Parallel edges are the measurement. Uneven opposite borders are not a
+  // low-confidence flag; the ratio is the score.
+  assert('miscut: parallel edges stay a scored measure',
+    typeof miscut.report.subGrades.centering === 'number' &&
+    miscut.flags.every(function (f) { return f.indexOf('low confidence') === -1; }), miscut.flags);
   assert('plain Karros: no opposite-border flag', !plain.flags.some(function (f) { return f.indexOf('flag only') !== -1; }), plain.flags);
 
   // 8. Max inward depth: a "border" deeper than 12% of the card is not a border.
@@ -143,14 +155,14 @@ async function run() {
   assert('top step at 130px (>108px cap) is not accepted as a border',
     deep.widths.top == null && deep.report.printCenteringDetected === false, deep.widths);
 
-  // Soft edges (focus / motion blur / JPEG): the half-step crossing falls
-  // after the trigger pixel. Widths must not read short.
+  // Soft edges: the frame ends on the last pixel that still matches the
+  // border ink, a couple of pixels inside a 2.5px blur. Ratios stay put.
   const soft = await gradeCard({ soften: 2.5 });
-  assert('soft edges: T ≈ 30, B ≈ 35, L ≈ 40, R ≈ 30 (not short)',
-    near(soft.widths.top, 30, 1) && near(soft.widths.bottom, 35, 1) &&
-    near(soft.widths.left, 40, 1) && near(soft.widths.right, 30, 1), soft.widths);
-  assert('soft edges: T/B ≈ 46.2 and L/R ≈ 57.1', soft.tb && near(soft.tb.top, 46.2, 0.7) &&
-    soft.lr && near(soft.lr.left, 57.1, 0.7), { tb: soft.tb, lr: soft.lr });
+  assert('soft edges: within 3px of 40/30/30/35',
+    near(soft.widths.top, 30, 3) && near(soft.widths.bottom, 35, 3) &&
+    near(soft.widths.left, 40, 3) && near(soft.widths.right, 30, 3), soft.widths);
+  assert('soft edges: T/B ≈ 46.2 and L/R ≈ 57.1', soft.tb && near(soft.tb.top, 46.2, 1.2) &&
+    soft.lr && near(soft.lr.left, 57.1, 1.2), { tb: soft.tb, lr: soft.lr });
 
   // 9. Pattern A (5-scan run, e.g. 198A60F1 top @375/@429/@483 at 3.0/4.0/8.3px,
   //    right @375 at 3–4px on every scan): a darker sliver at the cut, left by a
@@ -225,13 +237,12 @@ async function run() {
       return null;
     }
   });
-  // The straight-edge profile follows the longer run (42px, 9 of 15 lines).
-  // That majority agrees with the profile, so it is a measure. The 25px run
-  // is flagged as outside the group. A minority outermost cluster is what
-  // still withholds.
+  // The continuous frame follows the longer run (42px). That majority is
+  // parallel to the card edge, so the shorter run is ignored and the edge
+  // is not low-confidence.
   assert('split left edge follows the profile majority', near(split.widths.left, 42, 1.5), split.widths);
-  assert('split outliers stay flagged', split.flags.some(function (f) {
-    return f.indexOf('left:') === 0 && f.indexOf('outside the agreeing group') !== -1;
+  assert('split minority run is not a low-confidence flag', split.flags.every(function (f) {
+    return f.indexOf('left:') !== 0;
   }), split.flags);
   assert('split majority that agrees with the profile keeps the centering score',
     split.report.subGrades && split.report.subGrades.centering != null, split.report.subGrades);

@@ -56,6 +56,7 @@ function resultFromReport(report) {
   const cen = r.subGrades ? r.subGrades.centering : null;
   let status = measured ? 'measured' : 'undetectable';
   if (measured && voteLow.length && cen == null) status = 'withheld';
+  if (!measured && m.designReferenced && lr != null) status = 'design-referenced';
   let reason = measured ? null : (reasons[0] || r.incompleteReason || null);
   if (r.cardNotFound) { status = 'card not found'; reason = r.cardNotFoundReason || 'card not found'; }
   return {
