@@ -35,12 +35,19 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const multer = require('multer');
+const crypto = require('crypto');
 
 const grading = require('./services/grading_engine');
 const classifier = require('./services/classifier_engine');
 const wallet = require('./services/wallet_engine');
 const lanHttps = require('./scripts/lan_https');
 const scanLevel = require('./public/scan_level');
+const dumpScans = require('./scripts/dump_scans');
+const testDeck = require('./services/test_deck');
+const scanMetadata = require('./services/scan_metadata');
+const backScan = require('./services/back_scan');
+const deckReport = require('./scripts/deck_report');
+const childProcess = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -73,8 +80,8 @@ app.use(express.static(publicDir));
 /* =========================
    Upload storage
    ========================= */
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+const uploadsDir = process.env.JUDGE_UPLOADS_DIR || path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -105,6 +112,33 @@ let inventory = []; // Each item: { id, name, imagePath, gradingReport, createdA
  * @param {object} body
  * @returns {{ cardType?: string, debug?: boolean, captureTilt?: object }}
  */
+function parseOcrLines(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function resolveScanId(body) {
+  return grading.normalizeScanId(body && body.scanId) || crypto.randomUUID();
+}
+
+function honestCardIdentity(body) {
+  return {
+    name: 'Unidentified',
+    setName: '—',
+    cardIdentity: {
+      familyId: null,
+      match: null,
+      ocrLines: parseOcrLines(body && body.ocrLines)
+    }
+  };
+}
+
 function parseGradingOptions(body) {
   const opts = {};
   if (!body) return opts;
@@ -113,7 +147,59 @@ function parseGradingOptions(body) {
   const tilt = scanLevel.parseCaptureTilt(body);
   if (tilt) opts.captureTilt = tilt;
   if (scanLevel.parseAlignmentCrop(body)) opts.alignmentCrop = true;
+  const scanId = grading.normalizeScanId(body.scanId);
+  if (scanId) opts.scanId = scanId;
+  if (body.cardQuad) opts.cardQuad = body.cardQuad;
+  if (body.quadImageWidth) opts.quadImageWidth = Number(body.quadImageWidth);
+  if (body.quadImageHeight) opts.quadImageHeight = Number(body.quadImageHeight);
+  if (body.quadConfidence) opts.quadConfidence = Number(body.quadConfidence);
+  // Only a back changes the report. side=front is stored on the item and
+  // is not passed into the grader, so a front grade matches a request with
+  // no side field.
+  if (body.side === 'back') opts.side = 'back';
   return opts;
+}
+
+/**
+ * Append one line per rejected scan to data/failed_scans.jsonl. Card-not-found
+ * scans are never written to inventory, so this is the only trace of them.
+ */
+function logFailedScan(entry) {
+  try {
+    const dir = path.dirname(FAILED_SCANS_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(FAILED_SCANS_PATH, JSON.stringify(entry) + '\n', 'utf8');
+  } catch (e) {
+    console.error('Failed to append failed_scans.jsonl', e);
+  }
+}
+
+function respondCardNotFound(res, args) {
+  const report = args.report;
+  const reason = report.cardNotFoundReason || 'card not found';
+  const label = labelFromCapture(args.scanId, args.body);
+  logFailedScan({
+    scanId: args.scanId,
+    timestamp: new Date().toISOString(),
+    engine: ENGINE,
+    deckId: label && label.deckId ? label.deckId : null,
+    route: args.route,
+    reason: reason,
+    imagePath: args.imagePath || null,
+    debugDir: report.debugArtifacts && report.debugArtifacts.dir ? report.debugArtifacts.dir : null,
+    captureTilt: report.captureTilt || null,
+    captureMetadata: args.captureMetadata || null,
+    serverMetadata: args.serverMetadata || null,
+    diagnostics: report.cardDetection || null
+  });
+  console.log('[grade] scanId=' + args.scanId + ' card not found: ' + reason);
+  return res.status(422).json({
+    ok: false,
+    error: 'card not found',
+    reason: reason,
+    scanId: args.scanId,
+    report: report
+  });
 }
 
 /**
@@ -124,15 +210,20 @@ function parseGradingOptions(body) {
  * @param {string} classification
  */
 function persistGradedItem(item, classification) {
+  // One record per scanId: a repeated upload replaces, never duplicates.
+  const sameScan = function (other) { return other && item.scanId && other.scanId === item.scanId; };
+  inventory = inventory.filter(function (other) { return !sameScan(other); });
   inventory.unshift(item);
 
   const db = loadDatabase();
   db.inventory = db.inventory || [];
+  const replacing = db.inventory.some(sameScan);
+  db.inventory = db.inventory.filter(function (other) { return !sameScan(other); });
   db.inventory.unshift(item);
   const key = (classification && typeof classification === 'string') ? classification.toUpperCase() : 'UNKNOWN';
   db.categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
   if (!Object.prototype.hasOwnProperty.call(db.categoryCounts, key)) db.categoryCounts[key] = 0;
-  db.categoryCounts[key] = (db.categoryCounts[key] || 0) + 1;
+  if (!replacing) db.categoryCounts[key] = (db.categoryCounts[key] || 0) + 1;
   saveDatabase(db);
 }
 
@@ -140,7 +231,81 @@ function persistGradedItem(item, classification) {
    Simple JSON "DB" helpers (data/database.json)
    Maintains db.inventory and db.categoryCounts { SPORTS, TCG, UNKNOWN }
    ========================= */
-const DB_PATH = path.join(__dirname, 'data', 'database.json');
+const DATA_DIR = process.env.JUDGE_DATA_DIR || path.join(__dirname, 'data');
+const DB_PATH = path.join(DATA_DIR, 'database.json');
+const FAILED_SCANS_PATH = path.join(DATA_DIR, 'failed_scans.jsonl');
+const SCANS_DIR = process.env.JUDGE_SCANS_DIR || path.join(__dirname, 'scans');
+const deckStore = testDeck.createStore(DATA_DIR);
+
+/** Engine identity stamped on every saved grade and failed attempt. */
+const ENGINE = (function () {
+  let commit = process.env.JUDGE_ENGINE_COMMIT || null;
+  if (!commit) {
+    try {
+      commit = childProcess.execSync('git rev-parse --short HEAD', {
+        cwd: __dirname, stdio: ['ignore', 'pipe', 'ignore']
+      }).toString().trim() || null;
+    } catch (e) { commit = null; }
+  }
+  return { version: grading.ENGINE_VERSION, commit: commit };
+})();
+
+/** App-reported + server-observed metadata for one upload (recorded, never graded). */
+async function scanMetadataFor(req, args) {
+  const parsed = scanMetadata.parseCaptureMetadata(req.body);
+  if (parsed.error) console.warn('[metadata] ' + parsed.error);
+  const serverMetadata = await scanMetadata.buildServerMetadata(Object.assign({}, args, {
+    engine: ENGINE,
+    userAgent: req.get('user-agent'),
+    localNetwork: isLocalNetworkAddress(req.socket && req.socket.remoteAddress),
+    captureMetadataError: parsed.error
+  }));
+  return { captureMetadata: parsed.metadata, serverMetadata: serverMetadata };
+}
+
+/** Deck / pre-submission fields sent with a Capture. */
+function captureLabelFields(body) {
+  const fields = {};
+  if (body && body.deckId) fields.deckId = body.deckId;
+  if (body && body.preSubmission != null && body.preSubmission !== '') fields.preSubmission = body.preSubmission;
+  if (body && body.intendedGrader) fields.intendedGrader = body.intendedGrader;
+  if (body && (body.side === 'front' || body.side === 'back')) fields.side = body.side;
+  if (body && body.pairId) {
+    const pairId = grading.normalizeScanId(body.pairId);
+    if (pairId) fields.pairId = pairId;
+  }
+  return fields;
+}
+
+function pairFields(body, scanId) {
+  const side = body && body.side === 'back' ? 'back' : 'front';
+  const pairId = grading.normalizeScanId(body && body.pairId) || (side === 'front' ? scanId : null);
+  return { side: side, pairId: pairId };
+}
+
+/** Copyright year and the flip map. Front reports are not touched. */
+function attachBackMetadata(report, body, pairId) {
+  if (!report || !body || body.side !== 'back') return report;
+  const info = backScan.inspectLines(parseOcrLines(body.ocrLines));
+  report.edgeMap = {
+    instructedFlip: info.instructedFlip,
+    upsideDown: info.upsideDown,
+    applied: info.applied,
+    imageToFront: info.imageToFront
+  };
+  report.copyrightYear = info.copyrightYear;
+  report.copyrightLine = info.copyrightLine;
+  report.pairId = pairId;
+  return report;
+}
+
+function labelFromCapture(scanId, body) {
+  const fields = captureLabelFields(body);
+  if (!Object.keys(fields).length) return null;
+  const res = deckStore.labelScan(scanId, fields, 'capture');
+  if (!res.ok) console.warn('[deck] label ignored for ' + scanId + ': ' + res.error);
+  return res.ok ? res.label : null;
+}
 function loadDatabase() {
   try {
     const raw = fs.readFileSync(DB_PATH, 'utf8');
@@ -185,13 +350,26 @@ function sendSse(res, eventName, data) {
   }
 }
 
+/**
+ * Dashboard stats. inventorySize counts graded cards only (a final grade on a
+ * located card); savedScans counts every saved scan.
+ */
+function statsFor(inventoryArray, categoryCounts, walletStats) {
+  return {
+    inventorySize: walletStats.gradedCount,
+    savedScans: inventoryArray.length,
+    categoryCounts: categoryCounts,
+    wallet: walletStats
+  };
+}
+
 function broadcastStats() {
   try {
     const db = loadDatabase();
     const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
     const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
     const walletStats = wallet.portfolioStats(inventoryArray);
-    const payload = { ok: true, stats: { inventorySize: inventoryArray.length, categoryCounts, wallet: walletStats } };
+    const payload = { ok: true, stats: statsFor(inventoryArray, categoryCounts, walletStats) };
     for (const client of sseClients) {
       sendSse(client, 'stats', payload);
     }
@@ -214,7 +392,7 @@ app.get('/api/events', (req, res) => {
     const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
     const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
     const walletStats = wallet.portfolioStats(inventoryArray);
-    const payload = { ok: true, stats: { inventorySize: inventoryArray.length, categoryCounts, wallet: walletStats } };
+    const payload = { ok: true, stats: statsFor(inventoryArray, categoryCounts, walletStats) };
     sendSse(res, 'stats', payload);
   } catch (e) { /* ignore */ }
 
@@ -273,7 +451,7 @@ app.get('/api/stats', (req, res) => {
     const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
     const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
     const walletStats = wallet.portfolioStats(inventoryArray);
-    return res.json({ ok: true, stats: { inventorySize: inventoryArray.length, categoryCounts, wallet: walletStats } });
+    return res.json({ ok: true, stats: statsFor(inventoryArray, categoryCounts, walletStats) });
   } catch (e) {
     console.error('Failed to compute unified stats', e);
     return res.status(500).json({ error: 'failed to compute stats' });
@@ -286,40 +464,101 @@ app.get('/api/stats', (req, res) => {
  *
  * Body (multipart/form-data):
  *   image     file buffer (required)
- *   name      optional display name
+ *   scanId    optional client UUID (echoed on item.scanId and logged)
+ *   cardQuad  optional JSON {tl,tr,br,bl} card corners in image pixels
+ *             (quadImageWidth / quadImageHeight / quadConfidence alongside)
+ *   name      ignored for identity (title is Unidentified until family match)
  *   cardType  optional SPORTS | TCG (reserved for Phase 3 corner templates)
  *   debug     optional "true" to attach metrology dumps
+ *   captureMetadata optional JSON {schema, app, device, camera, capture} from
+ *             the native app; stored as item.captureMetadata (never graded).
+ *             The server adds item.serverMetadata itself.
  *
  * Response: { ok: true, item } where item.gradingReport is the Judge payload
  * from services/grading_engine.js (10-point finalScore + 0–100 projections).
+ * No card found: HTTP 422 { ok: false, error: 'card not found', reason,
+ * scanId, report } — nothing is saved to inventory; the attempt is appended
+ * to data/failed_scans.jsonl.
  */
-app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
+const gradeUpload = memoryUpload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'sweep', maxCount: 8 }
+]);
+
+app.post('/api/grade', gradeUpload, async (req, res) => {
   try {
-    if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'image buffer required' });
+    const receivedAt = new Date().toISOString();
+    const imageFile = req.files && req.files.image && req.files.image[0];
+    if (!imageFile || !imageFile.buffer) return res.status(400).json({ error: 'image buffer required' });
     const opts = parseGradingOptions(req.body);
+    const scanId = resolveScanId(req.body);
+    opts.scanId = scanId;
+    opts.scansRoot = SCANS_DIR;
 
     const ts = Date.now();
-    const orig = req.file.originalname || 'upload';
+    const orig = imageFile.originalname || 'upload';
     const safe = String(orig).replace(/\s+/g, '_').replace(/[^\w.-]/g, '');
     const filename = `${ts}_${safe}`;
     const filePath = path.join(uploadsDir, filename);
-    await fs.promises.writeFile(filePath, req.file.buffer);
+    await fs.promises.writeFile(filePath, imageFile.buffer);
 
     // 1) Classify the card (SPORTS | TCG | UNKNOWN)
-    const classification = await classifier.classifyBuffer(req.file.buffer, { filename: orig });
+    const classification = await classifier.classifyBuffer(imageFile.buffer, { filename: orig });
 
     // 2) Strict 4-phase Judge pipeline (centering / surface / edges / corners + 0.5 ceiling)
-    const report = await grading.gradeBuffer(req.file.buffer, opts);
+    const gradeStart = Date.now();
+    const report = await grading.gradeBuffer(imageFile.buffer, opts);
+    const pair = pairFields(req.body, scanId);
+    attachBackMetadata(report, req.body, pair.pairId);
+    const meta = await scanMetadataFor(req, {
+      buffer: imageFile.buffer, file: imageFile, route: '/api/grade', receivedAt: receivedAt,
+      gradeMs: Date.now() - gradeStart, sweepFrames: ((req.files && req.files.sweep) || []).length
+    });
+    report.scanId = scanId;
+    if (report.cardNotFound) {
+      return respondCardNotFound(res, Object.assign({
+        report: report, scanId: scanId, route: '/api/grade', imagePath: `/uploads/${filename}`, body: req.body
+      }, meta));
+    }
 
+    const sweepFiles = (req.files && req.files.sweep) || [];
+    const sweepMeta = scanLevel.parseSweepMeta(req.body);
+    const extraFrames = sweepFiles.map(function (file, i) {
+      const meta = sweepMeta[i] || {};
+      return {
+        buffer: file.buffer,
+        bin: meta.bin || null,
+        pitch: meta.pitch,
+        roll: meta.roll
+      };
+    });
+    await grading.applySurfaceSweep(report, extraFrames, {
+      alignmentCrop: Boolean(opts.alignmentCrop),
+      levelTilt: opts.captureTilt
+    });
+
+    const identity = honestCardIdentity(req.body);
+    report.scanId = scanId;
     const item = {
-      id: String(Date.now()),
-      name: req.body.name || safe || 'Untitled Card',
+      id: scanId,
+      scanId: scanId,
+      name: identity.name,
+      setName: identity.setName,
+      cardIdentity: identity.cardIdentity,
       imagePath: `/uploads/${filename}`,
       category: classification,
       gradingReport: report,
+      engine: ENGINE,
+      captureMetadata: meta.captureMetadata,
+      serverMetadata: meta.serverMetadata,
+      side: pair.side,
+      pairId: pair.pairId,
       createdAt: new Date().toISOString()
     };
 
+    console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
+    const label = labelFromCapture(scanId, req.body);
+    if (label && label.deckId) item.deckId = label.deckId;
     persistGradedItem(item, classification);
     return res.json({ ok: true, item });
   } catch (err) {
@@ -336,28 +575,410 @@ app.post('/api/grade', memoryUpload.single('image'), async (req, res) => {
  */
 app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
   try {
+    const receivedAt = new Date().toISOString();
     if (!req.file) return res.status(400).json({ error: 'image file is required' });
     const opts = parseGradingOptions(req.body);
+    const scanId = resolveScanId(req.body);
+    opts.scanId = scanId;
+    opts.scansRoot = SCANS_DIR;
     const buffer = await fs.promises.readFile(req.file.path);
     const orig = req.file.originalname || path.basename(req.file.path);
     const classification = await classifier.classifyBuffer(buffer, { filename: orig });
+    const gradeStart = Date.now();
     const report = await grading.gradeBuffer(buffer, opts);
+    const pair = pairFields(req.body, scanId);
+    attachBackMetadata(report, req.body, pair.pairId);
+    const meta = await scanMetadataFor(req, {
+      buffer: buffer, file: req.file, route: '/api/grade/upload', receivedAt: receivedAt, gradeMs: Date.now() - gradeStart
+    });
+    report.scanId = scanId;
+    if (report.cardNotFound) {
+      return respondCardNotFound(res, Object.assign({
+        report: report, scanId: scanId, route: '/api/grade/upload',
+        imagePath: `/uploads/${path.basename(req.file.path)}`, body: req.body
+      }, meta));
+    }
+    await grading.applySurfaceSweep(report, [], {
+      alignmentCrop: Boolean(opts.alignmentCrop),
+      levelTilt: opts.captureTilt
+    });
 
+    const identity = honestCardIdentity(req.body);
+    report.scanId = scanId;
     const item = {
-      id: String(Date.now()),
-      name: req.body.name || 'Untitled Card',
+      id: scanId,
+      scanId: scanId,
+      name: identity.name,
+      setName: identity.setName,
+      cardIdentity: identity.cardIdentity,
       imagePath: `/uploads/${path.basename(req.file.path)}`,
       category: classification,
       gradingReport: report,
+      engine: ENGINE,
+      captureMetadata: meta.captureMetadata,
+      serverMetadata: meta.serverMetadata,
+      side: pair.side,
+      pairId: pair.pairId,
       createdAt: new Date().toISOString()
     };
 
+    console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
+    const label = labelFromCapture(scanId, req.body);
+    if (label && label.deckId) item.deckId = label.deckId;
     persistGradedItem(item, classification);
     return res.json({ ok: true, item });
   } catch (err) {
     console.error('Legacy grade/upload error', err);
     return res.status(500).json({ error: err.message || 'grading failed' });
   }
+});
+
+/* =========================
+   Debug views (read-only, local network only)
+   ========================= */
+
+/** Loopback, RFC1918, link-local, or IPv6 ULA/link-local peer. Uses the socket
+ *  address, not X-Forwarded-For, so a proxy header cannot widen access. */
+function isLocalNetworkAddress(raw) {
+  let ip = String(raw || '').toLowerCase();
+  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+  if (ip === '::1' || ip.startsWith('127.')) return true;
+  if (ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('169.254.')) return true;
+  const m = /^172\.(\d+)\./.exec(ip);
+  if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return true;
+  if (ip.startsWith('fc') || ip.startsWith('fd') || ip.startsWith('fe80:')) return true;
+  return false;
+}
+
+function localNetworkOnly(req, res, next) {
+  if (isLocalNetworkAddress(req.socket && req.socket.remoteAddress)) return next();
+  return res.status(403).type('text/plain').send('Debug views are local-network only.');
+}
+
+const DEBUG_ARTIFACT_FILES = {
+  'oriented.jpg': 'image/jpeg',
+  'overlay.jpg': 'image/jpeg',
+  'debug.json': 'application/json'
+};
+
+app.get('/scans/:scanId/:file', localNetworkOnly, (req, res) => {
+  const scanId = grading.normalizeScanId(req.params.scanId);
+  const type = DEBUG_ARTIFACT_FILES[req.params.file];
+  if (!scanId || !type) return res.status(404).type('text/plain').send('not found');
+  const filePath = path.join(SCANS_DIR, scanId, req.params.file);
+  if (!fs.existsSync(filePath)) return res.status(404).type('text/plain').send('not found');
+  res.type(type);
+  return res.sendFile(filePath);
+});
+
+app.get('/api/debug/scan/:scanId', localNetworkOnly, (req, res) => {
+  const scanId = grading.normalizeScanId(req.params.scanId);
+  const text = scanId ? dumpScans.formatScanById(DATA_DIR, scanId) : null;
+  if (!text) return res.status(404).json({ ok: false, error: 'scan not found' });
+  return res.json({ ok: true, scanId: scanId, text: text });
+});
+
+function escapeHtmlText(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+app.get('/debug/recent', localNetworkOnly, (req, res) => {
+  const n = Math.max(1, Math.min(50, Number(req.query.n) || 5));
+  const text = dumpScans.formatScans(DATA_DIR, n);
+  if (req.query.format === 'text') return res.type('text/plain').send(text);
+  return res.type('html').send(`<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Judge — last ${n} scans</title>
+<style>
+  body { background:#0b1220; color:#e6edf3; font-family:-apple-system,system-ui,sans-serif; margin:12px; }
+  pre { white-space:pre-wrap; word-break:break-word; font:12px/1.4 ui-monospace,Menlo,monospace; background:#050a14; padding:10px; border-radius:8px; }
+  button { font-size:16px; padding:10px 14px; border-radius:8px; border:0; background:#00d4ff; color:#001; }
+  a { color:#7dd3fc; }
+</style></head><body>
+<p>Last ${n} scans · <a href="?n=5">5</a> · <a href="?n=10">10</a> · <a href="?n=25">25</a> · <a href="?n=${n}&format=text">plain text</a></p>
+<p><button id="copy">Copy all</button> <span id="status"></span></p>
+<pre id="dump">${escapeHtmlText(text)}</pre>
+<script>
+document.getElementById('copy').addEventListener('click', function () {
+  var text = document.getElementById('dump').textContent;
+  var status = document.getElementById('status');
+  function fallback() {
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    status.textContent = ok ? 'Copied.' : 'Select the text below and copy.';
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(function () { status.textContent = 'Copied.'; }, fallback);
+  } else { fallback(); }
+});
+</script></body></html>`);
+});
+
+/* =========================
+   Test deck + PSA ground truth (local network only)
+   ========================= */
+
+function scanExists(scanId) {
+  return Boolean(dumpScans.formatScanById(DATA_DIR, scanId));
+}
+
+app.get('/api/deck', localNetworkOnly, (req, res) => {
+  const cards = {};
+  const storedCards = deckStore.loadDeck().cards;
+  Object.keys(storedCards).forEach(function (id) { cards[id] = testDeck.presentCard(storedCards[id]); });
+  const labels = {};
+  const storedLabels = deckStore.loadLabels().scans;
+  Object.keys(storedLabels).forEach(function (id) { labels[id] = testDeck.presentLabel(storedLabels[id]); });
+  return res.json({
+    ok: true,
+    categories: testDeck.DECK_CATEGORIES,
+    graders: testDeck.GRADERS,
+    specialLabels: testDeck.SPECIAL_LABELS,
+    outcomes: testDeck.OUTCOMES,
+    qualifiers: testDeck.QUALIFIERS,
+    subgradeKeys: testDeck.SUBGRADE_KEYS,
+    cards: cards,
+    labels: labels,
+    engine: ENGINE
+  });
+});
+
+app.put('/api/deck/cards/:deckId', localNetworkOnly, (req, res) => {
+  const out = deckStore.upsertCard(req.params.deckId, req.body || {});
+  return out.ok ? res.json(out) : res.status(400).json(out);
+});
+
+app.put('/api/scans/:scanId/label', localNetworkOnly, (req, res) => {
+  const scanId = grading.normalizeScanId(req.params.scanId);
+  if (!scanId || !scanExists(scanId)) return res.status(404).json({ ok: false, error: 'scan not found' });
+  const out = deckStore.labelScan(scanId, req.body || {}, 'web');
+  return out.ok ? res.json(out) : res.status(400).json(out);
+});
+
+function copyablePage(title, text, extraHtml) {
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtmlText(title)}</title>
+<style>
+  body { background:#0b1220; color:#e6edf3; font-family:-apple-system,system-ui,sans-serif; margin:12px; }
+  pre { white-space:pre-wrap; word-break:break-word; font:12px/1.4 ui-monospace,Menlo,monospace; background:#050a14; padding:10px; border-radius:8px; }
+  button { font-size:15px; padding:8px 12px; border-radius:8px; border:0; background:#00d4ff; color:#001; }
+  a { color:#7dd3fc; } input, select { font-size:14px; padding:4px; background:#050a14; color:#e6edf3; border:1px solid #334; border-radius:6px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; } td, th { border-bottom:1px solid #223; padding:4px; text-align:left; vertical-align:top; }
+</style></head><body>
+${extraHtml || ''}
+${text != null ? `<p><button id="copy">Copy all</button> <span id="status"></span></p><pre id="dump">${escapeHtmlText(text)}</pre>
+<script>
+document.getElementById('copy').addEventListener('click', function () {
+  var text = document.getElementById('dump').textContent, status = document.getElementById('status');
+  function fallback() { var ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {} document.body.removeChild(ta);
+    status.textContent = ok ? 'Copied.' : 'Select the text below and copy.'; }
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(function () { status.textContent = 'Copied.'; }, fallback);
+  else fallback();
+});
+</script>` : ''}
+</body></html>`;
+}
+
+app.get('/deck/report', localNetworkOnly, async (req, res) => {
+  try {
+    const out = await deckReport.buildDeckReport({ dataDir: DATA_DIR, uploadsDir: uploadsDir });
+    if (req.query.format === 'text') return res.type('text/plain').send(out.text);
+    return res.type('html').send(copyablePage('The Judge — test deck report', out.text,
+      '<p><a href="/deck">Deck registry &amp; scan labels</a> · <a href="/deck/report?format=text">plain text</a></p>'));
+  } catch (err) {
+    return res.status(500).type('text/plain').send('deck report failed: ' + (err && err.message));
+  }
+});
+
+app.get('/deck', localNetworkOnly, (req, res) => {
+  return res.type('html').send(copyablePage('The Judge — test deck', null, `
+<h2>Test deck</h2>
+<p><a href="/deck/report">Deck report</a> · <a href="/debug/recent?n=10">Recent scans dump</a></p>
+<style>
+  .scan { border-bottom:1px solid #223; padding:8px 0; }
+  .scan img { max-width:320px; height:auto; display:block; margin:6px 0; background:#000; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; margin:4px 0; }
+  label.f { font-size:12px; color:#9fb3c8; display:flex; flex-direction:column; gap:2px; }
+  label.q { font-size:13px; color:#e6edf3; display:flex; gap:4px; align-items:center; }
+</style>
+<h3>Recent scans — deck card, intended grader, returned grade</h3>
+<p>A returned grade is a half-point overall, a special label, sub-grades, a TAG score as printed, qualifiers, an autograph grade, or Authentic / Altered / No Grade. Leave the number blank when the slab has none.</p>
+<div id="scans"></div>
+<h3>Deck cards</h3>
+<table id="cards"><thead><tr><th>ID</th><th>Category</th><th>Title</th><th>Expect</th><th>Ruler mm L R T B</th><th>Known grade</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table>
+<script>
+(async function () {
+  const deck = await fetch('/api/deck').then(function (r) { return r.json(); });
+  const recent = await fetch('/api/deck/recent-scans').then(function (r) { return r.json(); });
+  const cats = deck.categories;
+  function el(tag, attrs, text) { const e = document.createElement(tag); Object.assign(e, attrs || {}); if (text != null) e.textContent = text; return e; }
+  function input(value, size) { return el('input', { value: value == null ? '' : value, size: size || 6 }); }
+  function select(list, value, placeholder) {
+    const s = el('select');
+    s.appendChild(el('option', { value: '' }, placeholder || '—'));
+    (list || []).forEach(function (item) {
+      const v = typeof item === 'string' ? item : item.id;
+      const t = typeof item === 'string' ? item : item.label;
+      s.appendChild(el('option', { value: v, selected: v === value }, t));
+    });
+    return s;
+  }
+  function field(title, control) {
+    const l = el('label', { className: 'f' });
+    l.appendChild(document.createTextNode(title));
+    l.appendChild(control);
+    return l;
+  }
+  function labelsFor(grader) {
+    return (deck.specialLabels || []).filter(function (s) { return !grader || s.indexOf(grader + ' ') === 0; });
+  }
+  function refill(sel, list, keep) {
+    while (sel.options.length) sel.remove(0);
+    sel.appendChild(el('option', { value: '' }, '—'));
+    list.forEach(function (s) { sel.appendChild(el('option', { value: s, selected: s === keep }, s)); });
+  }
+  function gradeBox(rec) {
+    rec = rec || {};
+    const sub = rec.subgrades || {};
+    const grader = select(deck.graders, rec.grader);
+    const grade = input(rec.grade, 4); grade.placeholder = '9.5';
+    const label = select(labelsFor(rec.grader), rec.specialLabel);
+    grader.addEventListener('change', function () { refill(label, labelsFor(grader.value), label.value); });
+    const outcome = select(deck.outcomes, rec.outcome);
+    const subs = {};
+    const subRow = el('div', { className: 'row' });
+    (deck.subgradeKeys || []).forEach(function (k) {
+      subs[k] = input(sub[k], 3);
+      subRow.appendChild(field(k, subs[k]));
+    });
+    const tag = input(rec.tagScore, 8); tag.placeholder = 'as printed';
+    const auto = input(rec.autoGrade, 8);
+    const cert = input(rec.cert, 12);
+    const qualRow = el('div', { className: 'row' });
+    const quals = {};
+    (deck.qualifiers || []).forEach(function (q) {
+      quals[q] = el('input', { type: 'checkbox', checked: (rec.qualifiers || []).indexOf(q) !== -1 });
+      const lab = el('label', { className: 'q' });
+      lab.appendChild(quals[q]);
+      lab.appendChild(document.createTextNode(q));
+      qualRow.appendChild(lab);
+    });
+    const box = el('div');
+    const r1 = el('div', { className: 'row' });
+    r1.appendChild(field('Grader', grader));
+    r1.appendChild(field('Overall', grade));
+    r1.appendChild(field('Special label', label));
+    r1.appendChild(field('No-number result', outcome));
+    const r2 = el('div', { className: 'row' });
+    r2.appendChild(field('TAG score', tag));
+    r2.appendChild(field('Autograph', auto));
+    r2.appendChild(field('Cert', cert));
+    box.appendChild(r1); box.appendChild(subRow); box.appendChild(qualRow); box.appendChild(r2);
+    return { box: box, read: function () {
+      const qualifiers = (deck.qualifiers || []).filter(function (q) { return quals[q].checked; });
+      const subgrades = {};
+      (deck.subgradeKeys || []).forEach(function (k) { if (subs[k].value !== '') subgrades[k] = subs[k].value; });
+      const body = { grader: grader.value || null, grade: grade.value || null, specialLabel: label.value || null,
+        outcome: outcome.value || null, subgrades: subgrades, tagScore: tag.value || null,
+        qualifiers: qualifiers, autoGrade: auto.value || null, cert: cert.value || null };
+      const any = body.grader || body.grade || body.specialLabel || body.outcome || body.tagScore ||
+        body.autoGrade || body.cert || qualifiers.length || Object.keys(subgrades).length;
+      return any ? body : null;
+    } };
+  }
+  recent.scans.forEach(function (s) {
+    const l = deck.labels[s.scanId] || {};
+    const wrap = el('div', { className: 'scan' });
+    wrap.appendChild(el('div', {}, (s.time || '') + '  ' + s.scanId.slice(0, 8).toUpperCase() + '  ' + (s.summary || '')));
+    if (s.overlay) {
+      const img = el('img', { src: s.overlay, alt: 'Border overlay for ' + s.scanId.slice(0, 8) });
+      const link = el('a', { href: s.overlay, target: '_blank' }, 'Open overlay');
+      wrap.appendChild(img);
+      wrap.appendChild(link);
+    }
+    const deckIn = input(l.deckId, 6); deckIn.placeholder = 'TD-01';
+    const pre = el('input', { type: 'checkbox', checked: Boolean(l.preSubmission) });
+    const intended = select(deck.graders, l.intendedGrader);
+    const grade = gradeBox(l.result);
+    const status = el('span');
+    const save = el('button', {}, 'Save');
+    save.addEventListener('click', async function () {
+      const body = { deckId: deckIn.value || null, preSubmission: pre.checked, intendedGrader: intended.value || null, result: grade.read() };
+      const r = await fetch('/api/scans/' + encodeURIComponent(s.scanId) + '/label', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (x) { return x.json(); });
+      status.textContent = r.ok ? ' saved' : ' ' + (r.error || 'failed');
+      status.className = r.ok ? '' : 'err';
+    });
+    const top = el('div', { className: 'row' });
+    top.appendChild(field('Deck', deckIn));
+    const preLab = el('label', { className: 'q' });
+    preLab.appendChild(pre);
+    preLab.appendChild(document.createTextNode('Pre-sub'));
+    top.appendChild(preLab);
+    top.appendChild(field('Intended grader', intended));
+    top.appendChild(save);
+    top.appendChild(status);
+    wrap.appendChild(top);
+    wrap.appendChild(grade.box);
+    document.getElementById('scans').appendChild(wrap);
+  });
+  const cb = document.querySelector('#cards tbody');
+  function cardRow(id, c) {
+    c = c || {};
+    const tr = el('tr');
+    const idIn = input(id, 6); idIn.placeholder = 'TD-01';
+    const cat = el('select'); cat.appendChild(el('option', { value: '' }, '—'));
+    cats.forEach(function (k) { cat.appendChild(el('option', { value: k.id, selected: c.category === k.id }, k.label)); });
+    const title = input(c.title, 22);
+    const exp = el('select'); ['', 'measured', 'undetectable', 'offcenter'].forEach(function (v) { exp.appendChild(el('option', { value: v, selected: (c.expect || '') === v }, v || 'category default')); });
+    const mm = c.physicalMm || {};
+    const L = input(mm.left, 3), R = input(mm.right, 3), T = input(mm.top, 3), B = input(mm.bottom, 3);
+    const known = gradeBox(c.knownGrade);
+    const notes = input(c.notes, 22);
+    const status = el('span'); const save = el('button', {}, 'Save');
+    save.addEventListener('click', async function () {
+      const body = { category: cat.value || null, title: title.value || null, expect: exp.value || null,
+        physicalMm: { left: L.value, right: R.value, top: T.value, bottom: B.value }, knownGrade: known.read(), notes: notes.value || null };
+      const r = await fetch('/api/deck/cards/' + encodeURIComponent(idIn.value), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (x) { return x.json(); });
+      status.textContent = r.ok ? ' saved' : ' ' + (r.error || 'failed');
+    });
+    const mmTd = el('td'); [L, R, T, B].forEach(function (x) { mmTd.appendChild(x); });
+    [idIn, cat, title, exp].forEach(function (x) { const td = el('td'); td.appendChild(x); tr.appendChild(td); });
+    tr.appendChild(mmTd);
+    const knownTd = el('td'); knownTd.appendChild(known.box); tr.appendChild(knownTd);
+    [notes].forEach(function (x) { const td = el('td'); td.appendChild(x); tr.appendChild(td); });
+    const td = el('td'); td.appendChild(save); td.appendChild(status); tr.appendChild(td);
+    cb.appendChild(tr);
+  }
+  Object.keys(deck.cards).sort(function (a, b) { return Number(a.slice(3)) - Number(b.slice(3)); }).forEach(function (id) { cardRow(id, deck.cards[id]); });
+  cardRow('', {});
+})();
+</script>`));
+});
+
+app.get('/api/deck/recent-scans', localNetworkOnly, (req, res) => {
+  const n = Math.max(1, Math.min(100, Number(req.query.n) || 30));
+  function overlayFor(scanId) {
+    if (!scanId || !fs.existsSync(path.join(SCANS_DIR, scanId, 'overlay.jpg'))) return null;
+    return '/scans/' + scanId + '/overlay.jpg';
+  }
+  const graded = dumpScans.loadGradedItems(DATA_DIR).map(function (item) {
+    const scanId = String(item.scanId || item.id);
+    const r = deckReport.resultFromReport(item.gradingReport);
+    return {
+      scanId: scanId, time: item.createdAt, overlay: overlayFor(scanId),
+      summary: r.measured ? 'L/R ' + r.lr.toFixed(1) + ' T/B ' + r.tb.toFixed(1) + ' CEN ' + (r.cen == null ? '—' : r.cen) : r.status
+    };
+  });
+  const failed = dumpScans.loadFailedEntries(DATA_DIR).map(function (e) {
+    const scanId = String(e.scanId);
+    return { scanId: scanId, time: e.timestamp, summary: 'card not found', overlay: overlayFor(scanId) };
+  });
+  const all = graded.concat(failed).sort(function (a, b) { return Date.parse(b.time) - Date.parse(a.time); }).slice(0, n);
+  return res.json({ ok: true, scans: all });
 });
 
 /* Serve uploaded images statically. In production, serve from secure storage/CDN. */
@@ -402,17 +1023,32 @@ function logHttpsReady() {
   console.log('then Settings → General → About → Certificate Trust Settings → enable The Judge LAN.');
 }
 
-if (LAN_HTTPS) {
-  let tls;
-  try {
-    tls = lanHttps.ensureLanCertificate(lanAddress.ip);
-  } catch (err) {
-    console.error('Failed to mint the LAN HTTPS certificate:', err && err.message ? err.message : err);
-    process.exit(1);
-  }
-  https.createServer({ key: tls.key, cert: tls.cert }, app).listen(PORT, '0.0.0.0', () => {
-    logHttpsReady();
-  });
-} else {
-  app.listen(PORT, '0.0.0.0', logHttpReady);
+function ensureDatabaseFile() {
+  if (fs.existsSync(DB_PATH)) return;
+  saveDatabase({ inventory: [], categoryCounts: { SPORTS: 0, TCG: 0, UNKNOWN: 0 } });
+  console.log('Created empty ' + DB_PATH);
 }
+
+function startServer() {
+  ensureDatabaseFile();
+  if (LAN_HTTPS) {
+    let tls;
+    try {
+      tls = lanHttps.ensureLanCertificate(lanAddress.ip);
+    } catch (err) {
+      console.error('Failed to mint the LAN HTTPS certificate:', err && err.message ? err.message : err);
+      process.exit(1);
+    }
+    https.createServer({ key: tls.key, cert: tls.cert }, app).listen(PORT, '0.0.0.0', () => {
+      logHttpsReady();
+    });
+  } else {
+    app.listen(PORT, '0.0.0.0', logHttpReady);
+  }
+}
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, DB_PATH, FAILED_SCANS_PATH, SCANS_DIR, ensureDatabaseFile, isLocalNetworkAddress };
