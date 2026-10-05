@@ -1610,40 +1610,61 @@ function esc(s) {
   });
 }
 
-async function writeOverlay(file, result, dest) {
-  const meta = await sharp(file).metadata();
-  const long = Math.max(meta.width, meta.height);
-  const target = 1600;
-  const scale = long > target ? target / long : 1;
-  const dw = Math.round(meta.width * scale);
-  const dh = Math.round(meta.height * scale);
-  const base = await sharp(file).rotate().resize(dw, dh).png().toBuffer();
-  if (!result || !result.ok) {
-    await sharp(base).png().toFile(dest);
-    return dest;
-  }
+function buildOverlaySvg(result, geom) {
+  const scale = geom.scale;
+  const ox = geom.originX || 0;
+  const oy = geom.originY || 0;
+  const dw = geom.width;
+  const dh = geom.height;
+  const stroke = geom.stroke == null ? 2 : geom.stroke;
+  const pointR = geom.pointR == null ? 2.2 : geom.pointR;
+  const labels = geom.labels !== false;
+  const onlySide = geom.side || null;
   const parts = [];
+  function sx(x) { return ((x - ox) * scale).toFixed(1); }
+  function sy(y) { return ((y - oy) * scale).toFixed(1); }
+  if (!result || !result.ok) {
+    return svgWrap(dw, dh, parts);
+  }
   const c = result.corners;
-  function sx(x) { return (x * scale).toFixed(1); }
-  function sy(y) { return (y * scale).toFixed(1); }
-  parts.push(
-    '<polygon points="' +
-    [c.tl, c.tr, c.br, c.bl].map(function (p) { return sx(p.x) + ',' + sy(p.y); }).join(' ') +
-    '" fill="none" stroke="#39ff14" stroke-width="2"/>'
-  );
-  ['top', 'bottom', 'left', 'right'].forEach(function (name) {
+  if (!onlySide) {
+    parts.push(
+      '<polygon points="' +
+      [c.tl, c.tr, c.br, c.bl].map(function (p) { return sx(p.x) + ',' + sy(p.y); }).join(' ') +
+      '" fill="none" stroke="#000000" stroke-width="' + (stroke + 2) + '"/>'
+    );
+    parts.push(
+      '<polygon points="' +
+      [c.tl, c.tr, c.br, c.bl].map(function (p) { return sx(p.x) + ',' + sy(p.y); }).join(' ') +
+      '" fill="none" stroke="#39ff14" stroke-width="' + stroke + '"/>'
+    );
+  }
+  const names = onlySide ? [onlySide] : ['top', 'bottom', 'left', 'right'];
+  names.forEach(function (name) {
     const side = result.sides[name];
     if (!side || !side.edge) return;
+    if (onlySide) {
+      parts.push(
+        '<line x1="' + sx(side.edge.a.x) + '" y1="' + sy(side.edge.a.y) +
+        '" x2="' + sx(side.edge.b.x) + '" y2="' + sy(side.edge.b.y) +
+        '" stroke="#000000" stroke-width="' + (stroke + 2) + '"/>'
+      );
+      parts.push(
+        '<line x1="' + sx(side.edge.a.x) + '" y1="' + sy(side.edge.a.y) +
+        '" x2="' + sx(side.edge.b.x) + '" y2="' + sy(side.edge.b.y) +
+        '" stroke="#39ff14" stroke-width="' + stroke + '"/>'
+      );
+    }
     const col = side.withheld ? '#ff5a36' : '#ffe14a';
     (side.points || []).forEach(function (p) {
-      const ox = p.x + side.edge.nx * p.depth * pxPerMm(result.dpi);
-      const oy = p.y + side.edge.ny * p.depth * pxPerMm(result.dpi);
-      parts.push('<circle cx="' + sx(ox) + '" cy="' + sy(oy) + '" r="2.2" fill="' + col + '" fill-opacity="0.85"/>');
+      const px = p.x + side.edge.nx * p.depth * pxPerMm(result.dpi);
+      const py = p.y + side.edge.ny * p.depth * pxPerMm(result.dpi);
+      parts.push('<circle cx="' + sx(px) + '" cy="' + sy(py) + '" r="' + pointR + '" fill="' + col + '" fill-opacity="0.9"/>');
     });
     (side.used || []).forEach(function (p) {
-      const ox = p.x + side.edge.nx * p.depth * pxPerMm(result.dpi);
-      const oy = p.y + side.edge.ny * p.depth * pxPerMm(result.dpi);
-      parts.push('<circle cx="' + sx(ox) + '" cy="' + sy(oy) + '" r="3.4" fill="none" stroke="#ffffff" stroke-width="1"/>');
+      const px = p.x + side.edge.nx * p.depth * pxPerMm(result.dpi);
+      const py = p.y + side.edge.ny * p.depth * pxPerMm(result.dpi);
+      parts.push('<circle cx="' + sx(px) + '" cy="' + sy(py) + '" r="' + (pointR + 1.5) + '" fill="none" stroke="#ffffff" stroke-width="' + Math.max(1, stroke * 0.35) + '"/>');
     });
     if (!side.withheld && side.mm != null) {
       const depthPx = side.mm * pxPerMm(result.dpi);
@@ -1655,9 +1676,14 @@ async function writeOverlay(file, result, dest) {
       const by = b.y + side.edge.ny * depthPx;
       parts.push(
         '<line x1="' + sx(ax) + '" y1="' + sy(ay) + '" x2="' + sx(bx) + '" y2="' + sy(by) +
-        '" stroke="#3ee0ff" stroke-width="2"/>'
+        '" stroke="#000000" stroke-width="' + (stroke + 2) + '"/>'
+      );
+      parts.push(
+        '<line x1="' + sx(ax) + '" y1="' + sy(ay) + '" x2="' + sx(bx) + '" y2="' + sy(by) +
+        '" stroke="#3ee0ff" stroke-width="' + stroke + '"/>'
       );
     }
+    if (!labels) return;
     const labelX = (side.edge.a.x + side.edge.b.x) / 2 + side.edge.nx * 40 / scale;
     const labelY = (side.edge.a.y + side.edge.b.y) / 2 + side.edge.ny * 40 / scale;
     const text = side.withheld
@@ -1669,19 +1695,135 @@ async function writeOverlay(file, result, dest) {
       esc(text) + '</text>'
     );
   });
-  const sizeText = 'card ' + result.cardMm.width.toFixed(2) + ' x ' + result.cardMm.height.toFixed(2) + ' mm';
-  parts.push(
-    '<text x="16" y="32" fill="#ffffff" font-size="22" font-family="sans-serif" stroke="#000000" stroke-width="3" paint-order="stroke">' +
-    esc(sizeText) + '</text>'
-  );
-  const svg = '<?xml version="1.0" encoding="UTF-8"?>' +
+  if (labels && result.cardMm) {
+    const sizeText = 'card ' + result.cardMm.width.toFixed(2) + ' x ' + result.cardMm.height.toFixed(2) + ' mm';
+    parts.push(
+      '<text x="16" y="32" fill="#ffffff" font-size="22" font-family="sans-serif" stroke="#000000" stroke-width="3" paint-order="stroke">' +
+      esc(sizeText) + '</text>'
+    );
+  }
+  return svgWrap(dw, dh, parts);
+}
+
+function svgWrap(dw, dh, parts) {
+  return '<?xml version="1.0" encoding="UTF-8"?>' +
     '<svg xmlns="http://www.w3.org/2000/svg" width="' + dw + '" height="' + dh + '">' +
     parts.join('') + '</svg>';
+}
+
+async function writeOverlay(file, result, dest) {
+  const meta = await sharp(file).metadata();
+  const long = Math.max(meta.width, meta.height);
+  const target = 1600;
+  const scale = long > target ? target / long : 1;
+  const dw = Math.round(meta.width * scale);
+  const dh = Math.round(meta.height * scale);
+  const base = await sharp(file).rotate().resize(dw, dh).png().toBuffer();
+  const svg = buildOverlaySvg(result, { scale: scale, width: dw, height: dh });
   await sharp(base)
     .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
     .png()
     .toFile(dest);
   return dest;
+}
+
+async function writeFullJpeg(file, result, dest) {
+  const meta = await sharp(file).rotate().metadata();
+  const targetH = 2000;
+  const scale = meta.height > targetH ? targetH / meta.height : 1;
+  const dw = Math.round(meta.width * scale);
+  const dh = Math.round(meta.height * scale);
+  const base = await sharp(file).rotate().resize(dw, dh).png().toBuffer();
+  const svg = buildOverlaySvg(result, { scale: scale, width: dw, height: dh });
+  await sharp(base)
+    .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
+    .jpeg({ quality: 90, mozjpeg: true })
+    .toFile(dest);
+  return dest;
+}
+
+function sideCropBox(side, dpi, imageW, imageH) {
+  const ppm = pxPerMm(dpi);
+  const outside = 3 * ppm;
+  const inside = 15 * ppm;
+  const along = 1.5 * ppm;
+  const a = side.edge.a;
+  const b = side.edge.b;
+  const nx = side.edge.nx;
+  const ny = side.edge.ny;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.max(1, hypot(dx, dy));
+  const ux = dx / len;
+  const uy = dy / len;
+  const a2 = { x: a.x - ux * along, y: a.y - uy * along };
+  const b2 = { x: b.x + ux * along, y: b.y + uy * along };
+  const pts = [
+    { x: a2.x - nx * outside, y: a2.y - ny * outside },
+    { x: b2.x - nx * outside, y: b2.y - ny * outside },
+    { x: b2.x + nx * inside, y: b2.y + ny * inside },
+    { x: a2.x + nx * inside, y: a2.y + ny * inside }
+  ];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  pts.forEach(function (p) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  });
+  const left = Math.max(0, Math.floor(minX));
+  const top = Math.max(0, Math.floor(minY));
+  const right = Math.min(imageW, Math.ceil(maxX));
+  const bottom = Math.min(imageH, Math.ceil(maxY));
+  return {
+    left: left,
+    top: top,
+    width: Math.max(1, right - left),
+    height: Math.max(1, bottom - top)
+  };
+}
+
+async function writeSideCrop(file, result, sideName, dest) {
+  const meta = await sharp(file).rotate().metadata();
+  const side = result && result.sides && result.sides[sideName];
+  if (!side || !side.edge) {
+    throw new Error('no edge for ' + sideName);
+  }
+  const box = sideCropBox(side, result.dpi, meta.width, meta.height);
+  const ppm = pxPerMm(result.dpi);
+  const stroke = Math.max(4, Math.round(0.12 * ppm));
+  const base = await sharp(file).rotate().extract(box).png().toBuffer();
+  const svg = buildOverlaySvg(result, {
+    scale: 1,
+    originX: box.left,
+    originY: box.top,
+    width: box.width,
+    height: box.height,
+    stroke: stroke,
+    pointR: Math.max(3, Math.round(0.08 * ppm)),
+    labels: false,
+    side: sideName
+  });
+  await sharp(base)
+    .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
+    .png({ compressionLevel: 9 })
+    .toFile(dest);
+  return dest;
+}
+
+async function writeReviewSet(file, result, dir, stem) {
+  fs.mkdirSync(dir, { recursive: true });
+  const full = path.join(dir, stem + '_full.jpg');
+  await writeFullJpeg(file, result, full);
+  const sides = ['top', 'bottom', 'left', 'right'];
+  for (let i = 0; i < sides.length; i++) {
+    const dest = path.join(dir, stem + '_' + sides[i] + '.png');
+    await writeSideCrop(file, result, sides[i], dest);
+  }
+  return full;
 }
 
 async function loadRaster(file) {
@@ -1968,8 +2110,10 @@ async function runDirectory(dir, opts) {
     });
     if (opts.overlayDir) {
       fs.mkdirSync(opts.overlayDir, { recursive: true });
-      const dest = path.join(opts.overlayDir, parsed.card + '_' + parsed.orientation + '.png');
+      const stem = parsed.card + '_' + parsed.orientation;
+      const dest = path.join(opts.overlayDir, stem + '.png');
       await writeOverlay(files[i], result, dest);
+      await writeReviewSet(files[i], result, opts.overlayDir, stem);
       if (opts.artifactDir) {
         fs.mkdirSync(opts.artifactDir, { recursive: true });
         const copy = path.join(opts.artifactDir, parsed.card + '_' + parsed.orientation + '.png');
@@ -2320,6 +2464,7 @@ if (require.main === module) {
 module.exports = {
   measureImage: measureImage,
   measureFile: measureFile,
+  writeReviewSet: writeReviewSet,
   agreeEdges: agreeEdges,
   buildAnswerKey: buildAnswerKey,
   BIAS_AGREE_MM: BIAS_AGREE_MM
