@@ -13,8 +13,14 @@
  * edge to the outermost points of that outline.
  *
  * A mark that sits in the margin, or that enters it along only part of a
- * side, is not the outline. If a side's outline cannot be followed with
- * confidence, that side is withheld.
+ * side, is not the outline. The outline may change element along a side;
+ * the width is then the outermost points of the design block. If those
+ * points are not clear, that side is withheld.
+ *
+ * A 180° pair cancels a directional scanner bias. The answer-key value is
+ * the mean of the two orientations. An axis is kept only when the bias
+ * estimated from each of its two sides agrees. The bias is reported and
+ * is never subtracted as a fixed correction.
  *
  * Run: node scripts/measure_flatbed.js [--flatbed DIR] [--self-test]
  */
@@ -28,7 +34,8 @@ const sharp = require('sharp');
 const NOMINAL_W_MM = 63.5;
 const NOMINAL_H_MM = 88.9;
 const DEFAULT_DPI = 1200;
-const AGREE_MM = 0.05;
+const BIAS_AGREE_MM = 0.02;
+const PARTIAL_COVERAGE = 0.32;
 
 const SEARCH_TO_MM = 14;
 const DEPTH_STEP_MM = 0.02;
@@ -528,6 +535,91 @@ function outlineStartIndex(profile, stepMm) {
   return Math.min(n - 2, peakI + Math.round(0.2 / stepMm));
 }
 
+function marginColorFromProfile(profile, designStart) {
+  const colors = [];
+  const end = Math.min(profile.length, designStart + 8);
+  for (let i = Math.max(0, designStart); i < end; i++) {
+    if (profile[i]) colors.push(profile[i]);
+  }
+  if (!colors.length) return null;
+  return [
+    median(colors.map(function (c) { return c[0]; })),
+    median(colors.map(function (c) { return c[1]; })),
+    median(colors.map(function (c) { return c[2]; }))
+  ];
+}
+
+function colorAtDepth(profile, depth, stepMm) {
+  const idx = Math.round(depth / stepMm);
+  if (idx < 0 || idx >= profile.length) return null;
+  return profile[idx];
+}
+
+function isMarginColor(rgb, marginColor) {
+  if (!rgb || !marginColor) return false;
+  return rgbDist(rgb, marginColor) < 40;
+}
+
+// The design block is the ink run that keeps going inward. A mark that sits
+// in the margin is an ink run with margin colour on the inside of it.
+function lastingDesignDepth(profile, stepMm, marginColor, startDepth) {
+  if (!marginColor) return null;
+  const maxD = Math.min(SEARCH_TO_MM, (profile.length - 1) * stepMm);
+  let depth = startDepth || 0;
+  while (depth < maxD) {
+    while (depth < maxD && isMarginColor(colorAtDepth(profile, depth, stepMm), marginColor)) {
+      depth += stepMm;
+    }
+    if (depth >= maxD) return null;
+    const inkStart = depth;
+    let marginRun = 0;
+    let inkRun = 0;
+    let d = depth;
+    let returned = false;
+    for (; d <= maxD; d += stepMm) {
+      if (isMarginColor(colorAtDepth(profile, d, stepMm), marginColor)) {
+        marginRun += stepMm;
+        inkRun = 0;
+        if (marginRun >= 0.28) {
+          returned = true;
+          break;
+        }
+      } else {
+        marginRun = 0;
+        inkRun += stepMm;
+        if (inkRun >= 0.85) break;
+      }
+    }
+    if (!returned && inkRun >= 0.55) return inkStart;
+    depth = d + stepMm;
+  }
+  return null;
+}
+
+function snapDesignDepth(raw, cands) {
+  if (raw == null) return null;
+  let best = null;
+  for (let k = 0; k < cands.length; k++) {
+    const dd = Math.abs(cands[k].depth - raw);
+    if (dd > 0.3) continue;
+    if (!best || dd < best.dd || (dd === best.dd && cands[k].strength > best.strength)) {
+      best = { dd: dd, depth: cands[k].depth, strength: cands[k].strength };
+    }
+  }
+  return best ? best.depth : raw;
+}
+
+function tagMarginMarks(cands, profile, marginColor, stepMm, startDepth) {
+  const raw = lastingDesignDepth(profile, stepMm, marginColor, startDepth);
+  const designDepth = snapDesignDepth(raw, cands);
+  for (let k = 0; k < cands.length; k++) {
+    const depth = cands[k].depth;
+    cands[k].marginMark = designDepth == null ? false : depth < designDepth - 0.18;
+    cands[k].designEdge = designDepth != null && Math.abs(depth - designDepth) <= 0.22;
+  }
+  return designDepth;
+}
+
 function rayCandidates(profile, depth0, stepMm) {
   const raw = new Array(profile.length).fill(0);
   for (let i = 0; i < profile.length - 1; i++) {
@@ -909,6 +1001,9 @@ function measureSide(data, w, h, quad, sideName, ppm) {
       profile[i] = sampleRgb(data, w, h, px, py);
     }
     const designStart = outlineStartIndex(profile, DEPTH_STEP_MM);
+    const cands = rayCandidates(profile.slice(designStart), designStart * DEPTH_STEP_MM, DEPTH_STEP_MM);
+    const marginColor = marginColorFromProfile(profile, designStart);
+    const designDepth = tagMarginMarks(cands, profile, marginColor, DEPTH_STEP_MM, designStart * DEPTH_STEP_MM);
     stations.push({
       x: x,
       y: y,
@@ -916,43 +1011,326 @@ function measureSide(data, w, h, quad, sideName, ppm) {
       ny: ny,
       alongMm: s / ppm,
       t: t,
-      candidates: rayCandidates(profile.slice(designStart), designStart * DEPTH_STEP_MM, DEPTH_STEP_MM)
+      margin: marginColor,
+      designDepth: designDepth,
+      candidates: cands
     });
   }
-  let pool = stations;
-  let best = null;
-  for (let layer = 0; layer < MAX_LAYERS; layer++) {
-    const path = linkOutline(pool, STATION_STEP_MM);
-    const summary = summarizePath(path, pool.length);
-    summary.layer = layer;
-    if (!best) best = summary;
-    if (!summary.withheld || (summary.reason !== 'partial' && summary.reason !== 'no-outline')) {
-      best = summary;
-      break;
-    }
-    if (!path || !path.length) break;
-    const cut = Math.max.apply(null, path.map(function (p) { return p.depth; })) + 0.25;
-    let removed = 0;
-    pool = pool.map(function (st) {
-      const next = st.candidates.filter(function (c) { return c.depth > cut; });
-      removed += st.candidates.length - next.length;
-      return {
-        x: st.x,
-        y: st.y,
-        nx: st.nx,
-        ny: st.ny,
-        alongMm: st.alongMm,
-        t: st.t,
-        candidates: next
-      };
-    });
-    if (!removed) break;
-    best = summary;
+  let best = summarizeDesign(stations);
+  if (best.withheld && best.reason === 'no-outline') {
+    const path = linkOutline(stations, STATION_STEP_MM);
+    const linked = summarizePath(path, stations.length);
+    if (linked && !linked.withheld) best = linked;
   }
   best.side = sideName;
   best.lengthMm = lengthMm;
   best.edge = { a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, nx: nx, ny: ny };
+  if (process.env.TRACE_FLATBED) {
+    process.stdout.write(sideName + ' ' + JSON.stringify(traceSide(stations)) + '\n');
+  }
   return best;
+}
+
+function traceSide(stations) {
+  const depths = stations.map(function (st) { return st.designDepth; }).filter(function (d) { return d != null; });
+  const hist = {};
+  depths.forEach(function (d) {
+    const key = (Math.round(d * 5) / 5).toFixed(1);
+    hist[key] = (hist[key] || 0) + 1;
+  });
+  const sample = [];
+  for (let i = 0; i < stations.length; i += Math.max(1, Math.floor(stations.length / 12))) {
+    sample.push(roundMm(stations[i].alongMm) + ':' + (stations[i].designDepth == null ? '—' : roundMm(stations[i].designDepth)));
+  }
+  return { n: stations.length, design: depths.length, hist: hist, sample: sample };
+}
+
+function strengthAt(st) {
+  if (st.designDepth == null) return 0;
+  let best = 0;
+  let bestD = 1e9;
+  (st.candidates || []).forEach(function (c) {
+    const dd = Math.abs(c.depth - st.designDepth);
+    if (dd < bestD) {
+      bestD = dd;
+      best = c.strength;
+    }
+  });
+  return bestD <= 0.35 ? best : 0;
+}
+
+function clusterDepths(points) {
+  const items = points.slice().sort(function (a, b) { return a.depth - b.depth; });
+  const layers = [];
+  items.forEach(function (item) {
+    let best = null;
+    for (let li = 0; li < layers.length; li++) {
+      const layer = layers[li];
+      const dd = Math.abs(item.depth - layer.median);
+      if (dd > 0.2) continue;
+      const span = Math.max(layer.max, item.depth) - Math.min(layer.min, item.depth);
+      if (span > 0.4) continue;
+      if (!best || dd < Math.abs(item.depth - best.median)) best = layer;
+    }
+    if (!best) {
+      layers.push({ points: [item], median: item.depth, min: item.depth, max: item.depth });
+      return;
+    }
+    best.points.push(item);
+    best.min = Math.min(best.min, item.depth);
+    best.max = Math.max(best.max, item.depth);
+    best.median = median(best.points.map(function (p) { return p.depth; }));
+  });
+  layers.sort(function (a, b) { return a.median - b.median; });
+  return layers;
+}
+
+function denseBody(points) {
+  const depths = points.map(function (p) { return p.depth; });
+  let mode = median(depths);
+  let bestN = -1;
+  for (let i = 0; i < depths.length; i++) {
+    const d = depths[i];
+    let n = 0;
+    for (let j = 0; j < depths.length; j++) {
+      if (Math.abs(depths[j] - d) <= 0.12) n += 1;
+    }
+    if (n > bestN || (n === bestN && d < mode)) {
+      bestN = n;
+      mode = d;
+    }
+  }
+  const body = points.filter(function (p) { return Math.abs(p.depth - mode) <= 0.16; });
+  return body.length >= 2 ? body : points.slice();
+}
+
+function mergeCloseLayers(layers) {
+  const list = layers.map(function (layer) {
+    return {
+      points: layer.points.slice(),
+      median: layer.median,
+      min: layer.min,
+      max: layer.max
+    };
+  });
+  let changed = true;
+  while (changed) {
+    changed = false;
+    let bestI = -1;
+    let bestJ = -1;
+    let bestD = 0.32;
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const d = Math.abs(list[i].median - list[j].median);
+        const span = Math.max(list[i].max, list[j].max) - Math.min(list[i].min, list[j].min);
+        if (d < bestD && span <= 0.55) {
+          bestD = d;
+          bestI = i;
+          bestJ = j;
+        }
+      }
+    }
+    if (bestI < 0) break;
+    const a = list[bestI];
+    const b = list[bestJ];
+    const points = a.points.concat(b.points);
+    list[bestI] = {
+      points: points,
+      median: median(points.map(function (p) { return p.depth; })),
+      min: Math.min(a.min, b.min),
+      max: Math.max(a.max, b.max)
+    };
+    list.splice(bestJ, 1);
+    changed = true;
+  }
+  list.sort(function (a, b) { return a.median - b.median; });
+  return list;
+}
+
+function layerRuns(points) {
+  const sorted = points.slice().sort(function (a, b) { return a.i - b.i; });
+  const runs = [];
+  if (!sorted.length) return runs;
+  let run = [sorted[0]];
+  for (let k = 1; k < sorted.length; k++) {
+    if (sorted[k].i > run[run.length - 1].i + 2) {
+      runs.push(run);
+      run = [];
+    }
+    run.push(sorted[k]);
+  }
+  runs.push(run);
+  return runs.map(function (group) {
+    const along = group.map(function (p) { return p.alongMm; });
+    return {
+      fromMm: roundMm(Math.min.apply(null, along)),
+      toMm: roundMm(Math.max.apply(null, along)),
+      stations: group.length
+    };
+  });
+}
+
+function layerElement(layer, stationCount, role, refused, why) {
+  const along = layer.points.map(function (p) { return p.alongMm; });
+  const runs = layerRuns(layer.points);
+  return {
+    depthMm: roundMm(layer.median),
+    fromMm: roundMm(Math.min.apply(null, along)),
+    toMm: roundMm(Math.max.apply(null, along)),
+    coverage: stationCount ? Math.round((layer.points.length / stationCount) * 1000) / 1000 : null,
+    stations: layer.points.length,
+    runs: runs.slice(0, 12),
+    runCount: runs.length,
+    role: role,
+    refused: refused,
+    why: why
+  };
+}
+
+function summarizeDesign(stations) {
+  const empty = {
+    mm: null,
+    confidence: 0,
+    withheld: true,
+    reason: 'no-outline',
+    points: [],
+    used: [],
+    shape: null,
+    elements: [],
+    coverage: 0
+  };
+  const n = stations.length;
+  if (n < 4) return empty;
+  const shadow = [];
+  const readings = [];
+  stations.forEach(function (st, i) {
+    if (st.designDepth == null) return;
+    const point = {
+      i: i,
+      depth: st.designDepth,
+      strength: strengthAt(st),
+      x: st.x,
+      y: st.y,
+      nx: st.nx,
+      ny: st.ny,
+      alongMm: st.alongMm,
+      t: st.t
+    };
+    if (st.designDepth < 0.45) shadow.push(point);
+    else readings.push(point);
+  });
+  const layers = mergeCloseLayers(clusterDepths(readings));
+  layers.forEach(function (layer) {
+    layer.cov = layer.points.length / n;
+    layer.partial = false;
+    layer.why = null;
+  });
+  layers.forEach(function (layer) {
+    let deeper = null;
+    for (let li = 0; li < layers.length; li++) {
+      const other = layers[li];
+      if (other.median <= layer.median + 0.28) continue;
+      if (other.cov < 0.28) continue;
+      if (!deeper || other.cov > deeper.cov) deeper = other;
+    }
+    if (!deeper) return;
+    if (layer.cov < PARTIAL_COVERAGE && layer.cov < deeper.cov * 0.65) {
+      layer.partial = true;
+      layer.why = 'covers ' + Math.round(layer.cov * 100) +
+        '% of the side and sits outside the outline that continues along the rest';
+    }
+  });
+  const elements = [];
+  if (shadow.length >= 3) {
+    elements.push(layerElement(
+      { points: shadow, median: median(shadow.map(function (p) { return p.depth; })) || 0 },
+      n,
+      'edge-shadow',
+      true,
+      'sits in the card-edge transition, not the design block'
+    ));
+  }
+  const eligible = layers.filter(function (layer) { return !layer.partial && layer.points.length >= 2; });
+  eligible.sort(function (a, b) { return a.median - b.median; });
+  const outline = eligible.length ? eligible[0] : null;
+  const isolated = [];
+  layers.forEach(function (layer) {
+    if (layer === outline) return;
+    if (layer.points.length < 2) {
+      isolated.push.apply(isolated, layer.points);
+      return;
+    }
+    if (layer.partial) {
+      elements.push(layerElement(layer, n, 'partial-margin', true, layer.why));
+      return;
+    }
+    elements.push(layerElement(
+      layer, n, 'deeper-element', true,
+      'deeper than the outermost points of the design block'
+    ));
+  });
+  if (isolated.length) {
+    elements.push(layerElement(
+      { points: isolated, median: median(isolated.map(function (p) { return p.depth; })) || 0 },
+      n,
+      'isolated',
+      true,
+      'single-station readings, not an outline'
+    ));
+  }
+  if (!outline) {
+    return {
+      mm: null,
+      confidence: 0,
+      withheld: true,
+      reason: readings.length ? 'partial' : 'no-outline',
+      points: readings,
+      used: [],
+      shape: null,
+      elements: elements,
+      coverage: readings.length / n
+    };
+  }
+  const extreme = denseBody(outline.points);
+  const extDepths = extreme.map(function (p) { return p.depth; });
+  const extSpread = Math.max.apply(null, extDepths) - Math.min.apply(null, extDepths);
+  const tipMin = Math.min.apply(null, extDepths);
+  const tip = extreme.filter(function (p) { return p.depth <= tipMin + 0.08; });
+  const useTip = tip.length >= 4 && tip.length >= extreme.length * 0.45;
+  const reported = useTip ? median(tip.map(function (p) { return p.depth; })) : median(extDepths);
+  const measuredPts = useTip ? tip : extreme;
+  const strength = median(measuredPts.map(function (p) { return p.strength; })) || 0;
+  const coverage = extreme.length / n;
+  const measDepths = measuredPts.map(function (p) { return p.depth; });
+  const measSpread = Math.max.apply(null, measDepths) - Math.min.apply(null, measDepths);
+  const clear = measuredPts.length >= 2 && measSpread <= 0.36 && coverage >= 0.12 && isFinite(reported);
+  const covScore = clamp((coverage - 0.15) / 0.6, 0, 1);
+  const tightScore = clamp(1 - measSpread / 0.36, 0, 1);
+  const strScore = strength > 0 ? clamp((strength - CONTRAST_FLOOR) / 25, 0, 1) : 0.5;
+  let conf = (0.48 + 0.52 * covScore) * (0.62 + 0.38 * tightScore) * (0.72 + 0.28 * strScore);
+  if (measuredPts.length < 4) conf *= 0.85;
+  const withheld = !clear;
+  let why = null;
+  if (withheld) {
+    if (measuredPts.length < 2) why = 'fewer than 2 outermost points';
+    else if (measSpread > 0.36) why = 'outermost points disagree by ' + roundMm(measSpread) + ' mm';
+    else why = 'the outermost points do not cover enough of the side to be the outline';
+  }
+  elements.unshift(layerElement({ points: measuredPts, median: reported }, n, 'outline', withheld, why));
+  elements.sort(function (a, b) { return a.depthMm - b.depthMm; });
+  return {
+    mm: withheld ? null : reported,
+    confidence: withheld ? Math.min(conf, 0.34) : conf,
+    withheld: withheld,
+    reason: withheld ? 'unclear' : null,
+    points: measuredPts,
+    used: measuredPts,
+    shape: extSpread <= 0.22 ? 'line' : 'outer',
+    elements: elements,
+    coverage: coverage,
+    rms: extSpread / 2,
+    strength: strength
+  };
 }
 
 function measureImage(data, w, h, dpi) {
@@ -1025,6 +1403,20 @@ function sidePublic(side) {
     coverage: side.coverage == null ? null : Math.round(side.coverage * 1000) / 1000,
     points: (side.used || []).map(function (p) {
       return { alongMm: roundMm(p.alongMm), depthMm: roundMm(p.depth) };
+    }),
+    elements: (side.elements || []).map(function (el) {
+      return {
+        depthMm: el.depthMm,
+        fromMm: el.fromMm,
+        toMm: el.toMm,
+        coverage: el.coverage,
+        stations: el.stations,
+        runs: el.runs || [],
+        runCount: el.runCount == null ? (el.runs || []).length : el.runCount,
+        role: el.role,
+        refused: !!el.refused,
+        why: el.why || null
+      };
     })
   };
 }
@@ -1045,40 +1437,94 @@ function rotate180(data, w, h) {
 
 const SWAP_180 = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' };
 
+function measuredMm(side) {
+  if (!side || side.withheld || side.mm == null || !isFinite(side.mm)) return null;
+  return side.mm;
+}
+
+function pairBias(upSide, rotSide, upOpp, rotOpp) {
+  const fromSide = upSide != null && rotSide != null ? (upSide - rotSide) / 2 : null;
+  const fromOpp = upOpp != null && rotOpp != null ? (rotOpp - upOpp) / 2 : null;
+  const agree = fromSide != null && fromOpp != null && Math.abs(fromSide - fromOpp) <= BIAS_AGREE_MM;
+  return { fromSide: fromSide, fromOpp: fromOpp, agree: agree };
+}
+
 function agreeEdges(upSides, rotSides) {
-  const out = {};
+  const up = {
+    top: measuredMm(upSides.top),
+    bottom: measuredMm(upSides.bottom),
+    left: measuredMm(upSides.left),
+    right: measuredMm(upSides.right)
+  };
+  const rot = {
+    top: measuredMm(rotSides.bottom),
+    bottom: measuredMm(rotSides.top),
+    left: measuredMm(rotSides.right),
+    right: measuredMm(rotSides.left)
+  };
+  const along = pairBias(up.top, rot.top, up.bottom, rot.bottom);
+  const across = pairBias(up.left, rot.left, up.right, rot.right);
+  const axes = {
+    alongScan: {
+      sides: ['top', 'bottom'],
+      biasFromTop: along.fromSide == null ? null : roundMm(along.fromSide),
+      biasFromBottom: along.fromOpp == null ? null : roundMm(along.fromOpp),
+      agree: along.agree
+    },
+    acrossScan: {
+      sides: ['left', 'right'],
+      biasFromLeft: across.fromSide == null ? null : roundMm(across.fromSide),
+      biasFromRight: across.fromOpp == null ? null : roundMm(across.fromOpp),
+      agree: across.agree
+    }
+  };
+  const axisOf = { top: along, bottom: along, left: across, right: across };
+  const raw = { top: [up.top, rot.top], bottom: [up.bottom, rot.bottom], left: [up.left, rot.left], right: [up.right, rot.right] };
+  const imageSide = { top: 'top', bottom: 'bottom', left: 'left', right: 'right' };
+  const rotImage = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' };
+  const sides = {};
   ['top', 'bottom', 'left', 'right'].forEach(function (side) {
-    const a = upSides[side];
-    const b = rotSides[SWAP_180[side]];
-    const upMm = a && !a.withheld ? a.mm : null;
-    const rotMm = b && !b.withheld ? b.mm : null;
-    let diff = null;
-    let agree = false;
+    const pair = raw[side];
+    const upMm = pair[0];
+    const rotMm = pair[1];
+    const axis = axisOf[side];
+    const opposite = side === 'top' || side === 'bottom'
+      ? (side === 'top' ? 'bottom' : 'top')
+      : (side === 'left' ? 'right' : 'left');
+    const oppPair = raw[opposite];
     let mm = null;
     let withheld = true;
-    if (upMm != null && rotMm != null) {
-      diff = Math.abs(upMm - rotMm);
-      agree = diff <= AGREE_MM;
-      if (agree) {
-        mm = (upMm + rotMm) / 2;
-        withheld = false;
-      }
+    let reason = 'unmeasured';
+    if (axis.agree && upMm != null && rotMm != null) {
+      mm = (upMm + rotMm) / 2;
+      withheld = false;
+      reason = null;
+    } else if (upMm == null || rotMm == null) {
+      reason = 'unmeasured';
+    } else if (oppPair[0] == null || oppPair[1] == null) {
+      reason = 'needs-both-sides';
+    } else {
+      reason = 'bias-disagreement';
     }
+    const a = upSides[imageSide[side]];
+    const b = rotSides[rotImage[side]];
     const confs = [];
     if (a && a.confidence) confs.push(a.confidence);
     if (b && b.confidence) confs.push(b.confidence);
-    out[side] = {
+    const diff = upMm != null && rotMm != null ? upMm - rotMm : null;
+    sides[side] = {
       mm: mm == null ? null : roundMm(mm),
       confidence: confs.length ? Math.round(Math.min.apply(null, confs) * 1000) / 1000 : 0,
       withheld: withheld,
+      reason: reason,
       approved: false,
       upMm: upMm == null ? null : roundMm(upMm),
       rot180Mm: rotMm == null ? null : roundMm(rotMm),
       diffMm: diff == null ? null : roundMm(diff),
-      agree: agree
+      agree: !withheld
     };
   });
-  return out;
+  return { sides: sides, axes: axes };
 }
 
 function loadApproved(file) {
@@ -1114,7 +1560,8 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
     const pair = cards[id];
     const upSides = pair.up ? pair.up.result.sides : {};
     const rotSides = pair.rot ? pair.rot.result.sides : {};
-    const agreed = agreeEdges(upSides, rotSides);
+    const combined = agreeEdges(upSides, rotSides);
+    const agreed = combined.sides;
     const prev = previousApproved[id] || {};
     ['top', 'bottom', 'left', 'right'].forEach(function (side) {
       if (prev[side]) agreed[side].approved = true;
@@ -1139,6 +1586,7 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
     }
     outCards[id] = {
       sides: agreed,
+      axes: combined.axes,
       ratios: borderRatios(agreed),
       scans: {
         up: scanRecord(pair.up),
@@ -1150,8 +1598,8 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
     version: 1,
     dpi: dpi,
     nominalCardMm: { width: NOMINAL_W_MM, height: NOMINAL_H_MM },
-    agreeToleranceMm: AGREE_MM,
-    definition: 'Border is the perpendicular distance from the card edge to the outermost points of the continuous design-block outline on that side. Partial margin marks are not the outline. Unapproved until a person checks the overlay.',
+    biasAgreeMm: BIAS_AGREE_MM,
+    definition: 'Border is the perpendicular distance from the card edge to the outermost points of the continuous design-block outline on that side. A mark that covers only part of a side is not the outline. The published value is the mean of the upright scan and the swapped 180 degree scan. An axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. That bias is reported and is not subtracted as a constant. Unapproved until a person checks the overlay.',
     cards: outCards
   };
 }
@@ -1409,9 +1857,21 @@ function printReport(key) {
           '    ' + side.padEnd(6, ' ') +
           ' ' + fmt(s.mm) + ' mm' +
           '  conf ' + (s.confidence == null ? '—' : s.confidence.toFixed(2)) +
-          (s.withheld ? '  withheld' : '') +
+          (s.withheld ? '  withheld ' + (s.reason || '') : '') +
           (s.shape ? '  ' + s.shape : '')
         );
+        (s.elements || []).forEach(function (el) {
+          if (!s.withheld && el.role === 'outline') return;
+          const where = (el.runs && el.runs.length)
+            ? el.runs.slice(0, 4).map(function (run) { return run.fromMm + '–' + run.toMm; }).join(', ')
+            : (el.fromMm + '–' + el.toMm);
+          console.log(
+            '      ' + (el.role || 'element') +
+            '  ' + fmt(el.depthMm) + ' mm' +
+            '  ' + where + ' mm' +
+            '  ' + (el.why || '')
+          );
+        });
       });
       console.log(
         '    L/R ' + fmtRatio(ratios.leftOverRight) +
@@ -1423,6 +1883,19 @@ function printReport(key) {
     console.log(id);
     sizeLine('up ', up);
     sizeLine('180', rot);
+    const axes = card.axes || {};
+    const along = axes.alongScan || {};
+    const across = axes.acrossScan || {};
+    console.log(
+      '  along-scan bias  top ' + fmt(along.biasFromTop) +
+      '  bottom ' + fmt(along.biasFromBottom) +
+      '  ' + (along.agree ? 'agree' : 'WITHHELD')
+    );
+    console.log(
+      '  across-scan bias  left ' + fmt(across.biasFromLeft) +
+      '  right ' + fmt(across.biasFromRight) +
+      '  ' + (across.agree ? 'agree' : 'WITHHELD')
+    );
     ['top', 'bottom', 'left', 'right'].forEach(function (side) {
       const s = card.sides[side];
       rows.push({
@@ -1438,10 +1911,10 @@ function printReport(key) {
       });
       console.log(
         '  ' + side.padEnd(6, ' ') +
-        ' up ' + fmt(s.upMm) +
+        ' mean ' + fmt(s.mm) +
+        '  up ' + fmt(s.upMm) +
         '  180 ' + fmt(s.rot180Mm) +
-        '  diff ' + fmt(s.diffMm) +
-        '  ' + (s.agree ? 'agree' : 'WITHHELD') +
+        '  ' + (s.agree ? 'accept' : 'WITHHELD ' + (s.reason || '')) +
         '  conf ' + (s.confidence == null ? '—' : s.confidence.toFixed(2)) +
         '  approved ' + (s.approved ? 'yes' : 'no')
       );
@@ -1641,8 +2114,10 @@ async function selfTest() {
     const rot = rotate180(partial.data, partial.width, partial.height);
     const rotM = measureImage(rot, partial.width, partial.height, dpi);
     const agreed = agreeEdges(partialM.sides, rotM.sides);
+    check('partial axis bias agrees', agreed.axes.alongScan.agree && agreed.axes.acrossScan.agree, agreed.axes);
     ['top', 'bottom', 'left', 'right'].forEach(function (side) {
-      check('partial 180 ' + side, agreed[side].agree && agreed[side].diffMm <= AGREE_MM, agreed[side]);
+      const expect = { top: 4.0, bottom: 3.6, left: 3.2, right: 5.1 }[side];
+      check('partial 180 ' + side, agreed.sides[side].agree && near(agreed.sides[side].mm, expect, 0.05), agreed.sides[side]);
     });
   }
 
@@ -1693,15 +2168,61 @@ async function selfTest() {
   const curvedM = measureImage(curved.data, curved.width, curved.height, dpi);
   check('curve card found', curvedM.ok, curvedM.error);
   if (curvedM.ok) {
-    check('curve uses the extreme', near(curvedM.sides.top.mm, 3.2, 0.08) && !curvedM.sides.top.withheld,
+    check('curve uses the extreme', near(curvedM.sides.top.mm, 3.2, 0.1) && !curvedM.sides.top.withheld,
       sideBrief(curvedM.sides.top));
     check('curve other sides', near(curvedM.sides.bottom.mm, 4.4, 0.05) && near(curvedM.sides.left.mm, 3.8, 0.05),
       { bottom: sideBrief(curvedM.sides.bottom), left: sideBrief(curvedM.sides.left) });
     const rot = rotate180(curved.data, curved.width, curved.height);
     const rotM = measureImage(rot, curved.width, curved.height, dpi);
     const agreed = agreeEdges(curvedM.sides, rotM.sides);
-    check('curve 180 agrees', agreed.top.agree && agreed.top.diffMm <= AGREE_MM, agreed.top);
+    check('curve 180 agrees', agreed.axes.alongScan.agree && agreed.sides.top.agree && near(agreed.sides.top.mm, 3.2, 0.08), agreed.sides.top);
   }
+
+  const stepped = drawSynthetic({
+    dpi: dpi,
+    marginMm: 6,
+    cardWmm: NOMINAL_W_MM,
+    cardHmm: NOMINAL_H_MM,
+    pink: pink,
+    white: white,
+    photo: photo,
+    frameMm: 1.2,
+    top: {
+      depth: function (along) { return along < 0.5 ? 3.0 : 4.6; },
+      color: blue,
+      marks: []
+    },
+    bottom: constantEdge(4.0, blue, []),
+    left: constantEdge(3.5, blue, []),
+    right: constantEdge(3.5, blue, [])
+  });
+  const steppedM = measureImage(stepped.data, stepped.width, stepped.height, dpi);
+  check('stepped card found', steppedM.ok, steppedM.error);
+  if (steppedM.ok) {
+    check('stepped top uses the outermost element', near(steppedM.sides.top.mm, 3.0, 0.08) && !steppedM.sides.top.withheld,
+      sideBrief(steppedM.sides.top));
+  }
+
+  const biasUp = {
+    top: { mm: 3.777, withheld: false, confidence: 0.84 },
+    bottom: { mm: 3.022, withheld: false, confidence: 0.84 },
+    left: { mm: null, withheld: true, confidence: 0 },
+    right: { mm: 3.44, withheld: false, confidence: 0.91 }
+  };
+  const biasRot = {
+    top: { mm: 3.271, withheld: false, confidence: 0.87 },
+    bottom: { mm: 3.526, withheld: false, confidence: 0.83 },
+    left: { mm: 3.431, withheld: false, confidence: 0.95 },
+    right: { mm: null, withheld: true, confidence: 0 }
+  };
+  const bias = agreeEdges(biasUp, biasRot);
+  check('bias from top', near(bias.axes.alongScan.biasFromTop, 0.1255, 0.001), bias.axes.alongScan);
+  check('bias from bottom', near(bias.axes.alongScan.biasFromBottom, 0.1245, 0.001), bias.axes.alongScan);
+  check('along-scan axis accepted', bias.axes.alongScan.agree === true, bias.axes.alongScan);
+  check('top mean cancels bias', near(bias.sides.top.mm, 3.6515, 0.001), bias.sides.top);
+  check('bottom mean cancels bias', near(bias.sides.bottom.mm, 3.1465, 0.001), bias.sides.bottom);
+  check('across-scan needs both sides', bias.axes.acrossScan.agree === false && bias.sides.right.reason === 'needs-both-sides', bias.sides.right);
+  check('no fixed correction', bias.sides.top.mm === roundMm((3.777 + 3.526) / 2), bias.sides.top.mm);
 
   const tiltedPng = await sharp(mixed.data, {
     raw: { width: mixed.width, height: mixed.height, channels: 3 }
@@ -1801,5 +2322,5 @@ module.exports = {
   measureFile: measureFile,
   agreeEdges: agreeEdges,
   buildAnswerKey: buildAnswerKey,
-  AGREE_MM: AGREE_MM
+  BIAS_AGREE_MM: BIAS_AGREE_MM
 };
