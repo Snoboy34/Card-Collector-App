@@ -30,7 +30,6 @@ const NOMINAL_H_MM = 88.9;
 const DEFAULT_DPI = 1200;
 const AGREE_MM = 0.05;
 
-const SEARCH_FROM_MM = 0.25;
 const SEARCH_TO_MM = 14;
 const DEPTH_STEP_MM = 0.02;
 const STATION_STEP_MM = 0.4;
@@ -109,39 +108,6 @@ function sampleRgb(data, w, h, x, y) {
   return out;
 }
 
-function otsu(distances) {
-  const bins = 256;
-  const hist = new Uint32Array(bins);
-  let maxD = 1;
-  for (let i = 0; i < distances.length; i++) if (distances[i] > maxD) maxD = distances[i];
-  const scale = (bins - 1) / maxD;
-  for (let i = 0; i < distances.length; i++) {
-    hist[Math.max(0, Math.min(bins - 1, Math.round(distances[i] * scale)))] += 1;
-  }
-  const total = distances.length;
-  let sum = 0;
-  for (let i = 0; i < bins; i++) sum += i * hist[i];
-  let sumB = 0;
-  let wB = 0;
-  let best = 0;
-  let thresh = 0;
-  for (let i = 0; i < bins; i++) {
-    wB += hist[i];
-    if (!wB) continue;
-    const wF = total - wB;
-    if (!wF) break;
-    sumB += i * hist[i];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const between = wB * wF * (mB - mF) * (mB - mF);
-    if (between > best) {
-      best = between;
-      thresh = i;
-    }
-  }
-  return thresh / scale;
-}
-
 function estimatePaper(data, w, h) {
   const cw = Math.max(4, Math.round(w * 0.06));
   const ch = Math.max(4, Math.round(h * 0.06));
@@ -167,16 +133,25 @@ function estimatePaper(data, w, h) {
     }
   }
   const paper = [median(rs), median(gs), median(bs)];
-  const samples = [];
-  const step = Math.max(1, Math.floor(Math.sqrt((w * h) / 80000)));
-  for (let y = 0; y < h; y += step) {
-    for (let x = 0; x < w; x += step) {
-      const i = (y * w + x) * 3;
-      samples.push(distToPaper(data[i], data[i + 1], data[i + 2], paper));
+  const cornerDists = [];
+  for (let k = 0; k < corners.length; k++) {
+    const x0 = corners[k][0];
+    const y0 = corners[k][1];
+    for (let y = y0; y < y0 + ch; y += 2) {
+      for (let x = x0; x < x0 + cw; x += 2) {
+        const i = (y * w + x) * 3;
+        cornerDists.push(distToPaper(data[i], data[i + 1], data[i + 2], paper));
+      }
     }
   }
-  let threshold = otsu(samples);
-  if (!isFinite(threshold) || threshold < 8) threshold = 18;
+  const med = median(cornerDists) || 0;
+  const mad = median(cornerDists.map(function (d) { return Math.abs(d - med); })) || 1;
+  const sorted = cornerDists.slice().sort(function (a, b) { return a - b; });
+  const p98 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.98))] || 0;
+  // Above the sheet texture, below a printed card. The card edge is this
+  // crossing, not the strongest ink step further inside.
+  let threshold = Math.max(med + 8 * mad, p98 + 15, 22);
+  if (!isFinite(threshold)) threshold = 22;
   return { paper: paper, threshold: threshold };
 }
 
@@ -352,13 +327,17 @@ function intersect(l1, l2) {
   return { x: x, y: y };
 }
 
-function collectEdgePoints(data, w, h, paper, threshold, x0, y0, x1, y1, outwardX, outwardY, reach) {
+function collectEdgePoints(data, w, h, paper, threshold, x0, y0, x1, y1, outwardX, outwardY, reach, ppm) {
   const len = hypot(x1 - x0, y1 - y0);
   if (len < 4) return [];
   const points = [];
   const step = 0.5;
   const steps = Math.ceil((2 * reach) / step);
   const samples = Math.max(12, Math.floor(len / 2));
+  const sustain = Math.max(4, Math.round((0.55 * ppm) / step));
+  const lookOut = Math.round((1.1 * ppm) / step);
+  const gapOut = Math.round((0.2 * ppm) / step);
+  const lookIn = Math.round((0.5 * ppm) / step);
   for (let s = 0; s <= samples; s++) {
     const u = s / samples;
     const px = x0 + (x1 - x0) * u;
@@ -374,37 +353,52 @@ function collectEdgePoints(data, w, h, paper, threshold, x0, y0, x1, y1, outward
       dists.push(distToPaper(rgb[0], rgb[1], rgb[2], paper));
       ts.push(t);
     }
-    let bestK = -1;
-    let bestRise = 0;
+    let hitK = -1;
     for (let k = 1; k < dists.length; k++) {
-      const rise = dists[k] - dists[k - 1];
-      if (rise > bestRise) {
-        bestRise = rise;
-        bestK = k;
+      if (!(dists[k - 1] < threshold && dists[k] >= threshold)) continue;
+      const end = Math.min(dists.length - 1, k + sustain);
+      if (end <= k) continue;
+      let above = 0;
+      let count = 0;
+      for (let j = k; j <= end; j++) {
+        count += 1;
+        if (dists[j] >= threshold * 0.85) above += 1;
+      }
+      if (count >= 3 && above >= count * 0.7) {
+        hitK = k;
+        break;
       }
     }
-    if (bestK > 0 && bestRise >= 8) {
-      let lo = bestK - 1;
-      let hi = bestK;
-      while (lo > 0 && dists[lo] - dists[lo - 1] > bestRise * 0.3) lo -= 1;
-      while (hi < dists.length - 1 && dists[hi + 1] - dists[hi] > bestRise * 0.3) hi += 1;
-      const target = 0.5 * (dists[lo] + dists[hi]);
-      let hitT = ts[bestK];
-      for (let k = lo + 1; k <= hi; k++) {
-        if (dists[k - 1] <= target && dists[k] >= target) {
-          const f = (target - dists[k - 1]) / ((dists[k] - dists[k - 1]) || 1);
-          hitT = ts[k - 1] + (ts[k] - ts[k - 1]) * f;
-          break;
-        }
+    if (hitK < 0) continue;
+    const outLo = Math.max(0, hitK - lookOut);
+    const outHi = Math.max(outLo, hitK - gapOut);
+    const inLo = Math.min(dists.length - 1, hitK + Math.max(1, Math.round((0.08 * ppm) / step)));
+    const inHi = Math.min(dists.length - 1, hitK + lookIn);
+    const outside = [];
+    for (let j = outLo; j <= outHi; j++) outside.push(dists[j]);
+    const inside = [];
+    for (let j = inLo; j <= inHi; j++) inside.push(dists[j]);
+    const base = outside.length ? median(outside) : dists[hitK - 1];
+    const inner = inside.length ? median(inside) : dists[hitK];
+    if (!(inner > base + 8)) continue;
+    const target = base + 0.5 * (inner - base);
+    const lo = Math.max(1, hitK - Math.round((0.35 * ppm) / step));
+    const hi = Math.min(dists.length - 1, hitK + Math.round((0.35 * ppm) / step));
+    let hitT = ts[hitK];
+    for (let k = lo; k <= hi; k++) {
+      if (dists[k - 1] <= target && dists[k] >= target) {
+        const f = (target - dists[k - 1]) / ((dists[k] - dists[k - 1]) || 1);
+        hitT = ts[k - 1] + (ts[k] - ts[k - 1]) * f;
+        break;
       }
-      points.push({ x: px + outwardX * hitT, y: py + outwardY * hitT });
     }
+    points.push({ x: px + outwardX * hitT, y: py + outwardY * hitT });
   }
   return points;
 }
 
 function findCardQuad(data, w, h, paper, threshold, bbox, ppm) {
-  const reach = 4 * ppm;
+  const reach = 6 * ppm;
   const cx0 = (bbox.left + bbox.right) / 2;
   const cy0 = (bbox.top + bbox.bottom) / 2;
   const sides = [
@@ -450,7 +444,7 @@ function findCardQuad(data, w, h, paper, threshold, bbox, ppm) {
     const raw = collectEdgePoints(
       data, w, h, paper, threshold,
       side.x0, side.y0, side.x1, side.y1,
-      side.ox, side.oy, reach
+      side.ox, side.oy, reach, ppm
     );
     const fitted = trimLine(raw);
     if (!fitted.line || fitted.points.length < 8) {
@@ -497,6 +491,41 @@ function smooth5(values) {
     out[i] = acc / wsum;
   }
   return out;
+}
+
+function outlineStartIndex(profile, stepMm) {
+  const n = profile.length;
+  if (n < 8) return 0;
+  const grad = new Array(n).fill(0);
+  for (let i = 0; i < n - 1; i++) {
+    if (!profile[i] || !profile[i + 1]) continue;
+    grad[i] = rgbDist(profile[i], profile[i + 1]);
+  }
+  const sm = smooth5(grad);
+  const window = Math.min(n - 2, Math.max(4, Math.round(1.6 / stepMm)));
+  let peakI = 1;
+  let peakV = 0;
+  for (let i = 1; i < window; i++) {
+    if (sm[i] > peakV) {
+      peakV = sm[i];
+      peakI = i;
+    }
+  }
+  if (peakV < CONTRAST_FLOOR) return Math.round(0.2 / stepMm);
+  const quiet = Math.max(CONTRAST_FLOOR, peakV * 0.12);
+  const need = Math.max(3, Math.round(0.28 / stepMm));
+  const limit = Math.min(n - need - 1, Math.round(2.2 / stepMm));
+  for (let i = peakI + 1; i <= limit; i++) {
+    let calm = true;
+    for (let j = 0; j < need; j++) {
+      if (sm[i + j] > quiet) {
+        calm = false;
+        break;
+      }
+    }
+    if (calm) return i + need;
+  }
+  return Math.min(n - 2, peakI + Math.round(0.2 / stepMm));
 }
 
 function rayCandidates(profile, depth0, stepMm) {
@@ -551,7 +580,7 @@ function linkOutline(stations, stepMm) {
       for (let back = 1; back <= maxGap + 1 && i - back >= 0; back++) {
         const j = i - back;
         const pK = stations[j].candidates.length;
-        const jump = MAX_SLOPE * stepMm * back;
+        const jump = Math.min(0.55, 0.22 + MAX_SLOPE * stepMm * back);
         for (let p = 0; p < pK; p++) {
           const pd = stations[j].candidates[p].depth;
           if (Math.abs(d - pd) > jump) continue;
@@ -871,14 +900,15 @@ function measureSide(data, w, h, quad, sideName, ppm) {
     const t = (s - start) / Math.max(1e-6, end - start);
     const x = a.x + (b.x - a.x) * (s / lengthPx);
     const y = a.y + (b.y - a.y) * (s / lengthPx);
-    const nSteps = Math.round((SEARCH_TO_MM - SEARCH_FROM_MM) / DEPTH_STEP_MM);
+    const nSteps = Math.round(SEARCH_TO_MM / DEPTH_STEP_MM);
     const profile = new Array(nSteps);
     for (let i = 0; i < nSteps; i++) {
-      const depthMm = SEARCH_FROM_MM + i * DEPTH_STEP_MM;
+      const depthMm = i * DEPTH_STEP_MM;
       const px = x + nx * depthMm * ppm;
       const py = y + ny * depthMm * ppm;
       profile[i] = sampleRgb(data, w, h, px, py);
     }
+    const designStart = outlineStartIndex(profile, DEPTH_STEP_MM);
     stations.push({
       x: x,
       y: y,
@@ -886,7 +916,7 @@ function measureSide(data, w, h, quad, sideName, ppm) {
       ny: ny,
       alongMm: s / ppm,
       t: t,
-      candidates: rayCandidates(profile, SEARCH_FROM_MM, DEPTH_STEP_MM)
+      candidates: rayCandidates(profile.slice(designStart), designStart * DEPTH_STEP_MM, DEPTH_STEP_MM)
     });
   }
   let pool = stations;
@@ -1099,6 +1129,8 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
       });
       return {
         file: path.basename(entry.file),
+        dpi: entry.fileDpi || null,
+        scale: axisScale(entry.result.cardMm, entry.fileDpi),
         cardMm: entry.result.cardMm,
         sizeOk: entry.result.sizeOk,
         ratios: borderRatios(sides),
@@ -1284,6 +1316,51 @@ function parseScanName(file) {
   return { card: m[1].toUpperCase(), orientation: m[2].toLowerCase(), file: file };
 }
 
+function readPngDpi(file) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    let pos = 8;
+    const hdr = Buffer.alloc(8);
+    const chunk = Buffer.alloc(16);
+    while (pos < 2 * 1024 * 1024) {
+      if (fs.readSync(fd, hdr, 0, 8, pos) < 8) break;
+      const length = hdr.readUInt32BE(0);
+      const typ = hdr.toString('ascii', 4, 8);
+      if (typ === 'pHYs' && length >= 9) {
+        fs.readSync(fd, chunk, 0, 9, pos + 8);
+        const ppmX = chunk.readUInt32BE(0);
+        const ppmY = chunk.readUInt32BE(4);
+        const unit = chunk.readUInt8(8);
+        if (unit !== 1 || !ppmX || !ppmY) return { dpiX: null, dpiY: null, unit: unit };
+        return { dpiX: ppmX * 0.0254, dpiY: ppmY * 0.0254, unit: unit };
+      }
+      if (typ === 'IEND' || typ === 'IDAT') break;
+      pos += 12 + length;
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  return { dpiX: null, dpiY: null, unit: null };
+}
+
+function axisScale(cardMm, fileDpi) {
+  if (!cardMm) return null;
+  const widthScale = cardMm.width / NOMINAL_W_MM;
+  const heightScale = cardMm.height / NOMINAL_H_MM;
+  const dpiX = fileDpi && fileDpi.dpiX;
+  const dpiY = fileDpi && fileDpi.dpiY;
+  const fileDpiDiffer = dpiX != null && dpiY != null && Math.abs(dpiX - dpiY) > 0.5;
+  const axisDiffer = Math.abs(widthScale - heightScale) > 0.008;
+  return {
+    dpiX: dpiX == null ? null : Math.round(dpiX * 1000) / 1000,
+    dpiY: dpiY == null ? null : Math.round(dpiY * 1000) / 1000,
+    fileDpiDiffer: fileDpiDiffer,
+    widthScale: Math.round(widthScale * 10000) / 10000,
+    heightScale: Math.round(heightScale * 10000) / 10000,
+    xyScaleDiffer: fileDpiDiffer || axisDiffer
+  };
+}
+
 function defaultFlatbedDir() {
   if (process.env.JUDGE_FLATBED_DIR) return process.env.JUDGE_FLATBED_DIR;
   const candidates = [];
@@ -1311,10 +1388,41 @@ function printReport(key) {
     const card = cards[id];
     const up = card.scans && card.scans.up;
     const rot = card.scans && card.scans['180'];
-    console.log(id +
-      '  up ' + (up && up.cardMm ? up.cardMm.width.toFixed(2) + 'x' + up.cardMm.height.toFixed(2) : '—') +
-      ' mm   180 ' + (rot && rot.cardMm ? rot.cardMm.width.toFixed(2) + 'x' + rot.cardMm.height.toFixed(2) : '—') +
-      ' mm');
+    function sizeLine(label, scan) {
+      if (!scan || !scan.cardMm) {
+        console.log('  ' + label + '  missing');
+        return;
+      }
+      const sc = scan.scale || {};
+      const dpi = scan.dpi || {};
+      console.log(
+        '  ' + label +
+        '  dpi ' + (dpi.dpiX == null ? '—' : dpi.dpiX.toFixed(2)) + ' x ' + (dpi.dpiY == null ? '—' : dpi.dpiY.toFixed(2)) +
+        '  card ' + scan.cardMm.width.toFixed(3) + ' x ' + scan.cardMm.height.toFixed(3) + ' mm' +
+        '  scale ' + (sc.widthScale == null ? '—' : sc.widthScale.toFixed(4)) + ' x ' + (sc.heightScale == null ? '—' : sc.heightScale.toFixed(4)) +
+        (sc.xyScaleDiffer ? '  FLAG xy scale' : '')
+      );
+      const ratios = scan.ratios || {};
+      ['top', 'bottom', 'left', 'right'].forEach(function (side) {
+        const s = scan.sides[side];
+        console.log(
+          '    ' + side.padEnd(6, ' ') +
+          ' ' + fmt(s.mm) + ' mm' +
+          '  conf ' + (s.confidence == null ? '—' : s.confidence.toFixed(2)) +
+          (s.withheld ? '  withheld' : '') +
+          (s.shape ? '  ' + s.shape : '')
+        );
+      });
+      console.log(
+        '    L/R ' + fmtRatio(ratios.leftOverRight) +
+        '  left share ' + fmtShare(ratios.leftShare) +
+        '   T/B ' + fmtRatio(ratios.topOverBottom) +
+        '  top share ' + fmtShare(ratios.topShare)
+      );
+    }
+    console.log(id);
+    sizeLine('up ', up);
+    sizeLine('180', rot);
     ['top', 'bottom', 'left', 'right'].forEach(function (side) {
       const s = card.sides[side];
       rows.push({
@@ -1366,16 +1474,23 @@ async function runDirectory(dir, opts) {
   if (!files.length) {
     return { ok: false, error: 'no scans in ' + dir, files: [] };
   }
-  const dpi = opts.dpi || DEFAULT_DPI;
   const measurements = [];
+  let dpiUsed = opts.dpi || DEFAULT_DPI;
   for (let i = 0; i < files.length; i++) {
     const parsed = parseScanName(files[i]);
-    process.stdout.write('measure ' + path.basename(files[i]) + '\n');
+    const fileDpi = readPngDpi(files[i]);
+    let dpi = opts.dpiExplicit ? opts.dpi : DEFAULT_DPI;
+    if (!opts.dpiExplicit && fileDpi.dpiX && fileDpi.dpiY) {
+      dpi = (fileDpi.dpiX + fileDpi.dpiY) / 2;
+    }
+    dpiUsed = dpi;
+    process.stdout.write('measure ' + path.basename(files[i]) + ' dpi ' + dpi.toFixed(3) + '\n');
     const result = await measureFile(files[i], dpi);
     measurements.push({
       card: parsed.card,
       orientation: parsed.orientation,
       file: files[i],
+      fileDpi: fileDpi,
       result: result
     });
     if (opts.overlayDir) {
@@ -1390,7 +1505,7 @@ async function runDirectory(dir, opts) {
     }
   }
   const previous = loadApproved(opts.out);
-  const key = buildAnswerKey(measurements, dpi, previous);
+  const key = buildAnswerKey(measurements, dpiUsed, previous);
   if (opts.out) {
     fs.mkdirSync(path.dirname(opts.out), { recursive: true });
     fs.writeFileSync(opts.out, JSON.stringify(key, null, 2) + '\n');
@@ -1637,7 +1752,8 @@ function parseArgs(argv) {
     out: path.join('reference', 'answer_key.json'),
     overlayDir: path.join('reference', 'overlays'),
     artifactDir: '/opt/cursor/artifacts/flatbed-overlays',
-    dpi: DEFAULT_DPI,
+    dpi: null,
+    dpiExplicit: false,
     selfTest: false
   };
   for (let i = 2; i < argv.length; i++) {
@@ -1646,7 +1762,10 @@ function parseArgs(argv) {
     else if (a === '--flatbed') opts.flatbed = argv[++i];
     else if (a === '--out') opts.out = argv[++i];
     else if (a === '--overlay-dir') opts.overlayDir = argv[++i];
-    else if (a === '--dpi') opts.dpi = Number(argv[++i]);
+    else if (a === '--dpi') {
+      opts.dpi = Number(argv[++i]);
+      opts.dpiExplicit = true;
+    }
     else if (a === '--help') opts.help = true;
   }
   return opts;
