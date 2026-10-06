@@ -1537,7 +1537,11 @@ function loadApproved(file) {
       keep[id] = {};
       const sides = (cards[id] && cards[id].sides) || {};
       Object.keys(sides).forEach(function (side) {
-        keep[id][side] = !!sides[side].approved;
+        keep[id][side] = {
+          approved: !!sides[side].approved,
+          approved_by: sides[side].approved_by || null,
+          approved_on: sides[side].approved_on || null
+        };
       });
     });
     return keep;
@@ -1564,7 +1568,12 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
     const agreed = combined.sides;
     const prev = previousApproved[id] || {};
     ['top', 'bottom', 'left', 'right'].forEach(function (side) {
-      if (prev[side]) agreed[side].approved = true;
+      const kept = prev[side];
+      const wasApproved = kept === true || (kept && kept.approved);
+      if (!wasApproved) return;
+      agreed[side].approved = true;
+      if (kept && kept.approved_by) agreed[side].approved_by = kept.approved_by;
+      if (kept && kept.approved_on) agreed[side].approved_on = kept.approved_on;
     });
     function scanRecord(entry) {
       if (!entry || !entry.result || !entry.result.ok) {

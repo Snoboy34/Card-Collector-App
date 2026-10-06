@@ -15,44 +15,52 @@
           "confidence": 0.677,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "upMm": 3.76,
           "rot180Mm": 3.527,
           "diffMm": 0.233,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-06"
         },
         "bottom": {
           "mm": 3.123,
           "confidence": 0.716,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "upMm": 3.014,
           "rot180Mm": 3.232,
           "diffMm": -0.218,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-06"
         },
         "left": {
           "mm": 3.102,
           "confidence": 0.722,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "upMm": 3.091,
           "rot180Mm": 3.113,
           "diffMm": -0.022,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-06"
         },
         "right": {
           "mm": 3.252,
           "confidence": 0.864,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "upMm": 3.274,
           "rot180Mm": 3.23,
           "diffMm": 0.044,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-06"
         }
       },
       "axes": {
@@ -4994,44 +5002,52 @@
           "confidence": 0.489,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "upMm": 3.531,
           "rot180Mm": 3.343,
           "diffMm": 0.188,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-06"
         },
         "bottom": {
           "mm": 3.994,
           "confidence": 0.631,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "upMm": 3.897,
           "rot180Mm": 4.091,
           "diffMm": -0.194,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-06"
         },
         "left": {
           "mm": 4.111,
           "confidence": 0.433,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "upMm": 4.095,
           "rot180Mm": 4.128,
           "diffMm": -0.032,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-06"
         },
         "right": {
           "mm": 3.428,
           "confidence": 0.916,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "upMm": 3.427,
           "rot180Mm": 3.43,
           "diffMm": -0.002,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-06"
         }
       },
       "axes": {
