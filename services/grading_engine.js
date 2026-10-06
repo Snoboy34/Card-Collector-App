@@ -1034,6 +1034,50 @@ function marginBandStats(data, w, h, ch, edge, widthPx) {
 }
 
 /**
+ * Along-side spread of the band 1 mm in from the cut. A printed margin is
+ * even. A photo or chrome design that reaches the edge is not.
+ */
+function edgeBandStddev(rgb, edge) {
+  const w = rgb.width;
+  const h = rgb.height;
+  const ch = rgb.channels || 3;
+  const pxX = w / CARD_WIDTH_MM;
+  const pxY = h / CARD_HEIGHT_MM;
+  const vals = [];
+  if (edge === 'left' || edge === 'right') {
+    const x = edge === 'left' ? pxX : (w - 1 - pxX);
+    const step = Math.max(1, Math.round(pxY * 1.5));
+    for (let y = Math.floor(h * 0.15); y < h * 0.85; y += step) {
+      const p = designOutline.sampleRgb(rgb.data, w, h, x, y, ch);
+      if (p) vals.push(lumaOf(p));
+    }
+  } else {
+    const y = edge === 'top' ? pxY : (h - 1 - pxY);
+    const step = Math.max(1, Math.round(pxX * 1.5));
+    for (let x = Math.floor(w * 0.15); x < w * 0.85; x += step) {
+      const p = designOutline.sampleRgb(rgb.data, w, h, x, y, ch);
+      if (p) vals.push(lumaOf(p));
+    }
+  }
+  if (vals.length < 8) return 0;
+  return stddev(vals);
+}
+
+/**
+ * Coverage of the run that set the published millimetre. The side's own
+ * coverage field is the wider body; a short tip can still be what is reported.
+ */
+function outlineRunCoverage(side) {
+  const elements = side && side.elements;
+  if (elements) {
+    for (let i = 0; i < elements.length; i++) {
+      if (elements[i].role === 'outline' && elements[i].coverage != null) return elements[i].coverage;
+    }
+  }
+  return (side && side.coverage) || 0;
+}
+
+/**
  * Border widths from the design-block outline, in 643×900-equivalent pixels.
  * A side the outline cannot identify is left null so that side is withheld.
  */
@@ -1050,7 +1094,13 @@ function measureDesignCentering(rgb) {
     const side = found[edge] || {};
     const axis = (edge === 'left' || edge === 'right') ? 'x' : 'y';
     const pxPerMm = axis === 'x' ? pxX : pxY;
-    const clear = !side.withheld && side.mm != null && isFinite(side.mm);
+    // The published millimetre comes from one run. A run shorter than a
+    // partial margin mark is not the design block. Publishing it is how an
+    // interior line becomes a "border". The outline element's own coverage
+    // is that run; side.coverage can be the wider body behind a short tip.
+    const runCov = outlineRunCoverage(side);
+    const fragment = runCov < designOutline.PARTIAL_COVERAGE;
+    const clear = !side.withheld && side.mm != null && isFinite(side.mm) && !fragment;
     designAccepted[edge] = clear;
     const width = clear ? mmTo643(side.mm, axis) : null;
     const points = (side.points || []).slice().sort(function (a, b) { return a.alongMm - b.alongMm; });
@@ -1078,7 +1128,10 @@ function measureDesignCentering(rgb) {
     });
     const flags = [];
     if (!clear) {
-      flags.push(edge + ': outline withheld (' + (side.reason || 'unclear') + ')');
+      const why = fragment && !side.withheld
+        ? 'covers ' + Math.round(runCov * 100) + '% of the side'
+        : (side.reason || 'unclear');
+      flags.push(edge + ': outline withheld (' + why + ')');
     }
     const band = clear ? marginBandStats(rgb.data, w, h, ch, edge, side.mm * pxPerMm) : { mean: null, stddev: null, baseline: null };
     scans[edge] = {
@@ -1097,6 +1150,29 @@ function measureDesignCentering(rgb) {
       maxDepthPx: Math.round(designOutline.SEARCH_TO_MM * (axis === 'x' ? (643 / CARD_WIDTH_MM) : (900 / CARD_HEIGHT_MM)))
     };
   });
+
+  function dropEdge(edge, why) {
+    if (scans[edge].width == null) return;
+    scans[edge].width = null;
+    scans[edge].profileWidth = null;
+    designAccepted[edge] = false;
+    scans[edge].flags.push(edge + ': outline withheld (' + why + ')');
+  }
+  // Full-bleed: design reaches both the top and the bottom cut, so those
+  // sides are not borders. Left and right are reported only as a pair,
+  // labeled design-referenced. The centering sub-grade stays blank.
+  let designReferenced = false;
+  const designAtEdge = edgeBandStddev(rgb, 'top') > BORDER_BAND_UNIFORM_MAX &&
+    edgeBandStddev(rgb, 'bottom') > BORDER_BAND_UNIFORM_MAX;
+  if (designAtEdge) {
+    dropEdge('top', 'design reaches the edge');
+    dropEdge('bottom', 'design reaches the edge');
+    if (scans.left.width != null && scans.right.width != null) designReferenced = true;
+    else {
+      dropEdge('left', 'one side is not a left-right reference');
+      dropEdge('right', 'one side is not a left-right reference');
+    }
+  }
 
   const leftW = scans.left.width;
   const rightW = scans.right.width;
@@ -1140,13 +1216,17 @@ function measureDesignCentering(rgb) {
     paperBaselines: pick('paperBaseline'),
     voteLowConfidenceEdges: [],
     designAccepted: designAccepted,
-    designSides: found
+    designSides: found,
+    designReferenced: designReferenced ? 'left-right' : null
   };
-  if (!detected) return result;
-  const totalH = leftW + rightW;
-  const totalV = topW + bottomW;
-  result.leftRightRatio = { left: (leftW / totalH) * 100, right: 100 - (leftW / totalH) * 100 };
-  result.topBottomRatio = { top: (topW / totalV) * 100, bottom: 100 - (topW / totalV) * 100 };
+  if (leftW != null && rightW != null && (detected || designReferenced)) {
+    const totalH = leftW + rightW;
+    result.leftRightRatio = { left: (leftW / totalH) * 100, right: 100 - (leftW / totalH) * 100 };
+  }
+  if (detected) {
+    const totalV = topW + bottomW;
+    result.topBottomRatio = { top: (topW / totalV) * 100, bottom: 100 - (topW / totalV) * 100 };
+  }
   return result;
 }
 
@@ -3060,9 +3140,10 @@ async function gradeBuffer(buffer, options) {
         incompleteReason: incompleteReason,
         printCenteringDetected: false,
         centeringMetrics: {
-          leftRightRatio: null,
+          leftRightRatio: centeringMeasurement.designReferenced ? centeringMeasurement.leftRightRatio : null,
           topBottomRatio: null,
           detected: false,
+          designReferenced: centeringMeasurement.designReferenced || null,
           borderWidthsMm: centeringMeasurement.widthsMm,
           centeringWarp: centeringMeasurement.centeringWarp,
           lowConfidenceEdges: lowConfidenceEdges
