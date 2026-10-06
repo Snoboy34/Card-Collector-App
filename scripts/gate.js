@@ -210,6 +210,49 @@ async function deckStep(o) {
   };
 }
 
+async function answerKeyStep(o) {
+  if (!o.requireData) {
+    return { step: 'answer_key_phone', status: 'SKIP', detail: 'needs --require-data', failures: [] };
+  }
+  const phone = require('./answer_key_phone');
+  const keyFile = path.join(ROOT, 'reference', 'answer_key.json');
+  if (!fs.existsSync(keyFile)) {
+    return { step: 'answer_key_phone', status: 'SKIP', detail: 'no reference/answer_key.json', failures: [] };
+  }
+  try {
+    const result = await phone.checkApproved({
+      engineDir: o.candidateDir,
+      dataDir: o.dataDir,
+      uploadsDir: o.uploadsDir,
+      keyFile: keyFile
+    });
+    const outside = result.rows.filter(function (r) { return r.status === 'fail'; }).length;
+    const withheld = result.rows.filter(function (r) { return r.status === 'withheld'; }).length;
+    const passed = result.rows.filter(function (r) { return r.status === 'pass'; }).length;
+    const noFronts = !result.rows.length && result.failures.every(function (f) {
+      return f.indexOf('no saved front scan') !== -1;
+    });
+    if (noFronts && !o.requireData) {
+      return {
+        step: 'answer_key_phone',
+        status: 'SKIP',
+        detail: 'approved cards are not in this data',
+        failures: []
+      };
+    }
+    return {
+      step: 'answer_key_phone',
+      status: result.ok ? 'PASS' : 'FAIL',
+      detail: result.rows.length + ' edges · pass ' + passed + ' · withheld ' + withheld +
+        ' · outside ' + phone.TOLERANCE_MM + ' mm: ' + outside,
+      failures: result.failures,
+      log: result.lines.filter(function (line) { return line.indexOf('TD-') === 0; })
+    };
+  } catch (err) {
+    return { step: 'answer_key_phone', status: 'FAIL', detail: 'threw', failures: [String(err && err.message || err)] };
+  }
+}
+
 async function gate(options) {
   const o = Object.assign({}, options);
   o.candidateDir = path.resolve(o.candidateDir || ROOT);
@@ -227,6 +270,7 @@ async function gate(options) {
     steps.push({ step: 'compare_finders', status: status, detail: why, failures: o.requireData ? [why] : [] });
     steps.push({ step: 'deck_report', status: status, detail: why, failures: o.requireData ? [why] : [] });
     steps.push({ step: 'td_deck', status: status, detail: why, failures: o.requireData ? [why] : [] });
+    steps.push({ step: 'answer_key_phone', status: status, detail: why, failures: o.requireData ? [why] : [] });
   } else {
     const quiet = function (fn) {
       return async function () {
@@ -239,6 +283,7 @@ async function gate(options) {
     steps.push(await quiet(compareStep)());
     steps.push(await quiet(deckStep)());
     steps.push(await quiet(tdStep)());
+    steps.push(await answerKeyStep(o));
   }
 
   const ok = steps.every(function (s) { return s.status !== 'FAIL'; });
@@ -248,6 +293,7 @@ async function gate(options) {
   steps.forEach(function (s) {
     // Indented so a suite that prints a gate table is not miscounted as PASS/FAIL lines.
     lines.push('  ' + pad(s.status, 5) + pad(s.step, 28) + s.detail);
+    (s.log || []).forEach(function (f) { lines.push('        ' + f); });
     (s.failures || []).forEach(function (f) { lines.push('        ' + f); });
   });
   lines.push(ok ? 'GATE PASS' : 'GATE FAIL');

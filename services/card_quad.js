@@ -281,12 +281,11 @@ function warpWithHomography(src, H, outW, outH) {
 const REFINE_EXPAND_FRAC = 0.02;
 
 /**
- * Tighten a quad to the physical cut edge. A detector quad that is a few
- * pixels outside the card leaves a background sliver at the warp edge;
- * a few pixels inside eats the border. Both corrupt the inward border
- * scan, so: warp with a small outward margin, find the strongest
- * background→card step near the expected edge on each side (middle 50% of
- * the side, un-normalized grey), and map those edges back to the photo.
+ * Tighten a quad to the physical cut. A detector quad that sits on an
+ * inner printed line eats the border, so the search looks several
+ * millimetres outside the quad and takes the first sustained step off
+ * the background colour. A stronger step farther in (the frame) is not
+ * the cut.
  *
  * @param {{data:Buffer,width:number,height:number,channels:number}} src interleaved photo
  * @param {{tl:number[],tr:number[],br:number[],bl:number[]}} quad ordered quad in src pixels
@@ -294,8 +293,16 @@ const REFINE_EXPAND_FRAC = 0.02;
  *   stepSize, runnerUpRatio (strongest separate step / chosen), runnerUpOffsetPx (output px)
  */
 function refineQuadToCut(src, quad, outW, outH) {
-  const ex = Math.max(4, Math.round(outW * REFINE_EXPAND_FRAC));
-  const ey = Math.max(4, Math.round(outH * REFINE_EXPAND_FRAC));
+  // Look far enough outside the detector quad to start on the backdrop
+  // when the detector sat on an inner printed line. A wide white border
+  // is several millimetres, so a short window samples that border and
+  // then treats the frame as the cut. The cut is the first sustained
+  // step off the background, not the strongest step in the window.
+  const ppmX = outW / 63.5;
+  const ppmY = outH / 88.9;
+  const CUT_SEARCH_MM = 9;
+  const ex = Math.max(4, Math.round(CUT_SEARCH_MM * ppmX));
+  const ey = Math.max(4, Math.round(CUT_SEARCH_MM * ppmY));
   const bigW = outW + 2 * ex;
   const bigH = outH + 2 * ey;
   // Homography from the inner (card-sized) output rectangle to the quad, then
@@ -306,84 +313,134 @@ function refineQuadToCut(src, quad, outW, outH) {
   );
   const big = warpWithHomography(src, Hin, bigW, bigH);
   const ch = big.channels;
-  function grey(x, y) {
+  function rgbOf(x, y) {
     const i = (y * bigW + x) * ch;
-    if (ch >= 3) return (big.data[i] + big.data[i + 1] + big.data[i + 2]) / 3;
-    return big.data[i];
+    if (ch >= 3) return [big.data[i], big.data[i + 1], big.data[i + 2]];
+    const g = big.data[i];
+    return [g, g, g];
   }
-  // Mean profile along the inward direction, averaged across the middle half.
-  function profile(edge, length) {
-    const out = new Float64Array(length);
+  function colorDist(a, b) {
+    const dr = a[0] - b[0];
+    const dg = a[1] - b[1];
+    const db = a[2] - b[2];
+    return Math.sqrt(dr * dr + dg * dg + db * db);
+  }
+  function findCut(edge, expand, ppm) {
+    const length = 2 * expand + 2;
     const alongMax = (edge === 'left' || edge === 'right') ? bigH : bigW;
     const a0 = Math.floor(alongMax * 0.25);
     const a1 = Math.floor(alongMax * 0.75);
-    for (let i = 0; i < length; i++) {
-      let sum = 0;
-      for (let a = a0; a < a1; a++) {
-        if (edge === 'left') sum += grey(i, a);
-        else if (edge === 'right') sum += grey(bigW - 1 - i, a);
-        else if (edge === 'top') sum += grey(a, i);
-        else sum += grey(a, bigH - 1 - i);
+    const stepA = Math.max(1, Math.floor((a1 - a0) / 36));
+    function at(d, a) {
+      if (edge === 'left') return rgbOf(Math.min(bigW - 1, d), a);
+      if (edge === 'right') return rgbOf(Math.max(0, bigW - 1 - d), a);
+      if (edge === 'top') return rgbOf(a, Math.min(bigH - 1, d));
+      return rgbOf(a, Math.max(0, bigH - 1 - d));
+    }
+    const bgDepth = Math.max(2, Math.round(0.35 * ppm));
+    const bgPx = [[], [], []];
+    for (let d = 0; d < bgDepth; d++) {
+      for (let a = a0; a < a1; a += stepA) {
+        const p = at(d, a);
+        bgPx[0].push(p[0]);
+        bgPx[1].push(p[1]);
+        bgPx[2].push(p[2]);
       }
-      out[i] = sum / (a1 - a0);
     }
-    return out;
-  }
-  function findCut(edge, expand) {
-    const length = 2 * expand + 2;
-    const p = profile(edge, length);
-    let best = expand - 1;
+    const paper = bgPx.map(function (arr) {
+      const s = arr.sort(function (x, y) { return x - y; });
+      return s[s.length >> 1];
+    });
+    const profile = new Float64Array(length);
+    for (let d = 0; d < length; d++) {
+      let sum = 0;
+      let n = 0;
+      for (let a = a0; a < a1; a += stepA) {
+        sum += colorDist(at(d, a), paper);
+        n += 1;
+      }
+      profile[d] = n ? sum / n : 0;
+    }
+    let base = 0;
+    for (let d = 0; d < bgDepth; d++) base += profile[d];
+    base /= bgDepth;
+    let mad = 0;
+    for (let d = 0; d < bgDepth; d++) mad += Math.abs(profile[d] - base);
+    mad /= bgDepth;
+    const thresh = Math.max(18, base + 8, base + mad * 6);
+    const sustain = Math.max(2, Math.round(0.45 * ppm));
+    let hit = -1;
+    for (let i = bgDepth; i < length - sustain; i++) {
+      if (profile[i] < thresh) continue;
+      let above = 0;
+      for (let j = 0; j < sustain; j++) {
+        if (profile[i + j] >= thresh * 0.85) above += 1;
+      }
+      if (above >= sustain * 0.7) { hit = i; break; }
+    }
+    const steps = new Float64Array(Math.max(0, length - 1));
+    let best = expand;
     let bestStep = -1;
-    const steps = new Float64Array(length - 1);
     for (let i = 0; i < length - 1; i++) {
-      const step = Math.abs(p[i + 1] - p[i]);
-      steps[i] = step;
-      if (step > bestStep) { bestStep = step; best = i; }
+      steps[i] = Math.abs(profile[i + 1] - profile[i]);
+      if (steps[i] > bestStep) { bestStep = steps[i]; best = i; }
     }
-    // Runner-up = strongest separate peak of |step| (a local maximum at
-    // least 2 samples from the chosen one), so the blurred shoulder of the
-    // chosen edge never counts as a second edge.
+    if (hit < 0) hit = best;
+    // The threshold hit can sit on the plateau, where the local step is
+    // small. The chosen step is the shoulder just outside that hit.
+    let chosenStep = 0;
+    let chosenAt = hit;
+    const shoulder = Math.max(2, Math.round(0.45 * ppm));
+    for (let i = Math.max(0, hit - shoulder); i <= Math.min(steps.length - 1, hit); i++) {
+      if (steps[i] > chosenStep) { chosenStep = steps[i]; chosenAt = i; }
+    }
+    if (!(chosenStep > 0)) { chosenStep = bestStep; chosenAt = best; }
     let runner = -1;
     let runnerStep = 0;
+    const runnerReach = Math.max(4, Math.round(1.5 * ppm));
+    const sameEdge = Math.max(2, Math.round(0.25 * ppm));
     for (let i = 0; i < steps.length; i++) {
-      if (Math.abs(i - best) < 2) continue;
+      if (Math.abs(i - chosenAt) <= sameEdge) continue;
+      if (Math.abs(i - chosenAt) > runnerReach) continue;
       const left = i > 0 ? steps[i - 1] : -Infinity;
       const right = i < steps.length - 1 ? steps[i + 1] : -Infinity;
-      if (steps[i] >= left && steps[i] >= right && steps[i] > runnerStep) { runnerStep = steps[i]; runner = i; }
+      if (steps[i] >= left && steps[i] >= right && steps[i] > runnerStep) {
+        runnerStep = steps[i];
+        runner = i;
+      }
     }
-    const stepInfo = {
-      stepSize: Math.round(bestStep * 10) / 10,
-      runnerUpRatio: runner >= 0 && bestStep > 0 ? Math.round((runnerStep / bestStep) * 1000) / 1000 : 0,
-      runnerUpOffsetPx: runner >= 0 ? runner - best : null
+    cutSteps[edge] = {
+      stepSize: Math.round((chosenStep > 0 ? chosenStep : bestStep) * 10) / 10,
+      runnerUpRatio: runner >= 0 && chosenStep > 0 ? Math.round((runnerStep / chosenStep) * 1000) / 1000 : 0,
+      runnerUpOffsetPx: runner >= 0 ? runner - hit : null
     };
-    // Sub-pixel: locate the half-level crossing between the background and
-    // card plateaus around the strongest step, instead of snapping to a
-    // whole warp pixel. Returned value is the first card-side position
-    // (crossing + 0.5), so an exact pixel-boundary edge gives an integer.
-    const lo = Math.max(0, best - 3);
-    const hi = Math.min(length - 1, best + 4);
-    let bg = 0;
-    for (let k = lo; k <= best; k++) bg += p[k];
-    bg /= (best - lo + 1);
-    let card = 0;
-    for (let k = best + 1; k <= hi; k++) card += p[k];
-    card /= Math.max(1, hi - best);
-    const half = (bg + card) / 2;
-    let crossing = best + 0.5;
-    for (let k = lo; k < hi; k++) {
-      if ((p[k] - half) * (p[k + 1] - half) <= 0 && p[k + 1] !== p[k]) {
-        crossing = k + (half - p[k]) / (p[k + 1] - p[k]);
+    // The plateau is on the card, past the cut's soft shoulder. Sampling
+    // the shoulder itself pulls the 50% point outward into the background.
+    const inLo = Math.min(length - 1, hit + Math.max(2, Math.round(0.7 * ppm)));
+    const inHi = Math.min(length - 1, inLo + Math.max(2, Math.round(0.35 * ppm)));
+    let inner = 0;
+    let nInner = 0;
+    for (let k = inLo; k <= inHi; k++) { inner += profile[k]; nInner += 1; }
+    inner = nInner ? inner / nInner : profile[Math.min(length - 1, hit)];
+    const target = base + 0.5 * (inner - base);
+    let crossing = hit;
+    const lo = Math.max(1, hit - 2);
+    // Walk back from the card plateau. The first rise off the background
+    // can be a shadow ledge that only gets halfway; the cut is the step
+    // that actually arrives at the card.
+    for (let k = inHi; k >= lo; k--) {
+      if (profile[k - 1] <= target && profile[k] >= target && profile[k] !== profile[k - 1]) {
+        crossing = (k - 1) + (target - profile[k - 1]) / (profile[k] - profile[k - 1]);
         break;
       }
     }
-    cutSteps[edge] = stepInfo;
-    return crossing + 0.5;
+    return crossing;
   }
   const cutSteps = {};
-  const leftCut = findCut('left', ex);
-  const rightCut = findCut('right', ex);
-  const topCut = findCut('top', ey);
-  const bottomCut = findCut('bottom', ey);
+  const leftCut = findCut('left', ex, ppmX);
+  const rightCut = findCut('right', ex, ppmX);
+  const topCut = findCut('top', ey, ppmY);
+  const bottomCut = findCut('bottom', ey, ppmY);
   const x0 = leftCut;
   const x1 = bigW - 1 - rightCut;
   const y0 = topCut;

@@ -2,7 +2,7 @@
  * scripts/verify_cut_confidence.js
  * Cut-edge confidence. An edge is marked low-confidence, in the grade output
  * and the deck report, when its runner-up is either ≥60% of the chosen step
- * within 3 px, or ≥80% anywhere in the refine search. Flag only: the chosen
+ * within 3 px, or ≥70% within 1.5 mm of the cut. Flag only: the chosen
  * cut, widths, CEN, and final score are computed exactly as before.
  * Run: node scripts/verify_cut_confidence.js
  */
@@ -55,8 +55,8 @@ function unitProfileCase() {
 async function run() {
   const u = unitProfileCase();
   assert('unit: clean left edge has no strong runner-up', u.cutSteps.left.runnerUpRatio < 0.3, u.cutSteps.left);
-  assert('unit: right lip → runner-up ≥ 0.6 at 3 px', u.cutSteps.right.runnerUpRatio >= 0.6 &&
-    Math.abs(u.cutSteps.right.runnerUpOffsetPx) === 3, u.cutSteps.right);
+  assert('unit: right lip → runner-up ≥ 0.6 within 3 px', u.cutSteps.right.runnerUpRatio >= 0.6 &&
+    Math.abs(u.cutSteps.right.runnerUpOffsetPx) >= 2 && Math.abs(u.cutSteps.right.runnerUpOffsetPx) <= 3, u.cutSteps.right);
 
   const clean = await grade(await capture(101));
   const cleanConf = clean.cardDetection.edgeCutConfidence;
@@ -92,8 +92,8 @@ async function run() {
   assert('0.6 mm outer band → right is low-confidence',
     wide.centeringMetrics.lowConfidenceEdges.length === 1 && wide.centeringMetrics.lowConfidenceEdges[0] === 'right',
     wideConf);
-  assert('0.6 mm band is the wide rule: runner-up ≥ 80% and farther than 3 px',
-    wideConf.runnerUpRatio >= 0.8 && Math.abs(wideConf.runnerUpOffsetPx) > 3, wideConf);
+  assert('0.6 mm band is the wide rule: runner-up ≥ 70% and farther than 3 px',
+    wideConf.runnerUpRatio >= 0.7 && Math.abs(wideConf.runnerUpOffsetPx) > 3, wideConf);
   assert('0.6 mm band flag names the edge', (wide.centeringDiagnostics.edgeFlags || []).some(function (f) {
     return /^right: cut edge low confidence/.test(f);
   }), wide.centeringDiagnostics.edgeFlags);

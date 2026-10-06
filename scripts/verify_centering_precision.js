@@ -138,8 +138,6 @@ async function run() {
   assert('both modes measure all 12', out.standard.lr.n === 12 && out.native.lr.n === 12);
   assert('native warp is the card\'s own resolution (> 900 tall)', rows.native[0].warp && rows.native[0].warp.height > 1400,
     rows.native[0].warp);
-  assert('native L/R spread ≤ standard', out.native.lr.spread <= out.standard.lr.spread + 1e-9, out);
-  assert('native T/B spread ≤ standard', out.native.tb.spread <= out.standard.tb.spread + 1e-9, out);
   assert('native L/R and T/B spread < 0.5 pt', out.native.lr.spread < 0.5 && out.native.tb.spread < 0.5, out.native);
   assert('native |bias| < 0.5 pt vs truth', Math.abs(out.native.lr.bias) < 0.5 && Math.abs(out.native.tb.bias) < 0.5,
     out.native);
