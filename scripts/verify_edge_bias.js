@@ -149,8 +149,7 @@ async function run() {
   const deckB = await writeDeck('b', repeat(4, { notch: true }));
   const b = await edgeBias({ appDir: deckB, n: 4 });
   console.log(b.text);
-  assert('B: every scan has a top outlier', b.summary.top.scansWithOutliers === 4, b.summary.top);
-  assert('B: outliers are shallow at k7', /^k7−×4/.test(b.summary.top.outlierIndexes), b.summary.top.outlierIndexes);
+  assert('B: the notch is not the outline', b.summary.top.scansWithOutliers === 0, b.summary.top);
   assert('B: top width unaffected (|mean − 3.0| < 0.1 mm)', Math.abs(b.summary.top.mm.mean - 3.0) < 0.1, b.summary.top.mm);
 
   const specsC = repeat(4, { trimTopMm: 0.2 }).concat(repeat(4, { trimTopMm: 0.2, rotated: true }));

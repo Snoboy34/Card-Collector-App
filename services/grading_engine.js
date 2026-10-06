@@ -18,8 +18,9 @@
  *      greyscale, normalize, mild blur to flatten smartphone computational
  *      photography before any measurement.
  *   2. Quad-core metrology against the uploaded still:
- *        - Centering: contrast-variance inward scans along all four borders
- *          (pixel-perfect L/R and T/B print-border ratios).
+ *        - Centering: design-block outline on the warped card. The border is
+ *          the space from the card edge to the outermost points of the
+ *          printed design (photo, frame, nameplate, trim).
  *        - Surface: high-frequency residual clusters (scratches), compact
  *          mid-frequency blobs (dimples/dents), long linear faults (creases).
  *        - Edges: perimeter whitening / silvering cluster count.
@@ -72,10 +73,11 @@ const scanLevel = require('../public/scan_level');
 const cardQuad = require('./card_quad');
 const scanDebug = require('./scan_debug');
 const backScan = require('./back_scan');
+const designOutline = require('./design_outline');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.01-border-band';
+const ENGINE_VERSION = '2026.10.06-design-outline';
 
 let sharp = null;
 try {
@@ -987,6 +989,167 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
  *
  * @returns {{ leftRightRatio: {left:number, right:number}|null, topBottomRatio: {top:number, bottom:number}|null, detected: boolean, widths: object, samples: object }}
  */
+function mmTo643(mm, axis) {
+  if (mm == null || !isFinite(mm)) return null;
+  const per = axis === 'x' ? (643 / CARD_WIDTH_MM) : (900 / CARD_HEIGHT_MM);
+  return mm * per;
+}
+
+function lumaOf(rgb) {
+  return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+}
+
+/** Grey of the printed margin, from just inside the cut to the outline. */
+function marginBandStats(data, w, h, ch, edge, widthPx) {
+  const greys = [];
+  const baseline = [];
+  const alongMax = (edge === 'left' || edge === 'right') ? h : w;
+  const a0 = Math.floor(alongMax * EDGE_SPAN_START);
+  const a1 = Math.floor(alongMax * EDGE_SPAN_END);
+  const start = 2;
+  const end = Math.max(start + 2, Math.floor(widthPx) - 1);
+  const step = Math.max(1, Math.floor((a1 - a0) / 24));
+  for (let a = a0; a < a1; a += step) {
+    for (let d = start; d < end; d++) {
+      let x;
+      let y;
+      if (edge === 'left') { x = d; y = a; }
+      else if (edge === 'right') { x = w - 1 - d; y = a; }
+      else if (edge === 'top') { x = a; y = d; }
+      else { x = a; y = h - 1 - d; }
+      const p = designOutline.sampleRgb(data, w, h, x, y, ch);
+      if (!p) continue;
+      const g = lumaOf(p);
+      greys.push(g);
+      if (d < start + 4) baseline.push(g);
+    }
+  }
+  if (!greys.length) return { mean: null, stddev: null, baseline: null };
+  const m = mean(greys);
+  return {
+    mean: m,
+    stddev: stddev(greys),
+    baseline: baseline.length ? mean(baseline) : m
+  };
+}
+
+/**
+ * Border widths from the design-block outline, in 643×900-equivalent pixels.
+ * A side the outline cannot identify is left null so that side is withheld.
+ */
+function measureDesignCentering(rgb) {
+  const w = rgb.width;
+  const h = rgb.height;
+  const ch = rgb.channels || 3;
+  const pxX = w / CARD_WIDTH_MM;
+  const pxY = h / CARD_HEIGHT_MM;
+  const found = designOutline.measureRect(rgb.data, w, h, pxX, pxY, ch);
+  const designAccepted = {};
+  const scans = {};
+  ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+    const side = found[edge] || {};
+    const axis = (edge === 'left' || edge === 'right') ? 'x' : 'y';
+    const pxPerMm = axis === 'x' ? pxX : pxY;
+    const clear = !side.withheld && side.mm != null && isFinite(side.mm);
+    designAccepted[edge] = clear;
+    const width = clear ? mmTo643(side.mm, axis) : null;
+    const points = (side.points || []).slice().sort(function (a, b) { return a.alongMm - b.alongMm; });
+    const samples = [];
+    const lines = [];
+    const shown = [];
+    if (points.length) {
+      const nShow = Math.min(EDGE_LINE_COUNT, points.length);
+      for (let k = 0; k < nShow; k++) {
+        const idx = nShow === 1 ? 0 : Math.round(k * (points.length - 1) / (nShow - 1));
+        shown.push(points[idx]);
+      }
+    }
+    shown.forEach(function (p) {
+      const pos = mmTo643(p.depth, axis);
+      if (pos == null) return;
+      samples.push(pos);
+      const alongPer = axis === 'x' ? (900 / CARD_HEIGHT_MM) : (643 / CARD_WIDTH_MM);
+      lines.push({
+        at: Math.round(p.alongMm * alongPer),
+        pos: round2(pos),
+        inGroup: clear,
+        threshold: null
+      });
+    });
+    const flags = [];
+    if (!clear) {
+      flags.push(edge + ': outline withheld (' + (side.reason || 'unclear') + ')');
+    }
+    const band = clear ? marginBandStats(rgb.data, w, h, ch, edge, side.mm * pxPerMm) : { mean: null, stddev: null, baseline: null };
+    scans[edge] = {
+      width: width,
+      samples: samples,
+      lines: lines,
+      flags: flags,
+      bandStddev: band.stddev,
+      baseline: band.baseline,
+      paperBandMean: band.mean,
+      paperBandStddev: band.stddev,
+      paperBaseline: band.baseline,
+      voteLowConfidence: false,
+      trigger: 0,
+      profileWidth: width == null ? null : round2(width),
+      maxDepthPx: Math.round(designOutline.SEARCH_TO_MM * (axis === 'x' ? (643 / CARD_WIDTH_MM) : (900 / CARD_HEIGHT_MM)))
+    };
+  });
+
+  const leftW = scans.left.width;
+  const rightW = scans.right.width;
+  const topW = scans.top.width;
+  const bottomW = scans.bottom.width;
+  const detected = leftW != null && rightW != null && topW != null && bottomW != null;
+  const edgeFlags = [].concat(scans.left.flags, scans.right.flags, scans.top.flags, scans.bottom.flags);
+  function oppositeFlag(axis, aName, a, bName, b) {
+    if (a == null || b == null || a + b <= 0) return;
+    const share = 100 * Math.max(a, b) / (a + b);
+    if (share > EDGE_OPPOSITE_FLAG_SHARE) {
+      edgeFlags.push(axis + ' ' + round2(share) + '/' + round2(100 - share) + ' — check the ' +
+        (a > b ? aName : bName) + ' edge (flag only)');
+    }
+  }
+  oppositeFlag('L/R', 'left', leftW, 'right', rightW);
+  oppositeFlag('T/B', 'top', topW, 'bottom', bottomW);
+  const pick = function (key) {
+    return {
+      left: scans.left[key], right: scans.right[key], top: scans.top[key], bottom: scans.bottom[key]
+    };
+  };
+  const result = {
+    leftRightRatio: null,
+    topBottomRatio: null,
+    detected: detected,
+    widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
+    samples: pick('samples'),
+    sampleLines: pick('lines'),
+    edgeFlags: edgeFlags,
+    edgeProfiles: {
+      left: { trigger: scans.left.trigger, profileWidth: scans.left.profileWidth, maxDepthPx: scans.left.maxDepthPx },
+      right: { trigger: scans.right.trigger, profileWidth: scans.right.profileWidth, maxDepthPx: scans.right.maxDepthPx },
+      top: { trigger: scans.top.trigger, profileWidth: scans.top.profileWidth, maxDepthPx: scans.top.maxDepthPx },
+      bottom: { trigger: scans.bottom.trigger, profileWidth: scans.bottom.profileWidth, maxDepthPx: scans.bottom.maxDepthPx }
+    },
+    bandStddev: pick('bandStddev'),
+    baselines: pick('baseline'),
+    paperBandMean: pick('paperBandMean'),
+    paperBandStddev: pick('paperBandStddev'),
+    paperBaselines: pick('paperBaseline'),
+    voteLowConfidenceEdges: [],
+    designAccepted: designAccepted,
+    designSides: found
+  };
+  if (!detected) return result;
+  const totalH = leftW + rightW;
+  const totalV = topW + bottomW;
+  result.leftRightRatio = { left: (leftW / totalH) * 100, right: 100 - (leftW / totalH) * 100 };
+  result.topBottomRatio = { top: (topW / totalV) * 100, bottom: 100 - (topW / totalV) * 100 };
+  return result;
+}
+
 function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel, options) {
   const scale = options && options.scale > 0 ? options.scale : 1;
   const leftScan = findBorderWidth(getPixel, 'left', cardWidth, cardHeight, getPaperPixel, scale);
@@ -1486,16 +1649,19 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
         'px is below ' + BORDER_MIN_MEDIAN_WIDTH_PX + 'px'
       );
     }
+    // A clear design-block outline already ignored partial margin marks.
+    // Uniformity of that margin is not a reason to drop the outline.
+    const outlined = measurement.designAccepted && measurement.designAccepted[edge];
     const rawSd = finiteOrNull(paperBandStddev[edge]);
-    if (rawSd != null && rawSd > BORDER_BAND_UNIFORM_MAX) nonUniform.push(edge);
-    if (bandGrey != null && interiorMean != null &&
+    if (!outlined && rawSd != null && rawSd > BORDER_BAND_UNIFORM_MAX) nonUniform.push(edge);
+    if (!outlined && bandGrey != null && interiorMean != null &&
         !bandIsDistinct(bandGrey, interiorMean, bandRgb, interiorRgb)) {
       reasons.push(
         edge + ' border band grey ' + round2(bandGrey) +
         ' is not distinct from the interior (' + round2(interiorMean) + ')'
       );
     }
-    if (bandGrey != null && backdropGrey != null &&
+    if (!outlined && bandGrey != null && backdropGrey != null &&
         !bandIsDistinct(bandGrey, backdropGrey, bandRgb, backdropRgb)) {
       reasons.push(
         edge + ' border band grey ' + round2(bandGrey) +
@@ -2262,12 +2428,12 @@ const CENTERING_WARP_MAX_HEIGHT = 2400;
 // A second cut-like step means the refined cut could be either one. Flag the
 // edge (the chosen cut and every measured value stay as they are) when:
 //   close — runner-up ≥ 60% of the chosen step and within 3 px, or
-//   strong — runner-up ≥ 80% anywhere in the refine search (the 2% expanded
-//   margin, at least 4 px). The 0.6 mm outer band is this second case:
-//   about 90% as strong, about 6 px away, so the 3 px window missed it.
+//   strong — runner-up ≥ 70% within 1.5 mm of the cut. The 0.6 mm outer
+//   band is this second case: about 70% as strong, about 6 px away.
+//   A printed frame a few millimetres inside is not a second cut.
 const CUT_RUNNER_UP_RATIO = 0.6;
 const CUT_RUNNER_UP_MAX_PX = 3;
-const CUT_RUNNER_UP_WIDE_RATIO = 0.8;
+const CUT_RUNNER_UP_WIDE_RATIO = 0.7;
 const SERVER_DETECT_DIM = 900;
 
 /**
@@ -2577,7 +2743,9 @@ async function locateCard(buffer, options) {
  */
 async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, getPaper643, box643) {
   let measurement;
-  if (!warpInfo || warpInfo.height === box643.height) {
+  if (centeringWarped && centeringWarped.data && (centeringWarped.channels || 3) >= 3) {
+    measurement = measureDesignCentering(centeringWarped);
+  } else if (!warpInfo || warpInfo.height === box643.height) {
     measurement = measurePrintCentering(getPixel643, box643.width, box643.height, getPaper643);
   } else {
     const scale = warpInfo.height / box643.height;
