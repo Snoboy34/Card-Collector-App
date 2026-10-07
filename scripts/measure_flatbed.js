@@ -17,6 +17,11 @@
  * the width is then the outermost points of the design block. If those
  * points are not clear, that side is withheld.
  *
+ * A found quad that is not a card fails closed. sizeOk is true only when
+ * the quad is within 2.5 mm (sum of absolute edge errors) of 63.5 × 88.9 mm
+ * in either orientation. Otherwise every side is withheld with reason
+ * not-card-sized, and no width is published.
+ *
  * A 180° pair cancels a directional scanner bias. The answer-key value is
  * the mean of the two orientations. An axis is kept only when the bias
  * estimated from each of its two sides agrees. The bias is reported and
@@ -1352,6 +1357,8 @@ function measureImage(data, w, h, dpi) {
   const heightErr = Math.abs(quad.heightMm - NOMINAL_H_MM);
   const swapped = Math.abs(quad.widthMm - NOMINAL_H_MM) + Math.abs(quad.heightMm - NOMINAL_W_MM);
   const direct = widthErr + heightErr;
+  const sizeOk = Math.min(direct, swapped) < 2.5;
+  if (!sizeOk) withholdNotCardSized(sides);
   return {
     ok: true,
     dpi: dpi,
@@ -1361,10 +1368,20 @@ function measureImage(data, w, h, dpi) {
       width: roundMm(quad.widthMm),
       height: roundMm(quad.heightMm)
     },
-    sizeOk: Math.min(direct, swapped) < 2.5,
+    sizeOk: sizeOk,
     corners: quad.corners,
     sides: sides
   };
+}
+
+function withholdNotCardSized(sides) {
+  ['top', 'bottom', 'left', 'right'].forEach(function (name) {
+    const side = sides[name];
+    if (!side) return;
+    side.mm = null;
+    side.withheld = true;
+    side.reason = 'not-card-sized';
+  });
 }
 
 function borderRatios(sides) {
@@ -1696,7 +1713,7 @@ function buildOverlaySvg(result, geom) {
     const labelX = (side.edge.a.x + side.edge.b.x) / 2 + side.edge.nx * 40 / scale;
     const labelY = (side.edge.a.y + side.edge.b.y) / 2 + side.edge.ny * 40 / scale;
     const text = side.withheld
-      ? name + ' withheld'
+      ? name + ' withheld' + (side.reason ? ' (' + side.reason + ')' : '')
       : name + ' ' + side.mm.toFixed(2) + ' mm';
     const anchor = name === 'right' ? 'end' : (name === 'left' ? 'start' : 'middle');
     parts.push(
@@ -2382,6 +2399,30 @@ async function selfTest() {
   }).rotate(2, { background: { r: pink[0], g: pink[1], b: pink[2] } }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const tiltedM = measureImage(tiltedPng.data, tiltedPng.info.width, tiltedPng.info.height, dpi);
   check('tilted card found', tiltedM.ok && tiltedM.sizeOk, tiltedM.ok ? tiltedM.cardMm : tiltedM.error);
+  const tiny = drawSynthetic({
+    dpi: dpi,
+    marginMm: 4,
+    cardWmm: 40,
+    cardHmm: 55,
+    pink: pink,
+    white: white,
+    photo: photo,
+    frameMm: 1.0,
+    top: constantEdge(2.0, blue, []),
+    bottom: constantEdge(2.2, blue, []),
+    left: constantEdge(1.8, blue, []),
+    right: constantEdge(1.9, blue, [])
+  });
+  const tinyM = measureImage(tiny.data, tiny.width, tiny.height, dpi);
+  check('undersized quad found', tinyM.ok === true && tinyM.sizeOk === false, tinyM.ok ? tinyM.cardMm : tinyM.error);
+  if (tinyM.ok) {
+    ['top', 'bottom', 'left', 'right'].forEach(function (name) {
+      const side = tinyM.sides[name];
+      check('undersized ' + name + ' withheld',
+        side.withheld === true && side.mm == null && side.reason === 'not-card-sized',
+        sideBrief(side));
+    });
+  }
   if (tiltedM.ok) {
     check('tilted top', near(tiltedM.sides.top.mm, 3.4, 0.08), sideBrief(tiltedM.sides.top));
     check('tilted bottom', near(tiltedM.sides.bottom.mm, 4.2, 0.08), sideBrief(tiltedM.sides.bottom));
