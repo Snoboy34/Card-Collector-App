@@ -1,0 +1,10 @@
+{
+  "TD-01_up.png": { "deck": "TD-01", "orientation": "up" },
+  "TD-01_180.png": { "deck": "TD-01", "orientation": "180" },
+  "TD-02_up.png": { "deck": "TD-02", "orientation": "up" },
+  "TD-02_180.png": { "deck": "TD-02", "orientation": "180" },
+  "Lavitar_up.png": { "deck": "TD-03", "orientation": "up" },
+  "Lavitar_180.png": { "deck": "TD-03", "orientation": "180" },
+  "Fouts_up.png": { "deck": "TD-04", "orientation": "up" },
+  "Fouts_180.png": { "deck": "TD-04", "orientation": "180" }
+}
