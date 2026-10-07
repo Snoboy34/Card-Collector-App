@@ -1910,7 +1910,7 @@ async function measureFile(file, dpi) {
 
 function parseScanName(file) {
   const base = path.basename(file);
-  const m = /^(TD-\d+)_(up|180)\.png$/i.exec(base);
+  const m = /^(TD-\d+|KARROS)_(up|180)\.png$/i.exec(base);
   if (!m) return null;
   return { card: m[1].toUpperCase(), orientation: m[2].toLowerCase(), file: file };
 }
@@ -1975,7 +1975,7 @@ function defaultFlatbedDir() {
 function listScans(dir) {
   if (!dir || !fs.existsSync(dir)) return [];
   return fs.readdirSync(dir)
-    .filter(function (name) { return /^TD-\d+_(up|180)\.png$/i.test(name); })
+    .filter(function (name) { return /^(TD-\d+|KARROS)_(up|180)\.png$/i.test(name); })
     .map(function (name) { return path.join(dir, name); })
     .sort();
 }
