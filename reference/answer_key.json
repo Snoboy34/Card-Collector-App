@@ -9628,6 +9628,4026 @@
         }
       }
     },
+    "KARROS": {
+      "sides": {
+        "top": {
+          "mm": 2.996,
+          "confidence": 0.47,
+          "withheld": false,
+          "reason": null,
+          "approved": true,
+          "upMm": 3.084,
+          "rot180Mm": 2.909,
+          "diffMm": 0.174,
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-07"
+        },
+        "bottom": {
+          "mm": 3.757,
+          "confidence": 0.56,
+          "withheld": false,
+          "reason": null,
+          "approved": true,
+          "upMm": 3.682,
+          "rot180Mm": 3.832,
+          "diffMm": -0.15,
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-07"
+        },
+        "left": {
+          "mm": 3.706,
+          "confidence": 0.708,
+          "withheld": false,
+          "reason": null,
+          "approved": true,
+          "upMm": 3.683,
+          "rot180Mm": 3.728,
+          "diffMm": -0.046,
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-07"
+        },
+        "right": {
+          "mm": 2.767,
+          "confidence": 0.517,
+          "withheld": false,
+          "reason": null,
+          "approved": true,
+          "upMm": 2.789,
+          "rot180Mm": 2.746,
+          "diffMm": 0.043,
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-07"
+        }
+      },
+      "axes": {
+        "alongScan": {
+          "sides": [
+            "top",
+            "bottom"
+          ],
+          "biasFromTop": 0.087,
+          "biasFromBottom": 0.075,
+          "agree": true
+        },
+        "acrossScan": {
+          "sides": [
+            "left",
+            "right"
+          ],
+          "biasFromLeft": -0.023,
+          "biasFromRight": -0.021,
+          "agree": true
+        }
+      },
+      "ratios": {
+        "leftOverRight": 1.339,
+        "topOverBottom": 0.797,
+        "leftShare": 0.573,
+        "topShare": 0.444
+      },
+      "scans": {
+        "180": {
+          "file": "KARROS_180.png",
+          "dpi": {
+            "dpiX": 1199.9976,
+            "dpiY": 1199.9976,
+            "unit": 1
+          },
+          "scale": {
+            "dpiX": 1199.998,
+            "dpiY": 1199.998,
+            "fileDpiDiffer": false,
+            "widthScale": 1.0024,
+            "heightScale": 0.9999,
+            "xyScaleDiffer": false
+          },
+          "cardMm": {
+            "width": 63.654,
+            "height": 88.887
+          },
+          "sizeOk": true,
+          "ratios": {
+            "leftOverRight": 0.737,
+            "topOverBottom": 1.317,
+            "leftShare": 0.424,
+            "topShare": 0.568
+          },
+          "sides": {
+            "top": {
+              "mm": 3.832,
+              "confidence": 0.561,
+              "withheld": false,
+              "reason": null,
+              "shape": "outer",
+              "coverage": 0.563,
+              "points": [
+                {
+                  "alongMm": 27.967,
+                  "depthMm": 3.7
+                },
+                {
+                  "alongMm": 21.167,
+                  "depthMm": 3.72
+                },
+                {
+                  "alongMm": 22.367,
+                  "depthMm": 3.72
+                },
+                {
+                  "alongMm": 45.567,
+                  "depthMm": 3.72
+                },
+                {
+                  "alongMm": 8.367,
+                  "depthMm": 3.74
+                },
+                {
+                  "alongMm": 25.967,
+                  "depthMm": 3.74
+                },
+                {
+                  "alongMm": 31.167,
+                  "depthMm": 3.74
+                },
+                {
+                  "alongMm": 31.567,
+                  "depthMm": 3.74
+                },
+                {
+                  "alongMm": 37.967,
+                  "depthMm": 3.74
+                },
+                {
+                  "alongMm": 39.167,
+                  "depthMm": 3.74
+                },
+                {
+                  "alongMm": 41.567,
+                  "depthMm": 3.74
+                },
+                {
+                  "alongMm": 16.767,
+                  "depthMm": 3.76
+                },
+                {
+                  "alongMm": 21.967,
+                  "depthMm": 3.76
+                },
+                {
+                  "alongMm": 44.367,
+                  "depthMm": 3.76
+                },
+                {
+                  "alongMm": 28.767,
+                  "depthMm": 3.769
+                },
+                {
+                  "alongMm": 36.767,
+                  "depthMm": 3.772
+                },
+                {
+                  "alongMm": 25.167,
+                  "depthMm": 3.773
+                },
+                {
+                  "alongMm": 7.967,
+                  "depthMm": 3.774
+                },
+                {
+                  "alongMm": 30.767,
+                  "depthMm": 3.78
+                },
+                {
+                  "alongMm": 49.167,
+                  "depthMm": 3.78
+                },
+                {
+                  "alongMm": 24.367,
+                  "depthMm": 3.784
+                },
+                {
+                  "alongMm": 37.567,
+                  "depthMm": 3.795
+                },
+                {
+                  "alongMm": 24.767,
+                  "depthMm": 3.796
+                },
+                {
+                  "alongMm": 40.367,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 49.967,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 23.967,
+                  "depthMm": 3.802
+                },
+                {
+                  "alongMm": 33.567,
+                  "depthMm": 3.806
+                },
+                {
+                  "alongMm": 17.567,
+                  "depthMm": 3.811
+                },
+                {
+                  "alongMm": 47.167,
+                  "depthMm": 3.811
+                },
+                {
+                  "alongMm": 21.567,
+                  "depthMm": 3.812
+                },
+                {
+                  "alongMm": 56.767,
+                  "depthMm": 3.813
+                },
+                {
+                  "alongMm": 43.167,
+                  "depthMm": 3.816
+                },
+                {
+                  "alongMm": 19.167,
+                  "depthMm": 3.822
+                },
+                {
+                  "alongMm": 25.567,
+                  "depthMm": 3.829
+                },
+                {
+                  "alongMm": 19.967,
+                  "depthMm": 3.831
+                },
+                {
+                  "alongMm": 34.367,
+                  "depthMm": 3.832
+                },
+                {
+                  "alongMm": 35.967,
+                  "depthMm": 3.832
+                },
+                {
+                  "alongMm": 26.367,
+                  "depthMm": 3.834
+                },
+                {
+                  "alongMm": 48.767,
+                  "depthMm": 3.853
+                },
+                {
+                  "alongMm": 39.967,
+                  "depthMm": 3.868
+                },
+                {
+                  "alongMm": 29.567,
+                  "depthMm": 3.869
+                },
+                {
+                  "alongMm": 39.567,
+                  "depthMm": 3.875
+                },
+                {
+                  "alongMm": 30.367,
+                  "depthMm": 3.888
+                },
+                {
+                  "alongMm": 26.767,
+                  "depthMm": 3.893
+                },
+                {
+                  "alongMm": 46.367,
+                  "depthMm": 3.894
+                },
+                {
+                  "alongMm": 40.767,
+                  "depthMm": 3.903
+                },
+                {
+                  "alongMm": 32.367,
+                  "depthMm": 3.915
+                },
+                {
+                  "alongMm": 17.967,
+                  "depthMm": 3.917
+                },
+                {
+                  "alongMm": 36.367,
+                  "depthMm": 3.92
+                },
+                {
+                  "alongMm": 22.767,
+                  "depthMm": 3.922
+                },
+                {
+                  "alongMm": 35.567,
+                  "depthMm": 3.924
+                },
+                {
+                  "alongMm": 42.367,
+                  "depthMm": 3.926
+                },
+                {
+                  "alongMm": 16.367,
+                  "depthMm": 3.927
+                },
+                {
+                  "alongMm": 41.167,
+                  "depthMm": 3.93
+                },
+                {
+                  "alongMm": 54.767,
+                  "depthMm": 3.931
+                },
+                {
+                  "alongMm": 28.367,
+                  "depthMm": 3.933
+                },
+                {
+                  "alongMm": 33.167,
+                  "depthMm": 3.933
+                },
+                {
+                  "alongMm": 29.167,
+                  "depthMm": 3.938
+                },
+                {
+                  "alongMm": 27.567,
+                  "depthMm": 3.941
+                },
+                {
+                  "alongMm": 46.767,
+                  "depthMm": 3.943
+                },
+                {
+                  "alongMm": 37.167,
+                  "depthMm": 3.943
+                },
+                {
+                  "alongMm": 41.967,
+                  "depthMm": 3.95
+                },
+                {
+                  "alongMm": 29.967,
+                  "depthMm": 3.954
+                },
+                {
+                  "alongMm": 33.967,
+                  "depthMm": 3.955
+                },
+                {
+                  "alongMm": 38.767,
+                  "depthMm": 3.956
+                },
+                {
+                  "alongMm": 56.367,
+                  "depthMm": 3.965
+                },
+                {
+                  "alongMm": 18.767,
+                  "depthMm": 3.965
+                },
+                {
+                  "alongMm": 42.767,
+                  "depthMm": 3.966
+                },
+                {
+                  "alongMm": 45.167,
+                  "depthMm": 3.974
+                },
+                {
+                  "alongMm": 43.567,
+                  "depthMm": 3.984
+                },
+                {
+                  "alongMm": 19.567,
+                  "depthMm": 3.986
+                },
+                {
+                  "alongMm": 44.767,
+                  "depthMm": 4.013
+                }
+              ],
+              "elements": [
+                {
+                  "depthMm": 3.832,
+                  "fromMm": 7.967,
+                  "toMm": 56.767,
+                  "coverage": 0.563,
+                  "stations": 72,
+                  "runs": [
+                    {
+                      "fromMm": 7.967,
+                      "toMm": 8.367,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 16.367,
+                      "toMm": 19.967,
+                      "stations": 8
+                    },
+                    {
+                      "fromMm": 21.167,
+                      "toMm": 22.767,
+                      "stations": 5
+                    },
+                    {
+                      "fromMm": 23.967,
+                      "toMm": 34.367,
+                      "stations": 24
+                    },
+                    {
+                      "fromMm": 35.567,
+                      "toMm": 47.167,
+                      "stations": 27
+                    },
+                    {
+                      "fromMm": 48.767,
+                      "toMm": 49.967,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 54.767,
+                      "toMm": 54.767,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 56.367,
+                      "toMm": 56.767,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 8,
+                  "role": "outline",
+                  "refused": false,
+                  "why": null
+                },
+                {
+                  "depthMm": 5.265,
+                  "fromMm": 11.967,
+                  "toMm": 11.967,
+                  "coverage": 0.008,
+                  "stations": 1,
+                  "runs": [
+                    {
+                      "fromMm": 11.967,
+                      "toMm": 11.967,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "isolated",
+                  "refused": true,
+                  "why": "single-station readings, not an outline"
+                },
+                {
+                  "depthMm": 6.112,
+                  "fromMm": 47.567,
+                  "toMm": 57.167,
+                  "coverage": 0.148,
+                  "stations": 19,
+                  "runs": [
+                    {
+                      "fromMm": 47.567,
+                      "toMm": 48.367,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 49.567,
+                      "toMm": 55.967,
+                      "stations": 15
+                    },
+                    {
+                      "fromMm": 57.167,
+                      "toMm": 57.167,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 3,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 6.714,
+                  "fromMm": 8.767,
+                  "toMm": 11.567,
+                  "coverage": 0.039,
+                  "stations": 5,
+                  "runs": [
+                    {
+                      "fromMm": 8.767,
+                      "toMm": 8.767,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 10.367,
+                      "toMm": 11.567,
+                      "stations": 4
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 7.479,
+                  "fromMm": 9.167,
+                  "toMm": 9.967,
+                  "coverage": 0.023,
+                  "stations": 3,
+                  "runs": [
+                    {
+                      "fromMm": 9.167,
+                      "toMm": 9.967,
+                      "stations": 3
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 9.03,
+                  "fromMm": 6.367,
+                  "toMm": 13.567,
+                  "coverage": 0.063,
+                  "stations": 8,
+                  "runs": [
+                    {
+                      "fromMm": 6.367,
+                      "toMm": 7.567,
+                      "stations": 4
+                    },
+                    {
+                      "fromMm": 12.367,
+                      "toMm": 13.567,
+                      "stations": 4
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 9.4,
+                  "fromMm": 20.367,
+                  "toMm": 38.367,
+                  "coverage": 0.031,
+                  "stations": 4,
+                  "runs": [
+                    {
+                      "fromMm": 20.367,
+                      "toMm": 20.367,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 23.167,
+                      "toMm": 23.167,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 34.767,
+                      "toMm": 34.767,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 38.367,
+                      "toMm": 38.367,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 4,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                }
+              ]
+            },
+            "bottom": {
+              "mm": 2.909,
+              "confidence": 0.501,
+              "withheld": false,
+              "reason": null,
+              "shape": "outer",
+              "coverage": 0.391,
+              "points": [
+                {
+                  "alongMm": 46.364,
+                  "depthMm": 2.817
+                },
+                {
+                  "alongMm": 45.564,
+                  "depthMm": 2.818
+                },
+                {
+                  "alongMm": 37.564,
+                  "depthMm": 2.82
+                },
+                {
+                  "alongMm": 41.564,
+                  "depthMm": 2.834
+                },
+                {
+                  "alongMm": 36.764,
+                  "depthMm": 2.835
+                },
+                {
+                  "alongMm": 32.764,
+                  "depthMm": 2.84
+                },
+                {
+                  "alongMm": 27.964,
+                  "depthMm": 2.84
+                },
+                {
+                  "alongMm": 42.364,
+                  "depthMm": 2.847
+                },
+                {
+                  "alongMm": 35.964,
+                  "depthMm": 2.853
+                },
+                {
+                  "alongMm": 30.364,
+                  "depthMm": 2.854
+                },
+                {
+                  "alongMm": 29.564,
+                  "depthMm": 2.86
+                },
+                {
+                  "alongMm": 31.964,
+                  "depthMm": 2.865
+                },
+                {
+                  "alongMm": 40.364,
+                  "depthMm": 2.874
+                },
+                {
+                  "alongMm": 39.164,
+                  "depthMm": 2.875
+                },
+                {
+                  "alongMm": 46.764,
+                  "depthMm": 2.884
+                },
+                {
+                  "alongMm": 48.764,
+                  "depthMm": 2.885
+                },
+                {
+                  "alongMm": 39.964,
+                  "depthMm": 2.885
+                },
+                {
+                  "alongMm": 41.164,
+                  "depthMm": 2.89
+                },
+                {
+                  "alongMm": 43.564,
+                  "depthMm": 2.892
+                },
+                {
+                  "alongMm": 38.364,
+                  "depthMm": 2.893
+                },
+                {
+                  "alongMm": 29.964,
+                  "depthMm": 2.895
+                },
+                {
+                  "alongMm": 28.764,
+                  "depthMm": 2.895
+                },
+                {
+                  "alongMm": 33.564,
+                  "depthMm": 2.9
+                },
+                {
+                  "alongMm": 30.764,
+                  "depthMm": 2.909
+                },
+                {
+                  "alongMm": 45.164,
+                  "depthMm": 2.909
+                },
+                {
+                  "alongMm": 37.964,
+                  "depthMm": 2.909
+                },
+                {
+                  "alongMm": 43.164,
+                  "depthMm": 2.912
+                },
+                {
+                  "alongMm": 44.364,
+                  "depthMm": 2.913
+                },
+                {
+                  "alongMm": 31.564,
+                  "depthMm": 2.913
+                },
+                {
+                  "alongMm": 34.764,
+                  "depthMm": 2.917
+                },
+                {
+                  "alongMm": 37.164,
+                  "depthMm": 2.932
+                },
+                {
+                  "alongMm": 48.364,
+                  "depthMm": 2.933
+                },
+                {
+                  "alongMm": 29.164,
+                  "depthMm": 2.934
+                },
+                {
+                  "alongMm": 28.364,
+                  "depthMm": 2.948
+                },
+                {
+                  "alongMm": 45.964,
+                  "depthMm": 2.956
+                },
+                {
+                  "alongMm": 42.764,
+                  "depthMm": 2.967
+                },
+                {
+                  "alongMm": 32.364,
+                  "depthMm": 2.969
+                },
+                {
+                  "alongMm": 35.564,
+                  "depthMm": 2.971
+                },
+                {
+                  "alongMm": 36.364,
+                  "depthMm": 2.971
+                },
+                {
+                  "alongMm": 49.164,
+                  "depthMm": 2.985
+                },
+                {
+                  "alongMm": 39.564,
+                  "depthMm": 3.007
+                },
+                {
+                  "alongMm": 38.764,
+                  "depthMm": 3.008
+                },
+                {
+                  "alongMm": 31.164,
+                  "depthMm": 3.032
+                },
+                {
+                  "alongMm": 34.364,
+                  "depthMm": 3.048
+                },
+                {
+                  "alongMm": 44.764,
+                  "depthMm": 3.049
+                },
+                {
+                  "alongMm": 40.764,
+                  "depthMm": 3.05
+                },
+                {
+                  "alongMm": 43.964,
+                  "depthMm": 3.054
+                },
+                {
+                  "alongMm": 35.164,
+                  "depthMm": 3.066
+                },
+                {
+                  "alongMm": 33.164,
+                  "depthMm": 3.071
+                },
+                {
+                  "alongMm": 33.964,
+                  "depthMm": 3.074
+                }
+              ],
+              "elements": [
+                {
+                  "depthMm": 2.909,
+                  "fromMm": 27.964,
+                  "toMm": 49.164,
+                  "coverage": 0.391,
+                  "stations": 50,
+                  "runs": [
+                    {
+                      "fromMm": 27.964,
+                      "toMm": 46.764,
+                      "stations": 47
+                    },
+                    {
+                      "fromMm": 48.364,
+                      "toMm": 49.164,
+                      "stations": 3
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "outline",
+                  "refused": false,
+                  "why": null
+                },
+                {
+                  "depthMm": 3.775,
+                  "fromMm": 53.164,
+                  "toMm": 56.364,
+                  "coverage": 0.016,
+                  "stations": 2,
+                  "runs": [
+                    {
+                      "fromMm": 53.164,
+                      "toMm": 53.164,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 56.364,
+                      "toMm": 56.364,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "isolated",
+                  "refused": true,
+                  "why": "single-station readings, not an outline"
+                },
+                {
+                  "depthMm": 3.88,
+                  "fromMm": 54.364,
+                  "toMm": 56.764,
+                  "coverage": 0.039,
+                  "stations": 5,
+                  "runs": [
+                    {
+                      "fromMm": 54.364,
+                      "toMm": 56.764,
+                      "stations": 5
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 4.525,
+                  "fromMm": 51.964,
+                  "toMm": 53.964,
+                  "coverage": 0.031,
+                  "stations": 4,
+                  "runs": [
+                    {
+                      "fromMm": 51.964,
+                      "toMm": 52.364,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 53.564,
+                      "toMm": 53.964,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                }
+              ]
+            },
+            "left": {
+              "mm": 2.746,
+              "confidence": 0.606,
+              "withheld": false,
+              "reason": null,
+              "shape": "outer",
+              "coverage": 0.354,
+              "points": [
+                {
+                  "alongMm": 18.089,
+                  "depthMm": 2.704
+                },
+                {
+                  "alongMm": 19.289,
+                  "depthMm": 2.707
+                },
+                {
+                  "alongMm": 19.689,
+                  "depthMm": 2.711
+                },
+                {
+                  "alongMm": 21.689,
+                  "depthMm": 2.714
+                },
+                {
+                  "alongMm": 43.289,
+                  "depthMm": 2.716
+                },
+                {
+                  "alongMm": 40.489,
+                  "depthMm": 2.718
+                },
+                {
+                  "alongMm": 35.289,
+                  "depthMm": 2.72
+                },
+                {
+                  "alongMm": 42.089,
+                  "depthMm": 2.72
+                },
+                {
+                  "alongMm": 18.889,
+                  "depthMm": 2.72
+                },
+                {
+                  "alongMm": 37.689,
+                  "depthMm": 2.725
+                },
+                {
+                  "alongMm": 20.089,
+                  "depthMm": 2.73
+                },
+                {
+                  "alongMm": 38.089,
+                  "depthMm": 2.735
+                },
+                {
+                  "alongMm": 26.489,
+                  "depthMm": 2.735
+                },
+                {
+                  "alongMm": 39.689,
+                  "depthMm": 2.74
+                },
+                {
+                  "alongMm": 37.289,
+                  "depthMm": 2.745
+                },
+                {
+                  "alongMm": 20.889,
+                  "depthMm": 2.745
+                },
+                {
+                  "alongMm": 58.889,
+                  "depthMm": 2.747
+                },
+                {
+                  "alongMm": 43.689,
+                  "depthMm": 2.747
+                },
+                {
+                  "alongMm": 57.289,
+                  "depthMm": 2.748
+                },
+                {
+                  "alongMm": 52.489,
+                  "depthMm": 2.754
+                },
+                {
+                  "alongMm": 40.889,
+                  "depthMm": 2.755
+                },
+                {
+                  "alongMm": 58.089,
+                  "depthMm": 2.755
+                },
+                {
+                  "alongMm": 41.289,
+                  "depthMm": 2.757
+                },
+                {
+                  "alongMm": 39.289,
+                  "depthMm": 2.76
+                },
+                {
+                  "alongMm": 57.689,
+                  "depthMm": 2.76
+                },
+                {
+                  "alongMm": 59.289,
+                  "depthMm": 2.76
+                },
+                {
+                  "alongMm": 59.689,
+                  "depthMm": 2.76
+                },
+                {
+                  "alongMm": 24.889,
+                  "depthMm": 2.763
+                },
+                {
+                  "alongMm": 18.489,
+                  "depthMm": 2.765
+                },
+                {
+                  "alongMm": 26.889,
+                  "depthMm": 2.77
+                },
+                {
+                  "alongMm": 63.289,
+                  "depthMm": 2.776
+                },
+                {
+                  "alongMm": 62.889,
+                  "depthMm": 2.777
+                }
+              ],
+              "elements": [
+                {
+                  "depthMm": 2.746,
+                  "fromMm": 18.089,
+                  "toMm": 63.289,
+                  "coverage": 0.18,
+                  "stations": 32,
+                  "runs": [
+                    {
+                      "fromMm": 18.089,
+                      "toMm": 21.689,
+                      "stations": 8
+                    },
+                    {
+                      "fromMm": 24.889,
+                      "toMm": 24.889,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 26.489,
+                      "toMm": 26.889,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 35.289,
+                      "toMm": 35.289,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 37.289,
+                      "toMm": 38.089,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 39.289,
+                      "toMm": 42.089,
+                      "stations": 6
+                    },
+                    {
+                      "fromMm": 43.289,
+                      "toMm": 43.689,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 52.489,
+                      "toMm": 52.489,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 57.289,
+                      "toMm": 59.689,
+                      "stations": 6
+                    },
+                    {
+                      "fromMm": 62.889,
+                      "toMm": 63.289,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 10,
+                  "role": "outline",
+                  "refused": false,
+                  "why": null
+                },
+                {
+                  "depthMm": 4.964,
+                  "fromMm": 54.889,
+                  "toMm": 63.689,
+                  "coverage": 0.011,
+                  "stations": 2,
+                  "runs": [
+                    {
+                      "fromMm": 54.889,
+                      "toMm": 54.889,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 63.689,
+                      "toMm": 63.689,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 5.753,
+                  "fromMm": 9.289,
+                  "toMm": 10.889,
+                  "coverage": 0.028,
+                  "stations": 5,
+                  "runs": [
+                    {
+                      "fromMm": 9.289,
+                      "toMm": 10.889,
+                      "stations": 5
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 6.76,
+                  "fromMm": 11.289,
+                  "toMm": 62.489,
+                  "coverage": 0.028,
+                  "stations": 5,
+                  "runs": [
+                    {
+                      "fromMm": 11.289,
+                      "toMm": 11.289,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 49.289,
+                      "toMm": 49.289,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 50.889,
+                      "toMm": 50.889,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 55.289,
+                      "toMm": 55.289,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 62.489,
+                      "toMm": 62.489,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 5,
+                  "role": "isolated",
+                  "refused": true,
+                  "why": "single-station readings, not an outline"
+                },
+                {
+                  "depthMm": 7.277,
+                  "fromMm": 12.889,
+                  "toMm": 64.089,
+                  "coverage": 0.017,
+                  "stations": 3,
+                  "runs": [
+                    {
+                      "fromMm": 12.889,
+                      "toMm": 12.889,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 53.289,
+                      "toMm": 53.289,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 64.089,
+                      "toMm": 64.089,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 3,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 7.826,
+                  "fromMm": 8.889,
+                  "toMm": 12.089,
+                  "coverage": 0.017,
+                  "stations": 3,
+                  "runs": [
+                    {
+                      "fromMm": 8.889,
+                      "toMm": 8.889,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 11.689,
+                      "toMm": 12.089,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                }
+              ]
+            },
+            "right": {
+              "mm": 3.728,
+              "confidence": 0.714,
+              "withheld": false,
+              "reason": null,
+              "shape": "outer",
+              "coverage": 0.899,
+              "points": [
+                {
+                  "alongMm": 75.288,
+                  "depthMm": 3.616
+                },
+                {
+                  "alongMm": 68.888,
+                  "depthMm": 3.633
+                },
+                {
+                  "alongMm": 74.488,
+                  "depthMm": 3.634
+                },
+                {
+                  "alongMm": 69.688,
+                  "depthMm": 3.638
+                },
+                {
+                  "alongMm": 73.688,
+                  "depthMm": 3.642
+                },
+                {
+                  "alongMm": 64.888,
+                  "depthMm": 3.647
+                },
+                {
+                  "alongMm": 75.688,
+                  "depthMm": 3.648
+                },
+                {
+                  "alongMm": 70.088,
+                  "depthMm": 3.649
+                },
+                {
+                  "alongMm": 68.488,
+                  "depthMm": 3.65
+                },
+                {
+                  "alongMm": 64.088,
+                  "depthMm": 3.651
+                },
+                {
+                  "alongMm": 76.488,
+                  "depthMm": 3.652
+                },
+                {
+                  "alongMm": 62.088,
+                  "depthMm": 3.652
+                },
+                {
+                  "alongMm": 65.688,
+                  "depthMm": 3.653
+                },
+                {
+                  "alongMm": 63.288,
+                  "depthMm": 3.654
+                },
+                {
+                  "alongMm": 74.888,
+                  "depthMm": 3.655
+                },
+                {
+                  "alongMm": 70.488,
+                  "depthMm": 3.655
+                },
+                {
+                  "alongMm": 72.088,
+                  "depthMm": 3.658
+                },
+                {
+                  "alongMm": 71.288,
+                  "depthMm": 3.659
+                },
+                {
+                  "alongMm": 69.288,
+                  "depthMm": 3.664
+                },
+                {
+                  "alongMm": 68.088,
+                  "depthMm": 3.669
+                },
+                {
+                  "alongMm": 59.688,
+                  "depthMm": 3.67
+                },
+                {
+                  "alongMm": 52.488,
+                  "depthMm": 3.67
+                },
+                {
+                  "alongMm": 48.488,
+                  "depthMm": 3.67
+                },
+                {
+                  "alongMm": 59.288,
+                  "depthMm": 3.671
+                },
+                {
+                  "alongMm": 64.488,
+                  "depthMm": 3.672
+                },
+                {
+                  "alongMm": 49.288,
+                  "depthMm": 3.673
+                },
+                {
+                  "alongMm": 62.488,
+                  "depthMm": 3.673
+                },
+                {
+                  "alongMm": 47.688,
+                  "depthMm": 3.676
+                },
+                {
+                  "alongMm": 61.688,
+                  "depthMm": 3.676
+                },
+                {
+                  "alongMm": 54.088,
+                  "depthMm": 3.677
+                },
+                {
+                  "alongMm": 46.888,
+                  "depthMm": 3.677
+                },
+                {
+                  "alongMm": 53.288,
+                  "depthMm": 3.677
+                },
+                {
+                  "alongMm": 60.488,
+                  "depthMm": 3.678
+                },
+                {
+                  "alongMm": 58.888,
+                  "depthMm": 3.68
+                },
+                {
+                  "alongMm": 32.888,
+                  "depthMm": 3.68
+                },
+                {
+                  "alongMm": 61.288,
+                  "depthMm": 3.681
+                },
+                {
+                  "alongMm": 72.488,
+                  "depthMm": 3.684
+                },
+                {
+                  "alongMm": 65.288,
+                  "depthMm": 3.685
+                },
+                {
+                  "alongMm": 70.888,
+                  "depthMm": 3.687
+                },
+                {
+                  "alongMm": 60.888,
+                  "depthMm": 3.688
+                },
+                {
+                  "alongMm": 52.888,
+                  "depthMm": 3.688
+                },
+                {
+                  "alongMm": 56.888,
+                  "depthMm": 3.691
+                },
+                {
+                  "alongMm": 62.888,
+                  "depthMm": 3.692
+                },
+                {
+                  "alongMm": 54.888,
+                  "depthMm": 3.693
+                },
+                {
+                  "alongMm": 50.888,
+                  "depthMm": 3.693
+                },
+                {
+                  "alongMm": 48.088,
+                  "depthMm": 3.693
+                },
+                {
+                  "alongMm": 48.888,
+                  "depthMm": 3.694
+                },
+                {
+                  "alongMm": 53.688,
+                  "depthMm": 3.695
+                },
+                {
+                  "alongMm": 49.688,
+                  "depthMm": 3.695
+                },
+                {
+                  "alongMm": 44.488,
+                  "depthMm": 3.698
+                },
+                {
+                  "alongMm": 72.888,
+                  "depthMm": 3.699
+                },
+                {
+                  "alongMm": 66.888,
+                  "depthMm": 3.7
+                },
+                {
+                  "alongMm": 67.288,
+                  "depthMm": 3.703
+                },
+                {
+                  "alongMm": 45.288,
+                  "depthMm": 3.705
+                },
+                {
+                  "alongMm": 71.688,
+                  "depthMm": 3.707
+                },
+                {
+                  "alongMm": 38.088,
+                  "depthMm": 3.707
+                },
+                {
+                  "alongMm": 54.488,
+                  "depthMm": 3.708
+                },
+                {
+                  "alongMm": 39.288,
+                  "depthMm": 3.709
+                },
+                {
+                  "alongMm": 40.488,
+                  "depthMm": 3.709
+                },
+                {
+                  "alongMm": 40.888,
+                  "depthMm": 3.71
+                },
+                {
+                  "alongMm": 34.088,
+                  "depthMm": 3.711
+                },
+                {
+                  "alongMm": 39.688,
+                  "depthMm": 3.711
+                },
+                {
+                  "alongMm": 56.088,
+                  "depthMm": 3.711
+                },
+                {
+                  "alongMm": 41.688,
+                  "depthMm": 3.711
+                },
+                {
+                  "alongMm": 41.288,
+                  "depthMm": 3.712
+                },
+                {
+                  "alongMm": 37.288,
+                  "depthMm": 3.713
+                },
+                {
+                  "alongMm": 51.688,
+                  "depthMm": 3.713
+                },
+                {
+                  "alongMm": 36.488,
+                  "depthMm": 3.713
+                },
+                {
+                  "alongMm": 40.088,
+                  "depthMm": 3.713
+                },
+                {
+                  "alongMm": 36.088,
+                  "depthMm": 3.715
+                },
+                {
+                  "alongMm": 44.088,
+                  "depthMm": 3.715
+                },
+                {
+                  "alongMm": 38.488,
+                  "depthMm": 3.715
+                },
+                {
+                  "alongMm": 33.288,
+                  "depthMm": 3.716
+                },
+                {
+                  "alongMm": 46.488,
+                  "depthMm": 3.719
+                },
+                {
+                  "alongMm": 42.888,
+                  "depthMm": 3.721
+                },
+                {
+                  "alongMm": 38.888,
+                  "depthMm": 3.722
+                },
+                {
+                  "alongMm": 56.488,
+                  "depthMm": 3.723
+                },
+                {
+                  "alongMm": 32.488,
+                  "depthMm": 3.724
+                },
+                {
+                  "alongMm": 31.688,
+                  "depthMm": 3.728
+                },
+                {
+                  "alongMm": 51.288,
+                  "depthMm": 3.728
+                },
+                {
+                  "alongMm": 31.288,
+                  "depthMm": 3.729
+                },
+                {
+                  "alongMm": 33.688,
+                  "depthMm": 3.729
+                },
+                {
+                  "alongMm": 32.088,
+                  "depthMm": 3.73
+                },
+                {
+                  "alongMm": 26.888,
+                  "depthMm": 3.731
+                },
+                {
+                  "alongMm": 26.488,
+                  "depthMm": 3.731
+                },
+                {
+                  "alongMm": 26.088,
+                  "depthMm": 3.732
+                },
+                {
+                  "alongMm": 34.488,
+                  "depthMm": 3.732
+                },
+                {
+                  "alongMm": 22.488,
+                  "depthMm": 3.734
+                },
+                {
+                  "alongMm": 24.088,
+                  "depthMm": 3.735
+                },
+                {
+                  "alongMm": 25.688,
+                  "depthMm": 3.737
+                },
+                {
+                  "alongMm": 24.488,
+                  "depthMm": 3.741
+                },
+                {
+                  "alongMm": 37.688,
+                  "depthMm": 3.741
+                },
+                {
+                  "alongMm": 30.888,
+                  "depthMm": 3.743
+                },
+                {
+                  "alongMm": 20.088,
+                  "depthMm": 3.745
+                },
+                {
+                  "alongMm": 20.888,
+                  "depthMm": 3.748
+                },
+                {
+                  "alongMm": 15.288,
+                  "depthMm": 3.75
+                },
+                {
+                  "alongMm": 67.688,
+                  "depthMm": 3.75
+                },
+                {
+                  "alongMm": 29.288,
+                  "depthMm": 3.75
+                },
+                {
+                  "alongMm": 19.288,
+                  "depthMm": 3.751
+                },
+                {
+                  "alongMm": 21.688,
+                  "depthMm": 3.751
+                },
+                {
+                  "alongMm": 18.888,
+                  "depthMm": 3.751
+                },
+                {
+                  "alongMm": 18.488,
+                  "depthMm": 3.751
+                },
+                {
+                  "alongMm": 23.688,
+                  "depthMm": 3.752
+                },
+                {
+                  "alongMm": 10.488,
+                  "depthMm": 3.752
+                },
+                {
+                  "alongMm": 42.488,
+                  "depthMm": 3.752
+                },
+                {
+                  "alongMm": 18.088,
+                  "depthMm": 3.752
+                },
+                {
+                  "alongMm": 19.688,
+                  "depthMm": 3.753
+                },
+                {
+                  "alongMm": 23.288,
+                  "depthMm": 3.754
+                },
+                {
+                  "alongMm": 55.288,
+                  "depthMm": 3.754
+                },
+                {
+                  "alongMm": 10.088,
+                  "depthMm": 3.754
+                },
+                {
+                  "alongMm": 15.688,
+                  "depthMm": 3.754
+                },
+                {
+                  "alongMm": 16.888,
+                  "depthMm": 3.755
+                },
+                {
+                  "alongMm": 47.288,
+                  "depthMm": 3.755
+                },
+                {
+                  "alongMm": 11.288,
+                  "depthMm": 3.757
+                },
+                {
+                  "alongMm": 16.088,
+                  "depthMm": 3.76
+                },
+                {
+                  "alongMm": 28.888,
+                  "depthMm": 3.763
+                },
+                {
+                  "alongMm": 13.288,
+                  "depthMm": 3.763
+                },
+                {
+                  "alongMm": 17.288,
+                  "depthMm": 3.764
+                },
+                {
+                  "alongMm": 30.488,
+                  "depthMm": 3.764
+                },
+                {
+                  "alongMm": 28.088,
+                  "depthMm": 3.764
+                },
+                {
+                  "alongMm": 14.888,
+                  "depthMm": 3.764
+                },
+                {
+                  "alongMm": 45.688,
+                  "depthMm": 3.765
+                },
+                {
+                  "alongMm": 16.488,
+                  "depthMm": 3.767
+                },
+                {
+                  "alongMm": 22.888,
+                  "depthMm": 3.767
+                },
+                {
+                  "alongMm": 20.488,
+                  "depthMm": 3.768
+                },
+                {
+                  "alongMm": 27.288,
+                  "depthMm": 3.77
+                },
+                {
+                  "alongMm": 63.688,
+                  "depthMm": 3.77
+                },
+                {
+                  "alongMm": 12.488,
+                  "depthMm": 3.771
+                },
+                {
+                  "alongMm": 25.288,
+                  "depthMm": 3.771
+                },
+                {
+                  "alongMm": 10.888,
+                  "depthMm": 3.772
+                },
+                {
+                  "alongMm": 9.688,
+                  "depthMm": 3.772
+                },
+                {
+                  "alongMm": 36.888,
+                  "depthMm": 3.773
+                },
+                {
+                  "alongMm": 13.688,
+                  "depthMm": 3.774
+                },
+                {
+                  "alongMm": 8.888,
+                  "depthMm": 3.778
+                },
+                {
+                  "alongMm": 57.688,
+                  "depthMm": 3.78
+                },
+                {
+                  "alongMm": 46.088,
+                  "depthMm": 3.789
+                },
+                {
+                  "alongMm": 66.488,
+                  "depthMm": 3.792
+                },
+                {
+                  "alongMm": 42.088,
+                  "depthMm": 3.792
+                },
+                {
+                  "alongMm": 73.288,
+                  "depthMm": 3.799
+                },
+                {
+                  "alongMm": 9.288,
+                  "depthMm": 3.803
+                },
+                {
+                  "alongMm": 12.888,
+                  "depthMm": 3.807
+                },
+                {
+                  "alongMm": 50.488,
+                  "depthMm": 3.808
+                },
+                {
+                  "alongMm": 58.088,
+                  "depthMm": 3.809
+                },
+                {
+                  "alongMm": 43.288,
+                  "depthMm": 3.81
+                },
+                {
+                  "alongMm": 50.088,
+                  "depthMm": 3.816
+                },
+                {
+                  "alongMm": 74.088,
+                  "depthMm": 3.819
+                },
+                {
+                  "alongMm": 43.688,
+                  "depthMm": 3.829
+                },
+                {
+                  "alongMm": 11.688,
+                  "depthMm": 3.831
+                },
+                {
+                  "alongMm": 66.088,
+                  "depthMm": 3.831
+                },
+                {
+                  "alongMm": 58.488,
+                  "depthMm": 3.835
+                },
+                {
+                  "alongMm": 60.088,
+                  "depthMm": 3.835
+                },
+                {
+                  "alongMm": 44.888,
+                  "depthMm": 3.838
+                },
+                {
+                  "alongMm": 27.688,
+                  "depthMm": 3.847
+                },
+                {
+                  "alongMm": 55.688,
+                  "depthMm": 3.849
+                },
+                {
+                  "alongMm": 14.488,
+                  "depthMm": 3.85
+                },
+                {
+                  "alongMm": 35.688,
+                  "depthMm": 3.851
+                },
+                {
+                  "alongMm": 28.488,
+                  "depthMm": 3.868
+                },
+                {
+                  "alongMm": 34.888,
+                  "depthMm": 3.876
+                },
+                {
+                  "alongMm": 52.088,
+                  "depthMm": 3.877
+                },
+                {
+                  "alongMm": 17.688,
+                  "depthMm": 3.887
+                }
+              ],
+              "elements": [
+                {
+                  "depthMm": 3.385,
+                  "fromMm": 57.288,
+                  "toMm": 76.088,
+                  "coverage": 0.011,
+                  "stations": 2,
+                  "runs": [
+                    {
+                      "fromMm": 57.288,
+                      "toMm": 57.288,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 76.088,
+                      "toMm": 76.088,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "partial-margin",
+                  "refused": true,
+                  "why": "covers 1% of the side and sits outside the outline that continues along the rest"
+                },
+                {
+                  "depthMm": 3.728,
+                  "fromMm": 8.888,
+                  "toMm": 76.488,
+                  "coverage": 0.899,
+                  "stations": 160,
+                  "runs": [
+                    {
+                      "fromMm": 8.888,
+                      "toMm": 29.288,
+                      "stations": 47
+                    },
+                    {
+                      "fromMm": 30.488,
+                      "toMm": 76.488,
+                      "stations": 113
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "outline",
+                  "refused": false,
+                  "why": null
+                }
+              ]
+            }
+          }
+        },
+        "up": {
+          "file": "KARROS_up.png",
+          "dpi": {
+            "dpiX": 1199.9976,
+            "dpiY": 1199.9976,
+            "unit": 1
+          },
+          "scale": {
+            "dpiX": 1199.998,
+            "dpiY": 1199.998,
+            "fileDpiDiffer": false,
+            "widthScale": 1.0024,
+            "heightScale": 0.9998,
+            "xyScaleDiffer": false
+          },
+          "cardMm": {
+            "width": 63.652,
+            "height": 88.882
+          },
+          "sizeOk": true,
+          "ratios": {
+            "leftOverRight": 1.321,
+            "topOverBottom": 0.838,
+            "leftShare": 0.569,
+            "topShare": 0.456
+          },
+          "sides": {
+            "top": {
+              "mm": 3.084,
+              "confidence": 0.47,
+              "withheld": false,
+              "reason": null,
+              "shape": "outer",
+              "coverage": 0.375,
+              "points": [
+                {
+                  "alongMm": 19.167,
+                  "depthMm": 2.96
+                },
+                {
+                  "alongMm": 23.967,
+                  "depthMm": 2.974
+                },
+                {
+                  "alongMm": 14.367,
+                  "depthMm": 2.98
+                },
+                {
+                  "alongMm": 28.767,
+                  "depthMm": 2.98
+                },
+                {
+                  "alongMm": 13.567,
+                  "depthMm": 2.985
+                },
+                {
+                  "alongMm": 6.767,
+                  "depthMm": 2.991
+                },
+                {
+                  "alongMm": 24.767,
+                  "depthMm": 2.995
+                },
+                {
+                  "alongMm": 16.767,
+                  "depthMm": 3
+                },
+                {
+                  "alongMm": 22.367,
+                  "depthMm": 3
+                },
+                {
+                  "alongMm": 29.967,
+                  "depthMm": 3
+                },
+                {
+                  "alongMm": 31.167,
+                  "depthMm": 3
+                },
+                {
+                  "alongMm": 29.567,
+                  "depthMm": 3.008
+                },
+                {
+                  "alongMm": 26.367,
+                  "depthMm": 3.017
+                },
+                {
+                  "alongMm": 25.167,
+                  "depthMm": 3.019
+                },
+                {
+                  "alongMm": 30.367,
+                  "depthMm": 3.026
+                },
+                {
+                  "alongMm": 34.767,
+                  "depthMm": 3.034
+                },
+                {
+                  "alongMm": 32.767,
+                  "depthMm": 3.035
+                },
+                {
+                  "alongMm": 31.567,
+                  "depthMm": 3.036
+                },
+                {
+                  "alongMm": 25.967,
+                  "depthMm": 3.038
+                },
+                {
+                  "alongMm": 26.767,
+                  "depthMm": 3.053
+                },
+                {
+                  "alongMm": 30.767,
+                  "depthMm": 3.064
+                },
+                {
+                  "alongMm": 19.567,
+                  "depthMm": 3.071
+                },
+                {
+                  "alongMm": 17.567,
+                  "depthMm": 3.08
+                },
+                {
+                  "alongMm": 18.767,
+                  "depthMm": 3.083
+                },
+                {
+                  "alongMm": 21.167,
+                  "depthMm": 3.084
+                },
+                {
+                  "alongMm": 32.367,
+                  "depthMm": 3.087
+                },
+                {
+                  "alongMm": 17.967,
+                  "depthMm": 3.088
+                },
+                {
+                  "alongMm": 27.567,
+                  "depthMm": 3.09
+                },
+                {
+                  "alongMm": 33.967,
+                  "depthMm": 3.093
+                },
+                {
+                  "alongMm": 28.367,
+                  "depthMm": 3.097
+                },
+                {
+                  "alongMm": 23.567,
+                  "depthMm": 3.098
+                },
+                {
+                  "alongMm": 24.367,
+                  "depthMm": 3.11
+                },
+                {
+                  "alongMm": 18.367,
+                  "depthMm": 3.117
+                },
+                {
+                  "alongMm": 14.767,
+                  "depthMm": 3.119
+                },
+                {
+                  "alongMm": 13.967,
+                  "depthMm": 3.122
+                },
+                {
+                  "alongMm": 33.167,
+                  "depthMm": 3.127
+                },
+                {
+                  "alongMm": 25.567,
+                  "depthMm": 3.132
+                },
+                {
+                  "alongMm": 33.567,
+                  "depthMm": 3.171
+                },
+                {
+                  "alongMm": 34.367,
+                  "depthMm": 3.185
+                },
+                {
+                  "alongMm": 19.967,
+                  "depthMm": 3.188
+                },
+                {
+                  "alongMm": 21.567,
+                  "depthMm": 3.19
+                },
+                {
+                  "alongMm": 20.367,
+                  "depthMm": 3.191
+                },
+                {
+                  "alongMm": 20.767,
+                  "depthMm": 3.198
+                },
+                {
+                  "alongMm": 27.167,
+                  "depthMm": 3.213
+                },
+                {
+                  "alongMm": 27.967,
+                  "depthMm": 3.218
+                },
+                {
+                  "alongMm": 8.367,
+                  "depthMm": 3.218
+                },
+                {
+                  "alongMm": 22.767,
+                  "depthMm": 3.23
+                },
+                {
+                  "alongMm": 21.967,
+                  "depthMm": 3.248
+                }
+              ],
+              "elements": [
+                {
+                  "depthMm": 3.084,
+                  "fromMm": 6.767,
+                  "toMm": 34.767,
+                  "coverage": 0.375,
+                  "stations": 48,
+                  "runs": [
+                    {
+                      "fromMm": 6.767,
+                      "toMm": 6.767,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 8.367,
+                      "toMm": 8.367,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 13.567,
+                      "toMm": 14.767,
+                      "stations": 4
+                    },
+                    {
+                      "fromMm": 16.767,
+                      "toMm": 34.767,
+                      "stations": 42
+                    }
+                  ],
+                  "runCount": 4,
+                  "role": "outline",
+                  "refused": false,
+                  "why": null
+                },
+                {
+                  "depthMm": 3.362,
+                  "fromMm": 6.367,
+                  "toMm": 31.967,
+                  "coverage": 0.031,
+                  "stations": 4,
+                  "runs": [
+                    {
+                      "fromMm": 6.367,
+                      "toMm": 6.367,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 8.767,
+                      "toMm": 8.767,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 23.167,
+                      "toMm": 23.167,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 31.967,
+                      "toMm": 31.967,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 4,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 4.165,
+                  "fromMm": 7.167,
+                  "toMm": 9.567,
+                  "coverage": 0.031,
+                  "stations": 4,
+                  "runs": [
+                    {
+                      "fromMm": 7.167,
+                      "toMm": 7.967,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 9.167,
+                      "toMm": 9.567,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 4.965,
+                  "fromMm": 7.567,
+                  "toMm": 10.767,
+                  "coverage": 0.031,
+                  "stations": 4,
+                  "runs": [
+                    {
+                      "fromMm": 7.567,
+                      "toMm": 7.567,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 9.967,
+                      "toMm": 10.767,
+                      "stations": 3
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "isolated",
+                  "refused": true,
+                  "why": "single-station readings, not an outline"
+                }
+              ]
+            },
+            "bottom": {
+              "mm": 3.682,
+              "confidence": 0.56,
+              "withheld": false,
+              "reason": null,
+              "shape": "outer",
+              "coverage": 0.563,
+              "points": [
+                {
+                  "alongMm": 31.564,
+                  "depthMm": 3.52
+                },
+                {
+                  "alongMm": 39.164,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 43.164,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 47.964,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 45.164,
+                  "depthMm": 3.573
+                },
+                {
+                  "alongMm": 49.164,
+                  "depthMm": 3.574
+                },
+                {
+                  "alongMm": 40.364,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 19.164,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 25.564,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 25.964,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 28.764,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 35.164,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 35.564,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 41.164,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 38.764,
+                  "depthMm": 3.593
+                },
+                {
+                  "alongMm": 48.364,
+                  "depthMm": 3.595
+                },
+                {
+                  "alongMm": 21.564,
+                  "depthMm": 3.6
+                },
+                {
+                  "alongMm": 21.964,
+                  "depthMm": 3.607
+                },
+                {
+                  "alongMm": 23.564,
+                  "depthMm": 3.614
+                },
+                {
+                  "alongMm": 13.964,
+                  "depthMm": 3.615
+                },
+                {
+                  "alongMm": 18.764,
+                  "depthMm": 3.617
+                },
+                {
+                  "alongMm": 39.564,
+                  "depthMm": 3.62
+                },
+                {
+                  "alongMm": 50.764,
+                  "depthMm": 3.62
+                },
+                {
+                  "alongMm": 43.564,
+                  "depthMm": 3.626
+                },
+                {
+                  "alongMm": 37.164,
+                  "depthMm": 3.627
+                },
+                {
+                  "alongMm": 20.364,
+                  "depthMm": 3.64
+                },
+                {
+                  "alongMm": 17.564,
+                  "depthMm": 3.652
+                },
+                {
+                  "alongMm": 30.764,
+                  "depthMm": 3.652
+                },
+                {
+                  "alongMm": 32.764,
+                  "depthMm": 3.653
+                },
+                {
+                  "alongMm": 34.764,
+                  "depthMm": 3.654
+                },
+                {
+                  "alongMm": 27.964,
+                  "depthMm": 3.655
+                },
+                {
+                  "alongMm": 55.964,
+                  "depthMm": 3.656
+                },
+                {
+                  "alongMm": 23.164,
+                  "depthMm": 3.66
+                },
+                {
+                  "alongMm": 31.964,
+                  "depthMm": 3.675
+                },
+                {
+                  "alongMm": 36.764,
+                  "depthMm": 3.677
+                },
+                {
+                  "alongMm": 21.164,
+                  "depthMm": 3.681
+                },
+                {
+                  "alongMm": 42.364,
+                  "depthMm": 3.684
+                },
+                {
+                  "alongMm": 12.764,
+                  "depthMm": 3.684
+                },
+                {
+                  "alongMm": 34.364,
+                  "depthMm": 3.694
+                },
+                {
+                  "alongMm": 38.364,
+                  "depthMm": 3.712
+                },
+                {
+                  "alongMm": 24.764,
+                  "depthMm": 3.713
+                },
+                {
+                  "alongMm": 20.764,
+                  "depthMm": 3.72
+                },
+                {
+                  "alongMm": 44.764,
+                  "depthMm": 3.721
+                },
+                {
+                  "alongMm": 23.964,
+                  "depthMm": 3.728
+                },
+                {
+                  "alongMm": 46.364,
+                  "depthMm": 3.728
+                },
+                {
+                  "alongMm": 29.964,
+                  "depthMm": 3.733
+                },
+                {
+                  "alongMm": 37.564,
+                  "depthMm": 3.734
+                },
+                {
+                  "alongMm": 25.164,
+                  "depthMm": 3.736
+                },
+                {
+                  "alongMm": 19.964,
+                  "depthMm": 3.741
+                },
+                {
+                  "alongMm": 29.564,
+                  "depthMm": 3.743
+                },
+                {
+                  "alongMm": 18.364,
+                  "depthMm": 3.749
+                },
+                {
+                  "alongMm": 42.764,
+                  "depthMm": 3.756
+                },
+                {
+                  "alongMm": 10.764,
+                  "depthMm": 3.763
+                },
+                {
+                  "alongMm": 33.564,
+                  "depthMm": 3.764
+                },
+                {
+                  "alongMm": 51.564,
+                  "depthMm": 3.77
+                },
+                {
+                  "alongMm": 24.364,
+                  "depthMm": 3.771
+                },
+                {
+                  "alongMm": 22.764,
+                  "depthMm": 3.773
+                },
+                {
+                  "alongMm": 28.364,
+                  "depthMm": 3.775
+                },
+                {
+                  "alongMm": 29.164,
+                  "depthMm": 3.786
+                },
+                {
+                  "alongMm": 9.964,
+                  "depthMm": 3.786
+                },
+                {
+                  "alongMm": 47.564,
+                  "depthMm": 3.788
+                },
+                {
+                  "alongMm": 19.564,
+                  "depthMm": 3.79
+                },
+                {
+                  "alongMm": 55.564,
+                  "depthMm": 3.797
+                },
+                {
+                  "alongMm": 33.164,
+                  "depthMm": 3.805
+                },
+                {
+                  "alongMm": 37.964,
+                  "depthMm": 3.806
+                },
+                {
+                  "alongMm": 32.364,
+                  "depthMm": 3.809
+                },
+                {
+                  "alongMm": 47.164,
+                  "depthMm": 3.81
+                },
+                {
+                  "alongMm": 36.364,
+                  "depthMm": 3.821
+                },
+                {
+                  "alongMm": 27.564,
+                  "depthMm": 3.826
+                },
+                {
+                  "alongMm": 41.964,
+                  "depthMm": 3.827
+                },
+                {
+                  "alongMm": 17.964,
+                  "depthMm": 3.828
+                },
+                {
+                  "alongMm": 51.164,
+                  "depthMm": 3.834
+                }
+              ],
+              "elements": [
+                {
+                  "depthMm": 3.682,
+                  "fromMm": 9.964,
+                  "toMm": 55.964,
+                  "coverage": 0.563,
+                  "stations": 72,
+                  "runs": [
+                    {
+                      "fromMm": 9.964,
+                      "toMm": 10.764,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 12.764,
+                      "toMm": 12.764,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 13.964,
+                      "toMm": 13.964,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 17.564,
+                      "toMm": 25.964,
+                      "stations": 21
+                    },
+                    {
+                      "fromMm": 27.564,
+                      "toMm": 43.564,
+                      "stations": 34
+                    },
+                    {
+                      "fromMm": 44.764,
+                      "toMm": 45.164,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 46.364,
+                      "toMm": 49.164,
+                      "stations": 6
+                    },
+                    {
+                      "fromMm": 50.764,
+                      "toMm": 51.564,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 55.564,
+                      "toMm": 55.964,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 9,
+                  "role": "outline",
+                  "refused": false,
+                  "why": null
+                },
+                {
+                  "depthMm": 5.961,
+                  "fromMm": 6.364,
+                  "toMm": 55.164,
+                  "coverage": 0.172,
+                  "stations": 22,
+                  "runs": [
+                    {
+                      "fromMm": 6.364,
+                      "toMm": 16.364,
+                      "stations": 21
+                    },
+                    {
+                      "fromMm": 55.164,
+                      "toMm": 55.164,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 6.753,
+                  "fromMm": 52.364,
+                  "toMm": 54.764,
+                  "coverage": 0.039,
+                  "stations": 5,
+                  "runs": [
+                    {
+                      "fromMm": 52.364,
+                      "toMm": 53.564,
+                      "stations": 4
+                    },
+                    {
+                      "fromMm": 54.764,
+                      "toMm": 54.764,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 7.721,
+                  "fromMm": 53.964,
+                  "toMm": 54.364,
+                  "coverage": 0.016,
+                  "stations": 2,
+                  "runs": [
+                    {
+                      "fromMm": 53.964,
+                      "toMm": 54.364,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 8.86,
+                  "fromMm": 49.964,
+                  "toMm": 57.164,
+                  "coverage": 0.039,
+                  "stations": 5,
+                  "runs": [
+                    {
+                      "fromMm": 49.964,
+                      "toMm": 49.964,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 51.964,
+                      "toMm": 51.964,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 56.364,
+                      "toMm": 57.164,
+                      "stations": 3
+                    }
+                  ],
+                  "runCount": 3,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 9.2,
+                  "fromMm": 16.764,
+                  "toMm": 44.364,
+                  "coverage": 0.039,
+                  "stations": 5,
+                  "runs": [
+                    {
+                      "fromMm": 16.764,
+                      "toMm": 16.764,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 30.364,
+                      "toMm": 30.364,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 39.964,
+                      "toMm": 39.964,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 43.964,
+                      "toMm": 44.364,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 4,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 9.56,
+                  "fromMm": 46.764,
+                  "toMm": 46.764,
+                  "coverage": 0.008,
+                  "stations": 1,
+                  "runs": [
+                    {
+                      "fromMm": 46.764,
+                      "toMm": 46.764,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "isolated",
+                  "refused": true,
+                  "why": "single-station readings, not an outline"
+                }
+              ]
+            },
+            "left": {
+              "mm": 3.683,
+              "confidence": 0.708,
+              "withheld": false,
+              "reason": null,
+              "shape": "outer",
+              "coverage": 0.904,
+              "points": [
+                {
+                  "alongMm": 12.484,
+                  "depthMm": 3.593
+                },
+                {
+                  "alongMm": 15.684,
+                  "depthMm": 3.6
+                },
+                {
+                  "alongMm": 18.884,
+                  "depthMm": 3.606
+                },
+                {
+                  "alongMm": 14.084,
+                  "depthMm": 3.607
+                },
+                {
+                  "alongMm": 17.284,
+                  "depthMm": 3.607
+                },
+                {
+                  "alongMm": 12.884,
+                  "depthMm": 3.609
+                },
+                {
+                  "alongMm": 18.084,
+                  "depthMm": 3.61
+                },
+                {
+                  "alongMm": 16.484,
+                  "depthMm": 3.611
+                },
+                {
+                  "alongMm": 16.884,
+                  "depthMm": 3.612
+                },
+                {
+                  "alongMm": 15.284,
+                  "depthMm": 3.612
+                },
+                {
+                  "alongMm": 21.284,
+                  "depthMm": 3.612
+                },
+                {
+                  "alongMm": 22.484,
+                  "depthMm": 3.615
+                },
+                {
+                  "alongMm": 16.084,
+                  "depthMm": 3.616
+                },
+                {
+                  "alongMm": 22.884,
+                  "depthMm": 3.621
+                },
+                {
+                  "alongMm": 19.684,
+                  "depthMm": 3.624
+                },
+                {
+                  "alongMm": 23.284,
+                  "depthMm": 3.625
+                },
+                {
+                  "alongMm": 20.484,
+                  "depthMm": 3.627
+                },
+                {
+                  "alongMm": 30.484,
+                  "depthMm": 3.629
+                },
+                {
+                  "alongMm": 29.684,
+                  "depthMm": 3.63
+                },
+                {
+                  "alongMm": 33.684,
+                  "depthMm": 3.631
+                },
+                {
+                  "alongMm": 28.084,
+                  "depthMm": 3.631
+                },
+                {
+                  "alongMm": 34.484,
+                  "depthMm": 3.632
+                },
+                {
+                  "alongMm": 20.084,
+                  "depthMm": 3.632
+                },
+                {
+                  "alongMm": 40.084,
+                  "depthMm": 3.632
+                },
+                {
+                  "alongMm": 28.884,
+                  "depthMm": 3.632
+                },
+                {
+                  "alongMm": 24.884,
+                  "depthMm": 3.633
+                },
+                {
+                  "alongMm": 25.284,
+                  "depthMm": 3.633
+                },
+                {
+                  "alongMm": 27.284,
+                  "depthMm": 3.633
+                },
+                {
+                  "alongMm": 32.884,
+                  "depthMm": 3.633
+                },
+                {
+                  "alongMm": 26.884,
+                  "depthMm": 3.634
+                },
+                {
+                  "alongMm": 25.684,
+                  "depthMm": 3.634
+                },
+                {
+                  "alongMm": 35.284,
+                  "depthMm": 3.634
+                },
+                {
+                  "alongMm": 20.884,
+                  "depthMm": 3.635
+                },
+                {
+                  "alongMm": 39.284,
+                  "depthMm": 3.637
+                },
+                {
+                  "alongMm": 31.684,
+                  "depthMm": 3.637
+                },
+                {
+                  "alongMm": 26.084,
+                  "depthMm": 3.639
+                },
+                {
+                  "alongMm": 29.284,
+                  "depthMm": 3.639
+                },
+                {
+                  "alongMm": 26.484,
+                  "depthMm": 3.644
+                },
+                {
+                  "alongMm": 32.084,
+                  "depthMm": 3.644
+                },
+                {
+                  "alongMm": 14.884,
+                  "depthMm": 3.646
+                },
+                {
+                  "alongMm": 36.084,
+                  "depthMm": 3.647
+                },
+                {
+                  "alongMm": 38.484,
+                  "depthMm": 3.648
+                },
+                {
+                  "alongMm": 33.284,
+                  "depthMm": 3.649
+                },
+                {
+                  "alongMm": 30.084,
+                  "depthMm": 3.649
+                },
+                {
+                  "alongMm": 41.684,
+                  "depthMm": 3.651
+                },
+                {
+                  "alongMm": 44.884,
+                  "depthMm": 3.653
+                },
+                {
+                  "alongMm": 54.884,
+                  "depthMm": 3.653
+                },
+                {
+                  "alongMm": 40.884,
+                  "depthMm": 3.654
+                },
+                {
+                  "alongMm": 44.084,
+                  "depthMm": 3.654
+                },
+                {
+                  "alongMm": 43.284,
+                  "depthMm": 3.656
+                },
+                {
+                  "alongMm": 55.284,
+                  "depthMm": 3.66
+                },
+                {
+                  "alongMm": 78.884,
+                  "depthMm": 3.66
+                },
+                {
+                  "alongMm": 50.484,
+                  "depthMm": 3.663
+                },
+                {
+                  "alongMm": 14.484,
+                  "depthMm": 3.663
+                },
+                {
+                  "alongMm": 49.684,
+                  "depthMm": 3.663
+                },
+                {
+                  "alongMm": 42.484,
+                  "depthMm": 3.667
+                },
+                {
+                  "alongMm": 24.484,
+                  "depthMm": 3.667
+                },
+                {
+                  "alongMm": 19.284,
+                  "depthMm": 3.668
+                },
+                {
+                  "alongMm": 49.284,
+                  "depthMm": 3.668
+                },
+                {
+                  "alongMm": 42.884,
+                  "depthMm": 3.669
+                },
+                {
+                  "alongMm": 54.484,
+                  "depthMm": 3.67
+                },
+                {
+                  "alongMm": 43.684,
+                  "depthMm": 3.67
+                },
+                {
+                  "alongMm": 53.284,
+                  "depthMm": 3.671
+                },
+                {
+                  "alongMm": 18.484,
+                  "depthMm": 3.673
+                },
+                {
+                  "alongMm": 51.284,
+                  "depthMm": 3.673
+                },
+                {
+                  "alongMm": 62.884,
+                  "depthMm": 3.675
+                },
+                {
+                  "alongMm": 48.084,
+                  "depthMm": 3.676
+                },
+                {
+                  "alongMm": 31.284,
+                  "depthMm": 3.676
+                },
+                {
+                  "alongMm": 41.284,
+                  "depthMm": 3.677
+                },
+                {
+                  "alongMm": 52.484,
+                  "depthMm": 3.678
+                },
+                {
+                  "alongMm": 34.884,
+                  "depthMm": 3.68
+                },
+                {
+                  "alongMm": 60.484,
+                  "depthMm": 3.68
+                },
+                {
+                  "alongMm": 57.284,
+                  "depthMm": 3.681
+                },
+                {
+                  "alongMm": 46.884,
+                  "depthMm": 3.681
+                },
+                {
+                  "alongMm": 46.084,
+                  "depthMm": 3.681
+                },
+                {
+                  "alongMm": 48.884,
+                  "depthMm": 3.681
+                },
+                {
+                  "alongMm": 79.684,
+                  "depthMm": 3.681
+                },
+                {
+                  "alongMm": 51.684,
+                  "depthMm": 3.681
+                },
+                {
+                  "alongMm": 55.684,
+                  "depthMm": 3.682
+                },
+                {
+                  "alongMm": 59.684,
+                  "depthMm": 3.682
+                },
+                {
+                  "alongMm": 37.284,
+                  "depthMm": 3.683
+                },
+                {
+                  "alongMm": 45.284,
+                  "depthMm": 3.683
+                },
+                {
+                  "alongMm": 62.084,
+                  "depthMm": 3.685
+                },
+                {
+                  "alongMm": 56.084,
+                  "depthMm": 3.685
+                },
+                {
+                  "alongMm": 47.684,
+                  "depthMm": 3.685
+                },
+                {
+                  "alongMm": 39.684,
+                  "depthMm": 3.686
+                },
+                {
+                  "alongMm": 35.684,
+                  "depthMm": 3.686
+                },
+                {
+                  "alongMm": 44.484,
+                  "depthMm": 3.686
+                },
+                {
+                  "alongMm": 63.284,
+                  "depthMm": 3.686
+                },
+                {
+                  "alongMm": 34.084,
+                  "depthMm": 3.687
+                },
+                {
+                  "alongMm": 66.084,
+                  "depthMm": 3.687
+                },
+                {
+                  "alongMm": 48.484,
+                  "depthMm": 3.687
+                },
+                {
+                  "alongMm": 70.484,
+                  "depthMm": 3.688
+                },
+                {
+                  "alongMm": 67.684,
+                  "depthMm": 3.688
+                },
+                {
+                  "alongMm": 70.884,
+                  "depthMm": 3.689
+                },
+                {
+                  "alongMm": 76.484,
+                  "depthMm": 3.69
+                },
+                {
+                  "alongMm": 62.484,
+                  "depthMm": 3.69
+                },
+                {
+                  "alongMm": 66.884,
+                  "depthMm": 3.691
+                },
+                {
+                  "alongMm": 61.284,
+                  "depthMm": 3.691
+                },
+                {
+                  "alongMm": 71.684,
+                  "depthMm": 3.691
+                },
+                {
+                  "alongMm": 75.684,
+                  "depthMm": 3.692
+                },
+                {
+                  "alongMm": 72.484,
+                  "depthMm": 3.692
+                },
+                {
+                  "alongMm": 64.484,
+                  "depthMm": 3.692
+                },
+                {
+                  "alongMm": 76.084,
+                  "depthMm": 3.693
+                },
+                {
+                  "alongMm": 52.884,
+                  "depthMm": 3.693
+                },
+                {
+                  "alongMm": 65.284,
+                  "depthMm": 3.693
+                },
+                {
+                  "alongMm": 58.484,
+                  "depthMm": 3.694
+                },
+                {
+                  "alongMm": 54.084,
+                  "depthMm": 3.694
+                },
+                {
+                  "alongMm": 63.684,
+                  "depthMm": 3.694
+                },
+                {
+                  "alongMm": 72.884,
+                  "depthMm": 3.697
+                },
+                {
+                  "alongMm": 69.284,
+                  "depthMm": 3.699
+                },
+                {
+                  "alongMm": 64.884,
+                  "depthMm": 3.699
+                },
+                {
+                  "alongMm": 76.884,
+                  "depthMm": 3.7
+                },
+                {
+                  "alongMm": 65.684,
+                  "depthMm": 3.701
+                },
+                {
+                  "alongMm": 78.084,
+                  "depthMm": 3.703
+                },
+                {
+                  "alongMm": 70.084,
+                  "depthMm": 3.708
+                },
+                {
+                  "alongMm": 68.884,
+                  "depthMm": 3.708
+                },
+                {
+                  "alongMm": 17.684,
+                  "depthMm": 3.708
+                },
+                {
+                  "alongMm": 57.684,
+                  "depthMm": 3.708
+                },
+                {
+                  "alongMm": 68.484,
+                  "depthMm": 3.709
+                },
+                {
+                  "alongMm": 72.084,
+                  "depthMm": 3.71
+                },
+                {
+                  "alongMm": 74.484,
+                  "depthMm": 3.711
+                },
+                {
+                  "alongMm": 69.684,
+                  "depthMm": 3.714
+                },
+                {
+                  "alongMm": 78.484,
+                  "depthMm": 3.717
+                },
+                {
+                  "alongMm": 79.284,
+                  "depthMm": 3.719
+                },
+                {
+                  "alongMm": 24.084,
+                  "depthMm": 3.72
+                },
+                {
+                  "alongMm": 67.284,
+                  "depthMm": 3.722
+                },
+                {
+                  "alongMm": 52.084,
+                  "depthMm": 3.727
+                },
+                {
+                  "alongMm": 23.684,
+                  "depthMm": 3.729
+                },
+                {
+                  "alongMm": 28.484,
+                  "depthMm": 3.731
+                },
+                {
+                  "alongMm": 66.484,
+                  "depthMm": 3.732
+                },
+                {
+                  "alongMm": 73.284,
+                  "depthMm": 3.734
+                },
+                {
+                  "alongMm": 38.884,
+                  "depthMm": 3.739
+                },
+                {
+                  "alongMm": 60.884,
+                  "depthMm": 3.745
+                },
+                {
+                  "alongMm": 73.684,
+                  "depthMm": 3.749
+                },
+                {
+                  "alongMm": 22.084,
+                  "depthMm": 3.759
+                },
+                {
+                  "alongMm": 13.284,
+                  "depthMm": 3.771
+                },
+                {
+                  "alongMm": 21.684,
+                  "depthMm": 3.773
+                },
+                {
+                  "alongMm": 30.884,
+                  "depthMm": 3.773
+                },
+                {
+                  "alongMm": 36.484,
+                  "depthMm": 3.782
+                },
+                {
+                  "alongMm": 27.684,
+                  "depthMm": 3.789
+                },
+                {
+                  "alongMm": 77.284,
+                  "depthMm": 3.793
+                },
+                {
+                  "alongMm": 47.284,
+                  "depthMm": 3.807
+                },
+                {
+                  "alongMm": 37.684,
+                  "depthMm": 3.812
+                },
+                {
+                  "alongMm": 32.484,
+                  "depthMm": 3.815
+                },
+                {
+                  "alongMm": 46.484,
+                  "depthMm": 3.826
+                },
+                {
+                  "alongMm": 36.884,
+                  "depthMm": 3.826
+                },
+                {
+                  "alongMm": 13.684,
+                  "depthMm": 3.827
+                },
+                {
+                  "alongMm": 59.284,
+                  "depthMm": 3.827
+                },
+                {
+                  "alongMm": 61.684,
+                  "depthMm": 3.827
+                },
+                {
+                  "alongMm": 38.084,
+                  "depthMm": 3.829
+                },
+                {
+                  "alongMm": 68.084,
+                  "depthMm": 3.829
+                },
+                {
+                  "alongMm": 58.884,
+                  "depthMm": 3.832
+                },
+                {
+                  "alongMm": 77.684,
+                  "depthMm": 3.838
+                },
+                {
+                  "alongMm": 74.884,
+                  "depthMm": 3.848
+                },
+                {
+                  "alongMm": 71.284,
+                  "depthMm": 3.848
+                },
+                {
+                  "alongMm": 42.084,
+                  "depthMm": 3.85
+                },
+                {
+                  "alongMm": 75.284,
+                  "depthMm": 3.85
+                },
+                {
+                  "alongMm": 58.084,
+                  "depthMm": 3.867
+                },
+                {
+                  "alongMm": 56.884,
+                  "depthMm": 3.868
+                },
+                {
+                  "alongMm": 53.684,
+                  "depthMm": 3.87
+                }
+              ],
+              "elements": [
+                {
+                  "depthMm": 3.683,
+                  "fromMm": 12.484,
+                  "toMm": 79.684,
+                  "coverage": 0.904,
+                  "stations": 161,
+                  "runs": [
+                    {
+                      "fromMm": 12.484,
+                      "toMm": 79.684,
+                      "stations": 161
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "outline",
+                  "refused": false,
+                  "why": null
+                },
+                {
+                  "depthMm": 6.829,
+                  "fromMm": 8.884,
+                  "toMm": 9.284,
+                  "coverage": 0.011,
+                  "stations": 2,
+                  "runs": [
+                    {
+                      "fromMm": 8.884,
+                      "toMm": 9.284,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "isolated",
+                  "refused": true,
+                  "why": "single-station readings, not an outline"
+                }
+              ]
+            },
+            "right": {
+              "mm": 2.789,
+              "confidence": 0.517,
+              "withheld": false,
+              "reason": null,
+              "shape": "outer",
+              "coverage": 0.438,
+              "points": [
+                {
+                  "alongMm": 70.493,
+                  "depthMm": 2.687
+                },
+                {
+                  "alongMm": 69.693,
+                  "depthMm": 2.693
+                },
+                {
+                  "alongMm": 72.493,
+                  "depthMm": 2.693
+                },
+                {
+                  "alongMm": 70.093,
+                  "depthMm": 2.694
+                },
+                {
+                  "alongMm": 70.893,
+                  "depthMm": 2.697
+                },
+                {
+                  "alongMm": 71.293,
+                  "depthMm": 2.698
+                },
+                {
+                  "alongMm": 47.693,
+                  "depthMm": 2.7
+                },
+                {
+                  "alongMm": 72.093,
+                  "depthMm": 2.706
+                },
+                {
+                  "alongMm": 69.293,
+                  "depthMm": 2.707
+                },
+                {
+                  "alongMm": 51.293,
+                  "depthMm": 2.711
+                },
+                {
+                  "alongMm": 66.493,
+                  "depthMm": 2.713
+                },
+                {
+                  "alongMm": 65.693,
+                  "depthMm": 2.715
+                },
+                {
+                  "alongMm": 45.693,
+                  "depthMm": 2.718
+                },
+                {
+                  "alongMm": 65.293,
+                  "depthMm": 2.721
+                },
+                {
+                  "alongMm": 47.293,
+                  "depthMm": 2.723
+                },
+                {
+                  "alongMm": 48.893,
+                  "depthMm": 2.729
+                },
+                {
+                  "alongMm": 66.093,
+                  "depthMm": 2.731
+                },
+                {
+                  "alongMm": 29.293,
+                  "depthMm": 2.733
+                },
+                {
+                  "alongMm": 46.893,
+                  "depthMm": 2.74
+                },
+                {
+                  "alongMm": 32.093,
+                  "depthMm": 2.745
+                },
+                {
+                  "alongMm": 48.093,
+                  "depthMm": 2.75
+                },
+                {
+                  "alongMm": 43.293,
+                  "depthMm": 2.751
+                },
+                {
+                  "alongMm": 48.493,
+                  "depthMm": 2.752
+                },
+                {
+                  "alongMm": 63.293,
+                  "depthMm": 2.753
+                },
+                {
+                  "alongMm": 28.893,
+                  "depthMm": 2.753
+                },
+                {
+                  "alongMm": 37.693,
+                  "depthMm": 2.756
+                },
+                {
+                  "alongMm": 29.693,
+                  "depthMm": 2.758
+                },
+                {
+                  "alongMm": 30.093,
+                  "depthMm": 2.76
+                },
+                {
+                  "alongMm": 68.893,
+                  "depthMm": 2.765
+                },
+                {
+                  "alongMm": 27.293,
+                  "depthMm": 2.77
+                },
+                {
+                  "alongMm": 34.493,
+                  "depthMm": 2.771
+                },
+                {
+                  "alongMm": 30.493,
+                  "depthMm": 2.772
+                },
+                {
+                  "alongMm": 35.293,
+                  "depthMm": 2.773
+                },
+                {
+                  "alongMm": 26.493,
+                  "depthMm": 2.774
+                },
+                {
+                  "alongMm": 28.093,
+                  "depthMm": 2.782
+                },
+                {
+                  "alongMm": 46.493,
+                  "depthMm": 2.783
+                },
+                {
+                  "alongMm": 67.293,
+                  "depthMm": 2.786
+                },
+                {
+                  "alongMm": 44.493,
+                  "depthMm": 2.786
+                },
+                {
+                  "alongMm": 39.293,
+                  "depthMm": 2.788
+                },
+                {
+                  "alongMm": 52.493,
+                  "depthMm": 2.79
+                },
+                {
+                  "alongMm": 36.093,
+                  "depthMm": 2.795
+                },
+                {
+                  "alongMm": 51.693,
+                  "depthMm": 2.798
+                },
+                {
+                  "alongMm": 49.693,
+                  "depthMm": 2.806
+                },
+                {
+                  "alongMm": 30.893,
+                  "depthMm": 2.813
+                },
+                {
+                  "alongMm": 31.693,
+                  "depthMm": 2.821
+                },
+                {
+                  "alongMm": 24.493,
+                  "depthMm": 2.823
+                },
+                {
+                  "alongMm": 68.493,
+                  "depthMm": 2.83
+                },
+                {
+                  "alongMm": 43.693,
+                  "depthMm": 2.83
+                },
+                {
+                  "alongMm": 34.893,
+                  "depthMm": 2.833
+                },
+                {
+                  "alongMm": 44.093,
+                  "depthMm": 2.845
+                },
+                {
+                  "alongMm": 35.693,
+                  "depthMm": 2.849
+                },
+                {
+                  "alongMm": 40.493,
+                  "depthMm": 2.85
+                },
+                {
+                  "alongMm": 52.093,
+                  "depthMm": 2.852
+                },
+                {
+                  "alongMm": 50.893,
+                  "depthMm": 2.856
+                },
+                {
+                  "alongMm": 68.093,
+                  "depthMm": 2.865
+                },
+                {
+                  "alongMm": 31.293,
+                  "depthMm": 2.865
+                },
+                {
+                  "alongMm": 52.893,
+                  "depthMm": 2.87
+                },
+                {
+                  "alongMm": 50.093,
+                  "depthMm": 2.875
+                },
+                {
+                  "alongMm": 27.693,
+                  "depthMm": 2.876
+                },
+                {
+                  "alongMm": 64.093,
+                  "depthMm": 2.881
+                },
+                {
+                  "alongMm": 33.293,
+                  "depthMm": 2.885
+                },
+                {
+                  "alongMm": 44.893,
+                  "depthMm": 2.887
+                },
+                {
+                  "alongMm": 50.493,
+                  "depthMm": 2.89
+                },
+                {
+                  "alongMm": 66.893,
+                  "depthMm": 2.902
+                },
+                {
+                  "alongMm": 64.493,
+                  "depthMm": 2.905
+                },
+                {
+                  "alongMm": 34.093,
+                  "depthMm": 2.907
+                },
+                {
+                  "alongMm": 26.893,
+                  "depthMm": 2.912
+                },
+                {
+                  "alongMm": 23.293,
+                  "depthMm": 2.912
+                },
+                {
+                  "alongMm": 32.493,
+                  "depthMm": 2.925
+                },
+                {
+                  "alongMm": 21.693,
+                  "depthMm": 2.928
+                },
+                {
+                  "alongMm": 67.693,
+                  "depthMm": 2.93
+                },
+                {
+                  "alongMm": 64.893,
+                  "depthMm": 2.936
+                },
+                {
+                  "alongMm": 45.293,
+                  "depthMm": 2.939
+                },
+                {
+                  "alongMm": 49.293,
+                  "depthMm": 2.945
+                },
+                {
+                  "alongMm": 63.693,
+                  "depthMm": 2.952
+                },
+                {
+                  "alongMm": 26.093,
+                  "depthMm": 2.952
+                },
+                {
+                  "alongMm": 24.893,
+                  "depthMm": 2.954
+                },
+                {
+                  "alongMm": 36.493,
+                  "depthMm": 2.963
+                }
+              ],
+              "elements": [
+                {
+                  "depthMm": 2.789,
+                  "fromMm": 21.693,
+                  "toMm": 72.493,
+                  "coverage": 0.438,
+                  "stations": 78,
+                  "runs": [
+                    {
+                      "fromMm": 21.693,
+                      "toMm": 21.693,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 23.293,
+                      "toMm": 23.293,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 24.493,
+                      "toMm": 24.893,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 26.093,
+                      "toMm": 36.493,
+                      "stations": 24
+                    },
+                    {
+                      "fromMm": 37.693,
+                      "toMm": 37.693,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 39.293,
+                      "toMm": 39.293,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 40.493,
+                      "toMm": 40.493,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 43.293,
+                      "toMm": 52.893,
+                      "stations": 24
+                    },
+                    {
+                      "fromMm": 63.293,
+                      "toMm": 72.493,
+                      "stations": 23
+                    }
+                  ],
+                  "runCount": 9,
+                  "role": "outline",
+                  "refused": false,
+                  "why": null
+                },
+                {
+                  "depthMm": 3.987,
+                  "fromMm": 28.493,
+                  "toMm": 33.693,
+                  "coverage": 0.011,
+                  "stations": 2,
+                  "runs": [
+                    {
+                      "fromMm": 28.493,
+                      "toMm": 28.493,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 33.693,
+                      "toMm": 33.693,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 5.027,
+                  "fromMm": 23.693,
+                  "toMm": 25.293,
+                  "coverage": 0.011,
+                  "stations": 2,
+                  "runs": [
+                    {
+                      "fromMm": 23.693,
+                      "toMm": 23.693,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 25.293,
+                      "toMm": 25.293,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 5.822,
+                  "fromMm": 78.093,
+                  "toMm": 79.693,
+                  "coverage": 0.028,
+                  "stations": 5,
+                  "runs": [
+                    {
+                      "fromMm": 78.093,
+                      "toMm": 79.693,
+                      "stations": 5
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 7.303,
+                  "fromMm": 76.093,
+                  "toMm": 76.493,
+                  "coverage": 0.011,
+                  "stations": 2,
+                  "runs": [
+                    {
+                      "fromMm": 76.093,
+                      "toMm": 76.493,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 8.493,
+                  "fromMm": 36.893,
+                  "toMm": 77.693,
+                  "coverage": 0.034,
+                  "stations": 6,
+                  "runs": [
+                    {
+                      "fromMm": 36.893,
+                      "toMm": 36.893,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 39.693,
+                      "toMm": 39.693,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 73.293,
+                      "toMm": 73.293,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 76.893,
+                      "toMm": 77.693,
+                      "stations": 3
+                    }
+                  ],
+                  "runCount": 4,
+                  "role": "isolated",
+                  "refused": true,
+                  "why": "single-station readings, not an outline"
+                },
+                {
+                  "depthMm": 9.56,
+                  "fromMm": 37.293,
+                  "toMm": 40.093,
+                  "coverage": 0.011,
+                  "stations": 2,
+                  "runs": [
+                    {
+                      "fromMm": 37.293,
+                      "toMm": 37.293,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 40.093,
+                      "toMm": 40.093,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 11.13,
+                  "fromMm": 38.893,
+                  "toMm": 73.693,
+                  "coverage": 0.011,
+                  "stations": 2,
+                  "runs": [
+                    {
+                      "fromMm": 38.893,
+                      "toMm": 38.893,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 73.693,
+                      "toMm": 73.693,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 2,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
     "TD-03": {
       "sides": {
         "top": {
