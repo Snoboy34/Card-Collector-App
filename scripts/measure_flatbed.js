@@ -2429,10 +2429,14 @@ async function selfTest() {
   const lavitar = parseScanName('flatbed/Lavitar_up.png', manifest);
   const fouts = parseScanName('/scans/Fouts_180.png', manifest);
   const td01 = parseScanName('TD-01_up.png', manifest);
+  const karros = parseScanName('KARROS_180.png', manifest);
+  const laporta = parseScanName('flatbed/Laporta_up.png', manifest);
   check('manifest maps Lavitar_up to TD-03', lavitar && lavitar.card === 'TD-03' && lavitar.orientation === 'up', lavitar);
   check('manifest maps Fouts_180 to TD-04', fouts && fouts.card === 'TD-04' && fouts.orientation === '180', fouts);
   check('manifest keeps TD-01_up', td01 && td01.card === 'TD-01' && td01.orientation === 'up', td01);
-  check('manifest ignores a name it does not list', parseScanName('Laporta_up.png', manifest) == null);
+  check('manifest maps KARROS_180 to KARROS', karros && karros.card === 'KARROS' && karros.orientation === '180', karros);
+  check('manifest maps Laporta_up to LAPORTA', laporta && laporta.card === 'LAPORTA' && laporta.orientation === 'up', laporta);
+  check('manifest ignores a name it does not list', parseScanName('not-a-scan.png', manifest) == null);
 
   const tiltedPng = await sharp(mixed.data, {
     raw: { width: mixed.width, height: mixed.height, channels: 3 }
