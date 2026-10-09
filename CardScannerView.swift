@@ -81,6 +81,7 @@ struct CardScannerView: View {
     @State private var stillCaptureNonce: UInt64 = 0
     @State private var exposureLockStatus = "Camera starting…"
     @State private var judgeServerURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
+    @State private var helpImprove = CenteringAssistStore.helpImprove()
     @State private var deckIdInput = UserDefaults.standard.string(forKey: JudgeTestDeck.deckIdDefaultsKey) ?? ""
     @State private var preSubmission = false
     @State private var intendedGrader = ""
@@ -181,8 +182,10 @@ struct CardScannerView: View {
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showingActiveScanReport) {
                 if let ledger = pendingServerLedger {
-                    ActiveScanReportSheet(ledger: ledger, onCommit: {
-                        commitAndResetScan(ledger: ledger)
+                    ActiveScanReportSheet(ledger: ledger, serverURL: judgeServerURL, onLedger: { updated in
+                        pendingServerLedger = updated
+                    }, onCommit: { updated in
+                        commitAndResetScan(ledger: updated)
                     })
                 }
             }
@@ -193,6 +196,7 @@ struct CardScannerView: View {
                 CompactScanLayout.runContractChecks()
                 CaptureMetadata.runContractChecks()
                 JudgeAPIClient.runContractChecks()
+                CenteringAssist.runContractChecks()
                 #endif
                 if !CaptureMetadata.backgrounds.contains(scanBackground) {
                     scanBackground = ""
@@ -326,6 +330,14 @@ struct CardScannerView: View {
                     .onChange(of: judgeServerURL) {
                         UserDefaults.standard.set(judgeServerURL, forKey: JudgeAPIClient.serverURLDefaultsKey)
                     }
+                Toggle("Help improve The Judge", isOn: $helpImprove)
+                    .font(.caption2)
+                    .onChange(of: helpImprove) {
+                        CenteringAssistStore.setHelpImprove(helpImprove)
+                    }
+                Text("Off by default. A correction stays on this phone and the home server.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
                 HStack(spacing: 8) {
                     TextField("Deck card (TD-01)", text: $deckIdInput)
                         .textInputAutocapitalization(.characters)
@@ -560,7 +572,9 @@ struct CardScannerView: View {
                 }
             }
             .sheet(item: $selectedVaultCard) { vaultCard in
-                VaultDetailSheet(card: vaultCard)
+                VaultDetailSheet(card: vaultCard) { updated in
+                    portfolio.replaceSavedCard(id: vaultCard.id, ledger: updated)
+                }
             }
         }
     }
@@ -1085,10 +1099,26 @@ struct ScanLedgerRows: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal)
         VStack(spacing: 12) {
-            HStack {
-                Text("Grade")
-                Spacer()
-                Text(ledger.displayGrade).bold().foregroundColor(.purple)
+            if ledger.centeringAssist?.displayLine != nil {
+                HStack {
+                    Text("Engine grade")
+                    Spacer()
+                    Text(ledger.displayEngineGrade).bold().foregroundColor(.purple)
+                }
+                HStack {
+                    Text("Centering")
+                    Spacer()
+                    Text(ledger.displayGrade)
+                        .bold()
+                        .foregroundColor(.orange)
+                        .multilineTextAlignment(.trailing)
+                }
+            } else {
+                HStack {
+                    Text("Grade")
+                    Spacer()
+                    Text(ledger.displayGrade).bold().foregroundColor(.purple)
+                }
             }
             Divider()
             HStack {
@@ -1148,37 +1178,76 @@ struct ScanLedgerRows: View {
 
 struct VaultDetailSheet: View {
     let card: SavedCard
+    let onSaved: (ScanLedger) -> Void
     @Environment(\.dismiss) var dismiss
+    @State private var ledger: ScanLedger
+    private let serverURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
+
+    init(card: SavedCard, onSaved: @escaping (ScanLedger) -> Void) {
+        self.card = card
+        self.onSaved = onSaved
+        _ledger = State(initialValue: card.asLedger)
+    }
+
     var body: some View {
-        VStack(spacing: 20) {
-            Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
-            Text("VAULT RECORD AUDIT").font(.headline).bold().foregroundColor(.purple)
-            ScanLedgerRows(ledger: card.asLedger)
-            Button("Dismiss Audit Ledger") { dismiss() }
-                .font(.subheadline).bold().foregroundColor(.secondary).padding()
-            Spacer()
+        ScrollView {
+            VStack(spacing: 20) {
+                Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
+                Text("VAULT RECORD AUDIT").font(.headline).bold().foregroundColor(.purple)
+                ScanLedgerRows(ledger: ledger)
+                centeringEditor(ledger)
+                Button("Dismiss Audit Ledger") { dismiss() }
+                    .font(.subheadline).bold().foregroundColor(.secondary).padding()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func centeringEditor(_ ledger: ScanLedger) -> some View {
+        if let snapshot = ledger.centeringAssist {
+            CenteringAssistEditor(scanId: ledger.scanId, serverURL: serverURL, snapshot: snapshot) { updated in
+                self.ledger = updated
+                onSaved(updated)
+            }
         }
     }
 }
 
 struct ActiveScanReportSheet: View {
-    let ledger: ScanLedger
-    let onCommit: () -> Void
+    let serverURL: String
+    let onLedger: (ScanLedger) -> Void
+    let onCommit: (ScanLedger) -> Void
     @Environment(\.dismiss) var dismiss
+    @State private var ledger: ScanLedger
+
+    init(ledger: ScanLedger, serverURL: String, onLedger: @escaping (ScanLedger) -> Void, onCommit: @escaping (ScanLedger) -> Void) {
+        self.serverURL = serverURL
+        self.onLedger = onLedger
+        self.onCommit = onCommit
+        _ledger = State(initialValue: ledger)
+    }
+
     var body: some View {
-        VStack(spacing: 20) {
-            Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
-            Text("SERVER GRADE REPORT").font(.headline).bold().foregroundColor(.blue)
-            ScanLedgerRows(ledger: ledger)
-            Button(action: {
-                onCommit()
-                dismiss()
-            }) {
-                Text("Commit Scan to Collection Portfolio & Close")
-                    .bold().foregroundColor(.white).frame(maxWidth: .infinity).padding().background(Color.blue).cornerRadius(10)
+        ScrollView {
+            VStack(spacing: 20) {
+                Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
+                Text("SERVER GRADE REPORT").font(.headline).bold().foregroundColor(.blue)
+                ScanLedgerRows(ledger: ledger)
+                if let snapshot = ledger.centeringAssist {
+                    CenteringAssistEditor(scanId: ledger.scanId, serverURL: serverURL, snapshot: snapshot) { updated in
+                        ledger = updated
+                        onLedger(updated)
+                    }
+                }
+                Button(action: {
+                    onCommit(ledger)
+                    dismiss()
+                }) {
+                    Text("Commit Scan to Collection Portfolio & Close")
+                        .bold().foregroundColor(.white).frame(maxWidth: .infinity).padding().background(Color.blue).cornerRadius(10)
+                }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
-            Spacer()
         }
     }
 }
