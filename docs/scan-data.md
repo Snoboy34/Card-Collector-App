@@ -33,6 +33,8 @@ bash scripts/push_scan_data.sh
 That copies:
 
 - `data/database.json`, `failed_scans.jsonl`, `scan_labels.json`, `test_deck.json`
+
+`data/centering_examples.jsonl` and `data/assist_settings.json` are not copied. The database copy has the assisted label, with the user's border line in millimetres removed.
 - every file in `uploads/`
 - `scans/<scanId>/overlay.jpg`, `oriented.jpg`, and `debug.json`
 

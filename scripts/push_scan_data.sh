@@ -42,7 +42,24 @@ copy_if() {
   fi
 }
 
-copy_if "$DATA_DIR/database.json" "$REPO/data/database.json"
+# Assisted-correction examples stay on this machine. consent=false rows
+# must not be copied, and the exact user line is stripped from the grade
+# copy below. Do not add centering_examples.jsonl to this list.
+if [[ -f "$DATA_DIR/database.json" ]]; then
+  node -e '
+    const fs = require("fs");
+    const assist = require(process.argv[1]);
+    const db = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+    (db.inventory || []).forEach(function (item) {
+      if (item && item.gradingReport) {
+        item.gradingReport = assist.redactReportForEgress(item.gradingReport);
+      }
+    });
+    delete db.centeringExamples;
+    fs.writeFileSync(process.argv[3], JSON.stringify(db, null, 2));
+  ' "$ROOT/services/centering_assist.js" "$DATA_DIR/database.json" "$REPO/data/database.json"
+fi
+rm -f "$REPO/data/centering_examples.jsonl" "$REPO/data/assist_settings.json"
 copy_if "$DATA_DIR/failed_scans.jsonl" "$REPO/data/failed_scans.jsonl"
 copy_if "$DATA_DIR/scan_labels.json" "$REPO/data/scan_labels.json"
 copy_if "$DATA_DIR/test_deck.json" "$REPO/data/test_deck.json"
