@@ -204,6 +204,20 @@ function buildFromMillimetres(report, userMm, meta) {
       return;
     }
 
+    const previous = report.centeringAssist && report.centeringAssist.sides && report.centeringAssist.sides[side];
+    const previousUser = previous && geometry.isFiniteNumber(previous.userWidthMm) ? previous.userWidthMm : null;
+    if (previousUser != null && sameMm(placed, previousUser)) {
+      adjusted += 1;
+      combined[side] = placed;
+      sideRecords[side] = {
+        source: 'user',
+        kind: previous.kind || (measured ? 'disagreement' : 'assisted'),
+        engineWidthMm: rawEngine,
+        userWidthMm: placed
+      };
+      return;
+    }
+
     adjusted += 1;
     const kind = measured ? 'disagreement' : 'assisted';
     combined[side] = placed;

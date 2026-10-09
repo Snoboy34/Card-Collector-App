@@ -122,6 +122,12 @@ async function main() {
   assert('omitted consent is false', assist.buildFromLines(withheld, { left: lineForMm('left', 4) }, {
     scanId: 'assist-test-scan-0001'
   }).examples[0].consent === false);
+  const repeatReport = assist.attachAssist({ gradingReport: withheld }, built.assist).gradingReport;
+  const repeat = assist.buildFromLines(repeatReport, { left: lineForMm('left', 4) }, { scanId: 'assist-test-scan-0001' });
+  assert('the same user line is kept and not stored as a second example',
+    repeat.ok === true && repeat.examples.length === 0 &&
+    repeat.assist.sides.left.userWidthMm === 4 &&
+    repeat.assist.headline === 'Centering (you adjusted 1 side)', repeat);
 
   const partial = assist.buildFromLines(withheld, { left: lineForMm('left', 4) }, { scanId: 'assist-test-scan-0001' });
   assert('one withheld side plus measured opposites can score', partial.assist.centering === 7);

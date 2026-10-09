@@ -97,9 +97,11 @@
     wrap.appendChild(legend);
 
     var statusMap = g.sideStatus(report);
+    var savedSides = report.centeringAssist && report.centeringAssist.sides;
     var selected = SIDES.filter(function (side) { return statusMap[side].withheld; })[0] || 'left';
     var userPx = { left: null, right: null, top: null, bottom: null };
     var dragging = false;
+    var dirty = false;
 
     function imageReady() {
       return img.naturalWidth > 1 && img.naturalHeight > 1;
@@ -109,7 +111,13 @@
       if (!imageReady()) return;
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
+      SIDES.forEach(function (side) {
+        var row = savedSides && savedSides[side];
+        if (!row || !g.isFiniteNumber(row.userWidthMm) || userPx[side] != null) return;
+        userPx[side] = g.linePxFromWidthMm(side, row.userWidthMm, img.naturalWidth, img.naturalHeight);
+      });
       draw();
+      updateReadout();
     }
 
     function pointerToImage(event) {
@@ -221,7 +229,7 @@
       } else {
         readout.textContent = SIDE_LABEL[selected] + ' — you ' + formatMm(mm) + ', engine ' + formatMm(row.engineWidthMm) + '.';
       }
-      save.disabled = placedCount() === 0;
+      save.disabled = !dirty || placedCount() === 0;
       paintChips();
     }
 
@@ -257,6 +265,7 @@
       var point = pointerToImage(event);
       if (!point) return;
       dragging = true;
+      dirty = true;
       canvas.setPointerCapture(event.pointerId);
       userPx[selected] = clampToCard(selected, axisValue(selected, point));
       draw();
@@ -317,7 +326,7 @@
           if (!result.ok || !result.body || !result.body.ok) {
             var message = (result.body && result.body.error) || 'Could not save';
             status.textContent = message;
-            save.disabled = placedCount() === 0;
+            save.disabled = !dirty || placedCount() === 0;
             return;
           }
           status.textContent = 'Saved. This centering is assisted.';
@@ -325,7 +334,7 @@
         })
         .catch(function () {
           status.textContent = 'Could not save';
-          save.disabled = placedCount() === 0;
+          save.disabled = !dirty || placedCount() === 0;
         });
     });
 
