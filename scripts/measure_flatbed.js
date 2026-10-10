@@ -13,9 +13,15 @@
  * edge to the outermost points of that outline.
  *
  * A mark that sits in the margin, or that enters it along only part of a
- * side, is not the outline. The outline may change element along a side;
- * the width is then the outermost points of the design block. If those
- * points are not clear, that side is withheld.
+ * side, is not the outline. Texture or shading inside a uniform margin
+ * (foil, gloss, scanner noise) is not an edge either. A step counts only
+ * when it is the boundary between that margin and the design block. The
+ * outline may change element along a side; the width is then the outermost
+ * points of the design block. If those points are not clear, that side is
+ * withheld. The overlay follows those points, so a tilted frame is not
+ * crossed by a single-depth line. tiltDeg is the frame's angle against
+ * the card edge, in degrees. Positive means the border widens toward the
+ * side's end corner.
  *
  * A found quad that is not a card fails closed. sizeOk is true only when
  * the quad is within 2.5 mm (sum of absolute edge errors) of 63.5 × 88.9 mm
@@ -35,6 +41,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const sharp = require('sharp');
+const designOutline = require('../services/design_outline');
 
 const NOMINAL_W_MM = 63.5;
 const NOMINAL_H_MM = 88.9;
@@ -506,99 +513,15 @@ function smooth5(values) {
 }
 
 function outlineStartIndex(profile, stepMm) {
-  const n = profile.length;
-  if (n < 8) return 0;
-  const grad = new Array(n).fill(0);
-  for (let i = 0; i < n - 1; i++) {
-    if (!profile[i] || !profile[i + 1]) continue;
-    grad[i] = rgbDist(profile[i], profile[i + 1]);
-  }
-  const sm = smooth5(grad);
-  const window = Math.min(n - 2, Math.max(4, Math.round(1.6 / stepMm)));
-  let peakI = 1;
-  let peakV = 0;
-  for (let i = 1; i < window; i++) {
-    if (sm[i] > peakV) {
-      peakV = sm[i];
-      peakI = i;
-    }
-  }
-  if (peakV < CONTRAST_FLOOR) return Math.round(0.2 / stepMm);
-  const quiet = Math.max(CONTRAST_FLOOR, peakV * 0.12);
-  const need = Math.max(3, Math.round(0.28 / stepMm));
-  const limit = Math.min(n - need - 1, Math.round(2.2 / stepMm));
-  for (let i = peakI + 1; i <= limit; i++) {
-    let calm = true;
-    for (let j = 0; j < need; j++) {
-      if (sm[i + j] > quiet) {
-        calm = false;
-        break;
-      }
-    }
-    if (calm) return i + need;
-  }
-  return Math.min(n - 2, peakI + Math.round(0.2 / stepMm));
+  return designOutline.outlineStartIndex(profile, stepMm);
 }
 
-function marginColorFromProfile(profile, designStart) {
-  const colors = [];
-  const end = Math.min(profile.length, designStart + 8);
-  for (let i = Math.max(0, designStart); i < end; i++) {
-    if (profile[i]) colors.push(profile[i]);
-  }
-  if (!colors.length) return null;
-  return [
-    median(colors.map(function (c) { return c[0]; })),
-    median(colors.map(function (c) { return c[1]; })),
-    median(colors.map(function (c) { return c[2]; }))
-  ];
+function marginModelFromProfile(profile, designStart, stepMm) {
+  return designOutline.marginModelFromProfile(profile, designStart, stepMm);
 }
 
-function colorAtDepth(profile, depth, stepMm) {
-  const idx = Math.round(depth / stepMm);
-  if (idx < 0 || idx >= profile.length) return null;
-  return profile[idx];
-}
-
-function isMarginColor(rgb, marginColor) {
-  if (!rgb || !marginColor) return false;
-  return rgbDist(rgb, marginColor) < 40;
-}
-
-// The design block is the ink run that keeps going inward. A mark that sits
-// in the margin is an ink run with margin colour on the inside of it.
-function lastingDesignDepth(profile, stepMm, marginColor, startDepth) {
-  if (!marginColor) return null;
-  const maxD = Math.min(SEARCH_TO_MM, (profile.length - 1) * stepMm);
-  let depth = startDepth || 0;
-  while (depth < maxD) {
-    while (depth < maxD && isMarginColor(colorAtDepth(profile, depth, stepMm), marginColor)) {
-      depth += stepMm;
-    }
-    if (depth >= maxD) return null;
-    const inkStart = depth;
-    let marginRun = 0;
-    let inkRun = 0;
-    let d = depth;
-    let returned = false;
-    for (; d <= maxD; d += stepMm) {
-      if (isMarginColor(colorAtDepth(profile, d, stepMm), marginColor)) {
-        marginRun += stepMm;
-        inkRun = 0;
-        if (marginRun >= 0.28) {
-          returned = true;
-          break;
-        }
-      } else {
-        marginRun = 0;
-        inkRun += stepMm;
-        if (inkRun >= 0.85) break;
-      }
-    }
-    if (!returned && inkRun >= 0.55) return inkStart;
-    depth = d + stepMm;
-  }
-  return null;
+function lastingDesignDepth(profile, stepMm, model, startDepth) {
+  return designOutline.lastingDesignDepth(profile, stepMm, model, startDepth, SEARCH_TO_MM);
 }
 
 function snapDesignDepth(raw, cands) {
@@ -614,8 +537,8 @@ function snapDesignDepth(raw, cands) {
   return best ? best.depth : raw;
 }
 
-function tagMarginMarks(cands, profile, marginColor, stepMm, startDepth) {
-  const raw = lastingDesignDepth(profile, stepMm, marginColor, startDepth);
+function tagMarginMarks(cands, profile, marginModel, stepMm, startDepth) {
+  const raw = lastingDesignDepth(profile, stepMm, marginModel, startDepth);
   const designDepth = snapDesignDepth(raw, cands);
   for (let k = 0; k < cands.length; k++) {
     const depth = cands[k].depth;
@@ -1007,8 +930,8 @@ function measureSide(data, w, h, quad, sideName, ppm) {
     }
     const designStart = outlineStartIndex(profile, DEPTH_STEP_MM);
     const cands = rayCandidates(profile.slice(designStart), designStart * DEPTH_STEP_MM, DEPTH_STEP_MM);
-    const marginColor = marginColorFromProfile(profile, designStart);
-    const designDepth = tagMarginMarks(cands, profile, marginColor, DEPTH_STEP_MM, designStart * DEPTH_STEP_MM);
+    const marginModel = marginModelFromProfile(profile, designStart, DEPTH_STEP_MM);
+    const designDepth = tagMarginMarks(cands, profile, marginModel, DEPTH_STEP_MM, designStart * DEPTH_STEP_MM);
     stations.push({
       x: x,
       y: y,
@@ -1016,7 +939,8 @@ function measureSide(data, w, h, quad, sideName, ppm) {
       ny: ny,
       alongMm: s / ppm,
       t: t,
-      margin: marginColor,
+      margin: marginModel ? marginModel.med : null,
+      marginTextured: !!(marginModel && marginModel.textured),
       designDepth: designDepth,
       candidates: cands
     });
@@ -1030,6 +954,8 @@ function measureSide(data, w, h, quad, sideName, ppm) {
   best.side = sideName;
   best.lengthMm = lengthMm;
   best.edge = { a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, nx: nx, ny: ny };
+  const tiltPts = (best.used && best.used.length >= 2) ? best.used : best.points;
+  best.tiltDeg = designOutline.tiltDegrees(tiltPts);
   if (process.env.TRACE_FLATBED) {
     process.stdout.write(sideName + ' ' + JSON.stringify(traceSide(stations)) + '\n');
   }
@@ -1234,7 +1160,10 @@ function summarizeDesign(stations) {
     let deeper = null;
     for (let li = 0; li < layers.length; li++) {
       const other = layers[li];
-      if (other.median <= layer.median + 0.28) continue;
+      // A short step just outside a boundary that continues along the side
+      // is texture in the margin, not a second outline. 0.16 mm still keeps
+      // a real nearer element (a frame that only covers part of the side).
+      if (other.median <= layer.median + 0.16) continue;
       if (other.cov < 0.28) continue;
       if (!deeper || other.cov > deeper.cov) deeper = other;
     }
@@ -1418,6 +1347,7 @@ function sidePublic(side) {
     reason: side.reason || null,
     shape: side.shape || null,
     coverage: side.coverage == null ? null : Math.round(side.coverage * 1000) / 1000,
+    tiltDeg: side.tiltDeg == null || !isFinite(side.tiltDeg) ? null : Math.round(side.tiltDeg * 1000) / 1000,
     points: (side.used || []).map(function (p) {
       return { alongMm: roundMm(p.alongMm), depthMm: roundMm(p.depth) };
     }),
@@ -1625,7 +1555,7 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
     dpi: dpi,
     nominalCardMm: { width: NOMINAL_W_MM, height: NOMINAL_H_MM },
     biasAgreeMm: BIAS_AGREE_MM,
-    definition: 'Border is the perpendicular distance from the card edge to the outermost points of the continuous design-block outline on that side. A mark that covers only part of a side is not the outline. The published value is the mean of the upright scan and the swapped 180 degree scan. An axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. That bias is reported and is not subtracted as a constant. Unapproved until a person checks the overlay.',
+    definition: 'Border is the perpendicular distance from the card edge to the outermost points of the continuous design-block outline on that side. A mark that covers only part of a side is not the outline. Texture or shading inside a uniform margin is not an edge. The published value is the mean of the upright scan and the swapped 180 degree scan. An axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. That bias is reported and is not subtracted as a constant. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. Unapproved until a person checks the overlay.',
     cards: outCards
   };
 }
@@ -1634,6 +1564,40 @@ function esc(s) {
   return String(s).replace(/[&<>"]/g, function (ch) {
     return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch];
   });
+}
+
+// The cyan line follows the outline points. A single depth at the median
+// cuts through a tilted frame on the side where the frame is closer to the cut.
+function outlinePolyline(side, dpi) {
+  if (!side || !side.edge || side.mm == null) return null;
+  const ppm = pxPerMm(dpi);
+  const a = side.edge.a;
+  const b = side.edge.b;
+  const lenPx = hypot(b.x - a.x, b.y - a.y);
+  const lenMm = side.lengthMm || (lenPx / ppm);
+  const pts = (side.used || []).filter(function (p) {
+    return p && isFinite(p.depth) && isFinite(p.alongMm);
+  }).slice().sort(function (p, q) { return p.alongMm - q.alongMm; });
+  function atAlong(alongMm, depthMm) {
+    const t = lenMm > 0 ? alongMm / lenMm : 0;
+    const depth = Math.max(0, depthMm);
+    return {
+      x: a.x + (b.x - a.x) * t + side.edge.nx * depth * ppm,
+      y: a.y + (b.y - a.y) * t + side.edge.ny * depth * ppm
+    };
+  }
+  if (pts.length < 2) {
+    return [atAlong(0, side.mm), atAlong(lenMm, side.mm)];
+  }
+  const slope = (pts[pts.length - 1].depth - pts[0].depth) /
+    Math.max(0.5, pts[pts.length - 1].alongMm - pts[0].alongMm);
+  const poly = [atAlong(0, pts[0].depth + slope * (0 - pts[0].alongMm))];
+  pts.forEach(function (p) {
+    poly.push(atAlong(p.alongMm, p.depth));
+  });
+  const last = pts[pts.length - 1];
+  poly.push(atAlong(lenMm, last.depth + slope * (lenMm - last.alongMm)));
+  return poly;
 }
 
 function buildOverlaySvg(result, geom) {
@@ -1693,28 +1657,26 @@ function buildOverlaySvg(result, geom) {
       parts.push('<circle cx="' + sx(px) + '" cy="' + sy(py) + '" r="' + (pointR + 1.5) + '" fill="none" stroke="#ffffff" stroke-width="' + Math.max(1, stroke * 0.35) + '"/>');
     });
     if (!side.withheld && side.mm != null) {
-      const depthPx = side.mm * pxPerMm(result.dpi);
-      const a = side.edge.a;
-      const b = side.edge.b;
-      const ax = a.x + side.edge.nx * depthPx;
-      const ay = a.y + side.edge.ny * depthPx;
-      const bx = b.x + side.edge.nx * depthPx;
-      const by = b.y + side.edge.ny * depthPx;
-      parts.push(
-        '<line x1="' + sx(ax) + '" y1="' + sy(ay) + '" x2="' + sx(bx) + '" y2="' + sy(by) +
-        '" stroke="#000000" stroke-width="' + (stroke + 2) + '"/>'
-      );
-      parts.push(
-        '<line x1="' + sx(ax) + '" y1="' + sy(ay) + '" x2="' + sx(bx) + '" y2="' + sy(by) +
-        '" stroke="#3ee0ff" stroke-width="' + stroke + '"/>'
-      );
+      const poly = outlinePolyline(side, result.dpi) || [];
+      if (poly.length >= 2) {
+        const pointsAttr = poly.map(function (p) { return sx(p.x) + ',' + sy(p.y); }).join(' ');
+        parts.push(
+          '<polyline points="' + pointsAttr + '" fill="none" stroke="#000000" stroke-width="' + (stroke + 2) + '" stroke-linejoin="round"/>'
+        );
+        parts.push(
+          '<polyline points="' + pointsAttr + '" fill="none" stroke="#3ee0ff" stroke-width="' + stroke + '" stroke-linejoin="round"/>'
+        );
+      }
     }
     if (!labels) return;
     const labelX = (side.edge.a.x + side.edge.b.x) / 2 + side.edge.nx * 40 / scale;
     const labelY = (side.edge.a.y + side.edge.b.y) / 2 + side.edge.ny * 40 / scale;
+    const tiltNote = side.tiltDeg == null || !isFinite(side.tiltDeg)
+      ? ''
+      : '  tilt ' + side.tiltDeg.toFixed(2) + '°';
     const text = side.withheld
-      ? name + ' withheld' + (side.reason ? ' (' + side.reason + ')' : '')
-      : name + ' ' + side.mm.toFixed(2) + ' mm';
+      ? name + ' withheld' + (side.reason ? ' (' + side.reason + ')' : '') + tiltNote
+      : name + ' ' + side.mm.toFixed(2) + ' mm' + tiltNote;
     const anchor = name === 'right' ? 'end' : (name === 'left' ? 'start' : 'middle');
     parts.push(
       '<text x="' + sx(labelX) + '" y="' + sy(labelY) + '" fill="#ffffff" font-size="22" font-family="sans-serif" stroke="#000000" stroke-width="3" paint-order="stroke" text-anchor="' + anchor + '" dominant-baseline="middle">' +
@@ -1925,11 +1887,31 @@ async function measureFile(file, dpi) {
   return shiftResult(result, loaded.origin);
 }
 
-function parseScanName(file) {
+function flatbedManifestPath() {
+  return path.join(__dirname, '..', 'reference', 'flatbed_manifest.json');
+}
+
+function loadFlatbedManifest(file) {
+  const manifestFile = file || flatbedManifestPath();
+  const raw = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  const byName = {};
+  Object.keys(raw).forEach(function (name) {
+    const entry = raw[name];
+    if (!entry || typeof entry !== 'object') return;
+    const deck = String(entry.deck || '').trim().toUpperCase();
+    const orientation = String(entry.orientation || '').trim().toLowerCase();
+    if (!deck || (orientation !== 'up' && orientation !== '180')) return;
+    byName[name] = { card: deck, orientation: orientation };
+  });
+  return byName;
+}
+
+function parseScanName(file, manifest) {
   const base = path.basename(file);
-  const m = /^(TD-\d+)_(up|180)\.png$/i.exec(base);
-  if (!m) return null;
-  return { card: m[1].toUpperCase(), orientation: m[2].toLowerCase(), file: file };
+  const table = manifest || loadFlatbedManifest();
+  const hit = table[base];
+  if (!hit) return null;
+  return { card: hit.card, orientation: hit.orientation, file: file };
 }
 
 function readPngDpi(file) {
@@ -1989,12 +1971,19 @@ function defaultFlatbedDir() {
   return candidates[0] || candidates[candidates.length - 1];
 }
 
-function listScans(dir) {
+function listScans(dir, manifest) {
   if (!dir || !fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(function (name) { return /^TD-\d+_(up|180)\.png$/i.test(name); })
+  const table = manifest || loadFlatbedManifest();
+  return Object.keys(table)
+    .filter(function (name) { return fs.existsSync(path.join(dir, name)); })
     .map(function (name) { return path.join(dir, name); })
-    .sort();
+    .sort(function (a, b) {
+      const pa = table[path.basename(a)];
+      const pb = table[path.basename(b)];
+      const ka = pa.card + '\0' + (pa.orientation === 'up' ? '0' : '1');
+      const kb = pb.card + '\0' + (pb.orientation === 'up' ? '0' : '1');
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
 }
 
 function printReport(key) {
@@ -2110,6 +2099,232 @@ function fmtShare(v) {
   return v == null ? '—' : (v * 100).toFixed(1) + '%';
 }
 
+const REVIEW_MAX_BYTES = 3 * 1024 * 1024;
+
+function reviewCropBox(side, dpi, imageW, imageH) {
+  const ppm = pxPerMm(dpi);
+  const outside = 2.2 * ppm;
+  const inside = 8 * ppm;
+  const along = 14 * ppm;
+  const a = side.edge.a;
+  const b = side.edge.b;
+  const nx = side.edge.nx;
+  const ny = side.edge.ny;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.max(1, hypot(dx, dy));
+  const ux = dx / len;
+  const uy = dy / len;
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const a2 = { x: mx - ux * along, y: my - uy * along };
+  const b2 = { x: mx + ux * along, y: my + uy * along };
+  const pts = [
+    { x: a2.x - nx * outside, y: a2.y - ny * outside },
+    { x: b2.x - nx * outside, y: b2.y - ny * outside },
+    { x: b2.x + nx * inside, y: b2.y + ny * inside },
+    { x: a2.x + nx * inside, y: a2.y + ny * inside }
+  ];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  pts.forEach(function (p) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  });
+  const left = Math.max(0, Math.floor(minX));
+  const top = Math.max(0, Math.floor(minY));
+  const right = Math.min(imageW, Math.ceil(maxX));
+  const bottom = Math.min(imageH, Math.ceil(maxY));
+  return {
+    left: left,
+    top: top,
+    width: Math.max(1, right - left),
+    height: Math.max(1, bottom - top)
+  };
+}
+
+async function composeOverlay(file, result, options) {
+  const meta = await sharp(file).rotate().metadata();
+  let originX = 0;
+  let originY = 0;
+  let srcW = meta.width;
+  let srcH = meta.height;
+  let img = sharp(file).rotate();
+  if (options.extract) {
+    const box = options.extract;
+    img = img.extract(box);
+    originX = box.left;
+    originY = box.top;
+    srcW = box.width;
+    srcH = box.height;
+  }
+  const rot = options.rotate || 0;
+  const rotMod = Math.abs(rot % 180);
+  const quarterTurn = rotMod > 45 && rotMod < 135;
+  const limitW = quarterTurn ? options.maxHeight : options.maxWidth;
+  const limitH = quarterTurn ? options.maxWidth : options.maxHeight;
+  let scale = 1;
+  if (limitW) scale = Math.min(scale, limitW / srcW);
+  if (limitH) scale = Math.min(scale, limitH / srcH);
+  if (!isFinite(scale) || scale <= 0) scale = 1;
+  const dw = Math.max(1, Math.round(srcW * scale));
+  const dh = Math.max(1, Math.round(srcH * scale));
+  const base = await img.resize(dw, dh).png().toBuffer();
+  const stroke = options.stroke == null ? Math.max(2, Math.round(2.5 / Math.max(scale, 0.2))) : options.stroke;
+  const svg = buildOverlaySvg(result, {
+    scale: scale,
+    originX: originX,
+    originY: originY,
+    width: dw,
+    height: dh,
+    stroke: stroke,
+    pointR: options.pointR == null ? Math.max(2.2, stroke * 0.7) : options.pointR,
+    labels: options.labels !== false,
+    side: options.side || null
+  });
+  let out = await sharp(base).composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).png().toBuffer();
+  if (options.rotate) {
+    out = await sharp(out).rotate(options.rotate, { background: { r: 18, g: 18, b: 18 } }).png().toBuffer();
+  }
+  return out;
+}
+
+function rotateInwardDown(edge) {
+  const dx = edge.b.x - edge.a.x;
+  const dy = edge.b.y - edge.a.y;
+  const along = Math.atan2(dy, dx);
+  let deg = -along * 180 / Math.PI;
+  const rad = deg * Math.PI / 180;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  const iy = edge.nx * s + edge.ny * c;
+  if (iy < 0) deg += 180;
+  return Math.round(deg);
+}
+
+function reviewCaption(text, width) {
+  const h = 28;
+  return Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + h + '">' +
+    '<text x="8" y="20" fill="#ffffff" font-size="18" font-family="sans-serif">' + esc(text) + '</text></svg>'
+  );
+}
+
+function sideCaption(side, result) {
+  const s = result && result.sides && result.sides[side];
+  if (!s) return side + '  no edge';
+  const tilt = s.tiltDeg == null || !isFinite(s.tiltDeg) ? '' : '   tilt ' + s.tiltDeg.toFixed(2) + '°';
+  if (s.withheld || s.mm == null) return side + '  withheld' + (s.reason ? ' (' + s.reason + ')' : '') + tilt;
+  return side + '  ' + s.mm.toFixed(3) + ' mm' + tilt;
+}
+
+async function writeCardReviewSheet(cardId, scans, dest) {
+  const canvasW = 1500;
+  const gap = 14;
+  const pieces = [];
+  let y = gap;
+  function add(buf, left, top) {
+    pieces.push({ input: buf, left: left, top: top });
+  }
+  const ordered = scans.slice().sort(function (a, b) {
+    if (a.orientation === b.orientation) return 0;
+    return a.orientation === 'up' ? -1 : 1;
+  });
+  for (let i = 0; i < ordered.length; i++) {
+    const scan = ordered[i];
+    const result = scan.result;
+    const cardMm = result && result.cardMm;
+    const sizeText = cardMm ? cardMm.width.toFixed(2) + ' x ' + cardMm.height.toFixed(2) + ' mm' : 'no card';
+    const header = cardId + '  ' + scan.orientation + '  ' + sizeText +
+      (result && result.sizeOk === false ? '  NOT CARD SIZED' : '');
+    add(reviewCaption(header, canvasW), 0, y);
+    y += 28;
+    if (!result || !result.ok) {
+      add(reviewCaption('not measured', canvasW), 0, y);
+      y += 28 + gap;
+      continue;
+    }
+    const full = await composeOverlay(scan.file, result, { maxHeight: 520, maxWidth: 420, labels: false });
+    const fullMeta = await sharp(full).metadata();
+    add(full, Math.round((canvasW - fullMeta.width) / 2), y);
+    y += fullMeta.height + 8;
+    const meta = await sharp(scan.file).rotate().metadata();
+    const stripW = canvasW - gap * 2;
+    for (let s = 0; s < 4; s++) {
+      const name = ['top', 'bottom', 'left', 'right'][s];
+      const side = result.sides[name];
+      add(reviewCaption(sideCaption(name, result), stripW), gap, y);
+      y += 26;
+      if (!side || !side.edge) {
+        y += 4;
+        continue;
+      }
+      const box = reviewCropBox(side, result.dpi, meta.width, meta.height);
+      const turn = (name === 'left' || name === 'right') ? rotateInwardDown(side.edge) : 0;
+      const crop = await composeOverlay(scan.file, result, {
+        extract: box,
+        maxWidth: stripW,
+        maxHeight: 190,
+        labels: false,
+        side: name,
+        stroke: 4,
+        pointR: 3.5,
+        rotate: turn || null
+      });
+      const cm = await sharp(crop).metadata();
+      add(crop, gap, y);
+      y += cm.height + 8;
+    }
+    y += gap;
+  }
+  const canvasH = Math.max(y, 32);
+  let quality = 78;
+  let scale = 1;
+  let jpg = null;
+  while (scale >= 0.55) {
+    quality = 78;
+    const w = Math.round(canvasW * scale);
+    const h = Math.round(canvasH * scale);
+    const base = sharp({
+      create: { width: canvasW, height: canvasH, channels: 3, background: { r: 18, g: 18, b: 18 } }
+    }).composite(pieces);
+    while (quality >= 42) {
+      let pipe = base.clone();
+      if (scale < 0.999) pipe = pipe.resize(w, h);
+      jpg = await pipe.jpeg({ quality: quality, mozjpeg: true }).toBuffer();
+      if (jpg.length <= REVIEW_MAX_BYTES) {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, jpg);
+        return { file: dest, bytes: jpg.length };
+      }
+      quality -= 8;
+    }
+    scale -= 0.12;
+  }
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, jpg);
+  return { file: dest, bytes: jpg.length };
+}
+
+function approvedMeansHeld(oldCard, newCard) {
+  if (!oldCard || !oldCard.sides || !newCard || !newCard.sides) return false;
+  const names = ['top', 'bottom', 'left', 'right'];
+  let any = false;
+  for (let i = 0; i < names.length; i++) {
+    const oldSide = oldCard.sides[names[i]];
+    const newSide = newCard.sides[names[i]];
+    if (!oldSide || !oldSide.approved) return false;
+    any = true;
+    if (!newSide || newSide.mm == null || oldSide.mm == null) return false;
+    if (Math.abs(newSide.mm - oldSide.mm) > 0.02) return false;
+  }
+  return any;
+}
+
 async function runDirectory(dir, opts) {
   const files = listScans(dir);
   if (!files.length) {
@@ -2134,16 +2349,26 @@ async function runDirectory(dir, opts) {
       fileDpi: fileDpi,
       result: result
     });
-    if (opts.overlayDir) {
-      fs.mkdirSync(opts.overlayDir, { recursive: true });
-      const stem = parsed.card + '_' + parsed.orientation;
-      const dest = path.join(opts.overlayDir, stem + '.png');
-      await writeOverlay(files[i], result, dest);
-      await writeReviewSet(files[i], result, opts.overlayDir, stem);
+  }
+  if (opts.overlayDir) {
+    const groups = {};
+    measurements.forEach(function (m) {
+      if (!groups[m.card]) groups[m.card] = [];
+      groups[m.card].push(m);
+    });
+    fs.mkdirSync(opts.overlayDir, { recursive: true });
+    const ids = Object.keys(groups).sort();
+    for (let g = 0; g < ids.length; g++) {
+      const dest = path.join(opts.overlayDir, ids[g] + '_review.jpg');
+      const sheet = await writeCardReviewSheet(ids[g], groups[ids[g]], dest);
+      console.log('review ' + path.basename(dest) + '  ' + (sheet.bytes / (1024 * 1024)).toFixed(2) + ' MB');
       if (opts.artifactDir) {
-        fs.mkdirSync(opts.artifactDir, { recursive: true });
-        const copy = path.join(opts.artifactDir, parsed.card + '_' + parsed.orientation + '.png');
-        fs.copyFileSync(dest, copy);
+        try {
+          fs.mkdirSync(opts.artifactDir, { recursive: true });
+          fs.copyFileSync(dest, path.join(opts.artifactDir, path.basename(dest)));
+        } catch (err) {
+          console.error('artifact copy skipped: ' + (err && err.message ? err.message : err));
+        }
       }
     }
   }
@@ -2151,7 +2376,20 @@ async function runDirectory(dir, opts) {
   const key = buildAnswerKey(measurements, dpiUsed, previous);
   if (opts.out) {
     fs.mkdirSync(path.dirname(opts.out), { recursive: true });
-    fs.writeFileSync(opts.out, JSON.stringify(key, null, 2) + '\n');
+    let stored = key;
+    if (fs.existsSync(opts.out)) {
+      try {
+        stored = JSON.parse(fs.readFileSync(opts.out, 'utf8'));
+        stored.definition = key.definition;
+        stored.cards = stored.cards || {};
+        Object.keys(key.cards).forEach(function (id) {
+          if (!approvedMeansHeld(stored.cards[id], key.cards[id])) stored.cards[id] = key.cards[id];
+        });
+      } catch (err) {
+        stored = key;
+      }
+    }
+    fs.writeFileSync(opts.out, JSON.stringify(stored, null, 2) + '\n');
   }
   printReport(key);
   return { ok: true, key: key, measurements: measurements };
@@ -2430,6 +2668,103 @@ async function selfTest() {
     check('tilted right', near(tiltedM.sides.right.mm, 4.8, 0.08), sideBrief(tiltedM.sides.right));
   }
 
+  // A coloured band with the margin colour again on its inner side. The
+  // outline is the outer edge of the band, not the inner edge.
+  const banded = drawSynthetic({
+    dpi: dpi,
+    marginMm: 6,
+    cardWmm: NOMINAL_W_MM,
+    cardHmm: NOMINAL_H_MM,
+    pink: pink,
+    white: white,
+    photo: [250, 250, 248],
+    frameMm: 1.2,
+    top: constantEdge(1.15, [232, 208, 42], []),
+    bottom: constantEdge(3.5, [232, 208, 42], []),
+    left: constantEdge(2.4, [232, 208, 42], []),
+    right: constantEdge(2.7, [232, 208, 42], [])
+  });
+  const bandedM = measureImage(banded.data, banded.width, banded.height, dpi);
+  check('inner-white band found', bandedM.ok && bandedM.sizeOk, bandedM.ok ? bandedM.cardMm : bandedM.error);
+  if (bandedM.ok) {
+    check('inner-white uses the outer edge', near(bandedM.sides.top.mm, 1.15, 0.12) && !bandedM.sides.top.withheld,
+      sideBrief(bandedM.sides.top));
+    check('inner-white other sides', near(bandedM.sides.bottom.mm, 3.5, 0.1) && near(bandedM.sides.left.mm, 2.4, 0.1),
+      { bottom: sideBrief(bandedM.sides.bottom), left: sideBrief(bandedM.sides.left) });
+  }
+
+  // Neutral brightness stripes in the margin are foil, not the design block.
+  const foil = drawSynthetic({
+    dpi: dpi,
+    marginMm: 6,
+    cardWmm: NOMINAL_W_MM,
+    cardHmm: NOMINAL_H_MM,
+    pink: pink,
+    white: white,
+    photo: photo,
+    frameMm: 1.4,
+    top: constantEdge(3.0, [236, 206, 48], []),
+    bottom: constantEdge(3.2, [236, 206, 48], []),
+    left: constantEdge(2.8, [236, 206, 48], []),
+    right: constantEdge(3.1, [236, 206, 48], [])
+  });
+  const foilPpm = pxPerMm(dpi);
+  const foilMargin = Math.round(6 * foilPpm);
+  for (let y = 0; y < foil.height; y++) {
+    for (let x = 0; x < foil.width; x++) {
+      const dTop = (y - foilMargin) / foilPpm;
+      const dBot = (foilMargin + NOMINAL_H_MM * foilPpm - y) / foilPpm;
+      const dLeft = (x - foilMargin) / foilPpm;
+      const dRight = (foilMargin + NOMINAL_W_MM * foilPpm - x) / foilPpm;
+      const depth = Math.min(dTop, dBot, dLeft, dRight);
+      if (depth < 0.2 || depth >= 2.95) continue;
+      const stripe = Math.floor(depth / 0.18) % 2 === 0 ? 248 : 110;
+      const i = (y * foil.width + x) * 3;
+      foil.data[i] = stripe;
+      foil.data[i + 1] = stripe;
+      foil.data[i + 2] = stripe;
+    }
+  }
+  const foilM = measureImage(foil.data, foil.width, foil.height, dpi);
+  check('foil card found', foilM.ok && foilM.sizeOk, foilM.ok ? foilM.cardMm : foilM.error);
+  if (foilM.ok) {
+    check('foil top is the colour frame', near(foilM.sides.top.mm, 3.0, 0.2) && !foilM.sides.top.withheld,
+      sideBrief(foilM.sides.top));
+    check('foil ignores the stripes', near(foilM.sides.left.mm, 2.8, 0.2) && near(foilM.sides.right.mm, 3.1, 0.2),
+      { left: sideBrief(foilM.sides.left), right: sideBrief(foilM.sides.right) });
+  }
+
+  const slant = drawSynthetic({
+    dpi: dpi,
+    marginMm: 6,
+    cardWmm: NOMINAL_W_MM,
+    cardHmm: NOMINAL_H_MM,
+    pink: pink,
+    white: white,
+    photo: photo,
+    frameMm: 1.2,
+    top: {
+      depth: function (along) { return 3.0 + 0.4 * along; },
+      color: blue,
+      marks: []
+    },
+    bottom: constantEdge(4.0, blue, []),
+    left: constantEdge(3.2, blue, []),
+    right: constantEdge(3.6, blue, [])
+  });
+  const slantM = measureImage(slant.data, slant.width, slant.height, dpi);
+  check('slant card found', slantM.ok && slantM.sizeOk, slantM.ok ? slantM.cardMm : slantM.error);
+  if (slantM.ok) {
+    const top = slantM.sides.top;
+    const expectTilt = Math.atan(0.4 / NOMINAL_W_MM) * (180 / Math.PI);
+    check('slant width stays on the outer edge', near(top.mm, 3.2, 0.15) && !top.withheld, sideBrief(top));
+    check('slant tilt is the frame angle', top.tiltDeg != null && Math.abs(top.tiltDeg - expectTilt) < 0.15,
+      { tilt: top.tiltDeg, expect: expectTilt });
+    const depths = (top.used || []).map(function (p) { return p.depth; });
+    const span = depths.length ? Math.max.apply(null, depths) - Math.min.apply(null, depths) : 0;
+    check('slant line is not one depth', span > 0.2, span);
+  }
+
   const tmpCard = path.join(os.tmpdir(), 'flatbed-selftest-card.png');
   const tmpOver = path.join(os.tmpdir(), 'flatbed-selftest-overlay.png');
   const tmpCurve = path.join(os.tmpdir(), 'flatbed-selftest-curve.png');
@@ -2438,6 +2773,20 @@ async function selfTest() {
   await sharp(curved.data, { raw: { width: curved.width, height: curved.height, channels: 3 } }).png().toFile(tmpCard);
   await writeOverlay(tmpCard, curvedM, tmpCurve);
   check('overlay written', fs.existsSync(tmpOver) && fs.statSync(tmpOver).size > 1000 && fs.statSync(tmpCurve).size > 1000, tmpOver);
+  const manifest = loadFlatbedManifest();
+  const lavitar = parseScanName('flatbed/Lavitar_up.png', manifest);
+  const fouts = parseScanName('/scans/Fouts_180.png', manifest);
+  check('manifest maps Lavitar_up to TD-03', lavitar && lavitar.card === 'TD-03' && lavitar.orientation === 'up', lavitar);
+  check('manifest maps Fouts_180 to TD-04', fouts && fouts.card === 'TD-04' && fouts.orientation === '180', fouts);
+  const tmpReviewCard = path.join(os.tmpdir(), 'flatbed-selftest-review-card.png');
+  const tmpReview = path.join(os.tmpdir(), 'flatbed-selftest-review.jpg');
+  await sharp(partial.data, { raw: { width: partial.width, height: partial.height, channels: 3 } }).png().toFile(tmpReviewCard);
+  const reviewSheet = await writeCardReviewSheet('PARTIAL', [{
+    orientation: 'up',
+    file: tmpReviewCard,
+    result: partialM
+  }], tmpReview);
+  check('review sheet under 3 MB', reviewSheet.bytes > 1000 && reviewSheet.bytes <= REVIEW_MAX_BYTES, reviewSheet.bytes);
 
   if (failed) {
     console.error(failed + ' self-test failure(s)');
