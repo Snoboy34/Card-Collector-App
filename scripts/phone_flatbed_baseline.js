@@ -84,6 +84,18 @@ function phoneEdgeMm(report) {
   return out;
 }
 
+/**
+ * A rejected print-border detection stores candidate widths and does not
+ * accept them. Those widths are not a measurement.
+ */
+function measurementRejected(report) {
+  if (!report || report.cardNotFound) return true;
+  if (report.centeringUndetected === true) return true;
+  if (report.incomplete === true) return true;
+  if (report.printCenteringDetected === false) return true;
+  return false;
+}
+
 function phoneStatus(report) {
   if (!report) return 'missing';
   if (report.cardNotFound) return 'card not found';
@@ -120,27 +132,27 @@ function selectScans(dataDir, decks) {
 }
 
 function compareScan(report, key, deckId, side) {
-  const phone = phoneEdgeMm(report);
+  const raw = phoneEdgeMm(report);
+  const rejected = measurementRejected(report);
+  const phone = {};
+  EDGES.forEach(function (edge) { phone[edge] = rejected ? null : raw[edge]; });
   const looked = flatbedCard(key, deckId, side);
   const edges = {};
   EDGES.forEach(function (edge) {
-    if (looked.skipReason) {
-      edges[edge] = {
-        phoneMm: phone[edge],
-        flatbedMm: null,
-        errorMm: null,
-        reason: looked.skipReason,
-        flatbedApproved: false
-      };
-      return;
+    const flat = looked.card && looked.card.sides && looked.card.sides[edge];
+    const err = looked.skipReason
+      ? { errorMm: null, reason: looked.skipReason }
+      : edgeError(phone[edge], flat || null);
+    let reason = err.reason;
+    if (reason === 'phone-withheld' && flat && (flat.withheld || !finite(flat.mm))) {
+      reason = 'phone-withheld; flatbed ' + (flat.reason || 'withheld');
     }
-    const flat = looked.card.sides && looked.card.sides[edge];
-    const err = edgeError(phone[edge], flat || null);
     edges[edge] = {
       phoneMm: phone[edge],
+      rawMm: rejected && finite(raw[edge]) ? raw[edge] : null,
       flatbedMm: flat && !flat.withheld && finite(flat.mm) ? flat.mm : null,
       errorMm: err.errorMm,
-      reason: err.reason,
+      reason: reason,
       flatbedApproved: Boolean(flat && flat.approved)
     };
   });
@@ -171,7 +183,8 @@ function tableText(rows) {
       const e = row.edges[edge];
       lines.push(pad(row.deckId, 8) + pad(row.side, 7) + pad(row.scanId.slice(0, 8), 10) +
         pad(edge, 8) + pad(fmt(e.phoneMm), 10) + pad(fmt(e.flatbedMm), 10) +
-        pad(fmt(e.errorMm), 10) + (e.reason || ''));
+        pad(fmt(e.errorMm), 10) + (e.reason || '') +
+        (finite(e.rawMm) ? '  raw ' + fmt(e.rawMm) + ' not accepted' : ''));
     });
     lines.push(pad('', 8) + pad('', 7) + pad('', 10) + pad('status', 8) + row.status +
       '  ' + (row.capturedAt || '') + (row.quad ? '  quad ' + row.quad : ''));
@@ -198,7 +211,7 @@ async function runBaseline(options) {
         quad: null, missing: file || 'no image', provisional: true, status: 'upload missing',
         engineVersion: null,
         edges: EDGES.reduce(function (acc, edge) {
-          acc[edge] = { phoneMm: null, flatbedMm: null, errorMm: null, reason: 'upload-missing', flatbedApproved: false };
+          acc[edge] = { phoneMm: null, rawMm: null, flatbedMm: null, errorMm: null, reason: 'upload-missing', flatbedApproved: false };
           return acc;
         }, {})
       });
@@ -266,6 +279,14 @@ function selfTest() {
   assert('published edges subtract the flatbed mean', partial.edges.left.errorMm === 0.8);
   assert('a null phone edge is withheld when the flatbed mean exists', partial.edges.right.reason === 'phone-withheld' && partial.edges.right.errorMm == null);
   assert('a withheld flatbed mean publishes no error', partial.edges.top.reason === 'unclear' && partial.edges.top.errorMm == null);
+  const rejected = compareScan({
+    incomplete: true,
+    centeringUndetected: true,
+    printCenteringDetected: false,
+    centeringMetrics: { borderWidthsMm: { left: null, right: 3.667, top: null, bottom: null } }
+  }, { cards: { 'TD-07': { sides: { right: { mm: null, withheld: true, reason: 'unmeasured', approved: false } } } } }, 'TD-07', 'front');
+  assert('a rejected detection is not a phone measurement', rejected.edges.right.phoneMm == null && rejected.edges.right.errorMm == null);
+  assert('the rejected candidate width is kept only as raw', rejected.edges.right.rawMm === 3.667 && /phone-withheld/.test(rejected.edges.right.reason));
   if (failures.length) {
     console.error(failures.length + ' baseline check(s) failed: ' + failures.join('; '));
     process.exit(1);
