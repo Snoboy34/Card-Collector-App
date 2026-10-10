@@ -93,6 +93,10 @@ public enum CenteringAssist {
         public var engineCommit: String?
         public var consent: Bool
         public var createdAt: String
+        /// True when the line was outside the plausible range and the warning was shown.
+        public var warningShown: Bool?
+        public var plausibleMinMM: Double?
+        public var plausibleMaxMM: Double?
 
         public init(
             id: String,
@@ -105,7 +109,10 @@ public enum CenteringAssist {
             engineVersion: String?,
             engineCommit: String?,
             consent: Bool,
-            createdAt: String
+            createdAt: String,
+            warningShown: Bool? = nil,
+            plausibleMinMM: Double? = nil,
+            plausibleMaxMM: Double? = nil
         ) {
             self.id = id
             self.kind = kind
@@ -118,7 +125,22 @@ public enum CenteringAssist {
             self.engineCommit = engineCommit
             self.consent = consent
             self.createdAt = createdAt
+            self.warningShown = warningShown
+            self.plausibleMinMM = plausibleMinMM
+            self.plausibleMaxMM = plausibleMaxMM
         }
+    }
+
+    public struct PlausibleRange: Equatable {
+        public var minMM: Double
+        public var maxMM: Double
+    }
+
+    public struct ImplausibleSide: Equatable {
+        public var side: String
+        public var userWidthMM: Double
+        public var minMM: Double
+        public var maxMM: Double
     }
 
     static func roundMM(_ value: Double) -> Double {
@@ -167,6 +189,84 @@ public enum CenteringAssist {
         case "bottom": return (warpHeight - 1) - widthPx
         default: return nil
         }
+    }
+
+    static func edgeMM(_ side: String) -> Double? {
+        if side == "left" || side == "right" { return cardWidthMM }
+        if side == "top" || side == "bottom" { return cardHeightMM }
+        return nil
+    }
+
+    /// Plausible millimetre range for one border. Built only from the engine
+    /// widths on this card and the length of each edge. No per-card constants.
+    static func plausibleRangeMM(side: String, measured: [String: Double]) -> PlausibleRange? {
+        guard let edge = edgeMM(side) else { return nil }
+        var fractions: [Double] = []
+        for name in sides {
+            guard let width = measured[name], width.isFinite, width >= 0, let length = edgeMM(name) else { continue }
+            fractions.append(width / length)
+        }
+        let cardCap = roundMM(edge / 4)
+        if fractions.isEmpty { return PlausibleRange(minMM: 0, maxMM: cardCap) }
+        var lo = fractions[0]
+        var hi = fractions[0]
+        for fraction in fractions {
+            if fraction < lo { lo = fraction }
+            if fraction > hi { hi = fraction }
+        }
+        let spread = hi - lo
+        let unit = spread > 0 ? spread : lo
+        var minMM = roundMM(max(0, lo - unit) * edge)
+        var maxMM = roundMM((hi + unit) * edge)
+        if maxMM > cardCap { maxMM = cardCap }
+        if maxMM < minMM { maxMM = minMM }
+        return PlausibleRange(minMM: minMM, maxMM: maxMM)
+    }
+
+    static func measuredWidths(snapshot: Snapshot) -> [String: Double] {
+        var out: [String: Double] = [:]
+        for side in sides {
+            guard let row = snapshot.sides[side], !row.withheld, let width = row.engineWidthMM, width.isFinite, width >= 0 else { continue }
+            out[side] = width
+        }
+        return out
+    }
+
+    /// User widths outside plausibleRangeMM. A line that matches the engine width is not a user width.
+    static func implausibleSides(snapshot: Snapshot, userWidths: [String: Double]) -> [ImplausibleSide] {
+        let measured = measuredWidths(snapshot: snapshot)
+        var hits: [ImplausibleSide] = []
+        for side in sides {
+            guard let placed = userWidths[side], placed.isFinite else { continue }
+            if let engine = measured[side], abs(placed - engine) < 0.0005 { continue }
+            guard let range = plausibleRangeMM(side: side, measured: measured) else { continue }
+            if placed < range.minMM - 0.0005 || placed > range.maxMM + 0.0005 {
+                hits.append(ImplausibleSide(
+                    side: side,
+                    userWidthMM: roundMM(placed),
+                    minMM: range.minMM,
+                    maxMM: range.maxMM
+                ))
+            }
+        }
+        return hits
+    }
+
+    static func mmText(_ value: Double) -> String {
+        let rounded = roundMM(value)
+        var text = String(format: "%.3f", rounded)
+        while text.hasSuffix("0") { text.removeLast() }
+        if text.hasSuffix(".") { text.removeLast() }
+        return text
+    }
+
+    static func plausibilityWarning(_ hits: [ImplausibleSide]) -> String {
+        if hits.isEmpty { return "" }
+        let parts = hits.map { hit -> String in
+            let label = hit.side.prefix(1).uppercased() + hit.side.dropFirst()
+            return "\(label) is \(mmText(hit.userWidthMM)) mm. The borders measured on this card, and the card size, put a \(hit.side) border between \(mmText(hit.minMM)) mm and \(mmText(hit.maxMM)) mm."
+        }
+        return parts.joined(separator: " ") + " This is outside that range. Save again to keep this line."
     }
 
     static func parse(report: [String: Any]?, item: [String: Any]?) -> Snapshot? {
@@ -233,8 +333,10 @@ public enum CenteringAssist {
         previous: Snapshot,
         updated: Snapshot,
         consent: Bool,
-        createdAt: String
+        createdAt: String,
+        warnings: [ImplausibleSide] = []
     ) -> [Example] {
+        let measured = measuredWidths(snapshot: updated)
         var rows: [Example] = []
         for side in sides {
             guard let next = updated.sides[side], let user = next.userWidthMM else { continue }
@@ -242,6 +344,8 @@ public enum CenteringAssist {
             if sameMM(prior?.userWidthMM, user) { continue }
             let kind = next.kind ?? (prior?.withheld == false ? "disagreement" : "assisted")
             guard kind == "assisted" || kind == "disagreement" else { continue }
+            let range = plausibleRangeMM(side: side, measured: measured)
+            let hit = warnings.first { $0.side == side }
             rows.append(Example(
                 id: UUID().uuidString,
                 kind: kind,
@@ -253,7 +357,10 @@ public enum CenteringAssist {
                 engineVersion: updated.engineVersion ?? previous.engineVersion,
                 engineCommit: updated.engineCommit ?? previous.engineCommit,
                 consent: consent,
-                createdAt: createdAt
+                createdAt: createdAt,
+                warningShown: hit != nil,
+                plausibleMinMM: range?.minMM,
+                plausibleMaxMM: range?.maxMM
             ))
         }
         return rows
@@ -342,10 +449,34 @@ public enum CenteringAssist {
         let disagreement = examples(scanId: "scan-1", previous: snap!, updated: disagreed, consent: false, createdAt: "2026-10-09T00:00:00Z")
         precondition(disagreement.count == 1 && disagreement[0].kind == "disagreement")
         precondition(disagreement[0].engineWidthMM == 4.737)
+        precondition(rows[0].warningShown == false)
         precondition(CenteringAssistStore.examplesClearedToLeave().isEmpty)
         precondition(CenteringAssistStore.consentIsOn(nil) == false)
         precondition(CenteringAssistStore.consentIsOn(false) == false)
         precondition(CenteringAssistStore.consentIsOn(true) == true)
+
+        let measured: [String: Double] = ["right": 4.737, "top": 4.148, "bottom": 4.936]
+        let range = plausibleRangeMM(side: "left", measured: measured)
+        precondition(range?.minMM == 1.189, "min \(String(describing: range?.minMM))")
+        precondition(range?.maxMM == 6.511, "max \(String(describing: range?.maxMM))")
+        let far = implausibleSides(snapshot: snap!, userWidths: ["left": 11.43])
+        precondition(far.count == 1 && far[0].userWidthMM == 11.43)
+        precondition(far[0].minMM == 1.189 && far[0].maxMM == 6.511)
+        precondition(implausibleSides(snapshot: snap!, userWidths: ["left": 4]).isEmpty)
+        let warning = plausibilityWarning(far)
+        precondition(warning.contains("11.43"))
+        precondition(warning.contains("1.189") && warning.contains("6.511"))
+        precondition(warning.contains("Save again"))
+        let empty = plausibleRangeMM(side: "left", measured: [:])
+        precondition(empty?.minMM == 0 && empty?.maxMM == roundMM(cardWidthMM / 4))
+        var flagged = updated
+        flagged.sides["left"]?.userWidthMM = 11.43
+        let warned = examples(scanId: "scan-1", previous: snap!, updated: flagged, consent: false, createdAt: "2026-10-09T00:00:00Z", warnings: far)
+        precondition(warned.count == 1 && warned[0].warningShown == true)
+        precondition(warned[0].plausibleMinMM == 1.189 && warned[0].plausibleMaxMM == 6.511)
+        precondition(ScanLedger.predictedGradeText(9) == "Predicted PSA 9")
+        precondition(ScanLedger.predictedGradeText(9.5) == "Predicted PSA 9.5")
+        precondition(ScanLedger.predictedGradeText(8) == "Predicted PSA 8")
     }
     #endif
 }
@@ -408,6 +539,8 @@ struct CenteringAssistEditor: View {
     @State private var loupeAt: CGPoint = .zero
     @State private var status = ""
     @State private var saving = false
+    @State private var confirming = false
+    @State private var warningText = ""
 
     private var intro: String {
         if snapshot.needsAssist {
@@ -424,9 +557,15 @@ struct CenteringAssistEditor: View {
                 frame(image)
                 chips
                 Text(readout).font(.subheadline).bold()
+                if !warningText.isEmpty {
+                    Text(warningText)
+                        .font(.subheadline)
+                        .bold()
+                        .foregroundColor(Color(red: 1, green: 0.69, blue: 0.125))
+                }
                 HStack {
-                    Button(saving ? "Saving…" : "Save adjustment") { Task { await save() } }
-                        .disabled(saving || !dirty || placedCount == 0)
+                    Button(buttonTitle) { Task { await save() } }
+                        .disabled(saving || (!confirming && (!dirty || placedCount == 0)))
                     Text(status).font(.caption).foregroundColor(.secondary)
                 }
                 Text("Amber is your line. A saved result is labelled assisted. The engine's measurement stays as it was.")
@@ -469,6 +608,8 @@ struct CenteringAssistEditor: View {
                             .onChanged { value in
                                 dirty = true
                                 dragging = true
+                                confirming = false
+                                warningText = ""
                                 place(at: value.location, in: size)
                             }
                             .onEnded { _ in dragging = false }
@@ -548,6 +689,20 @@ struct CenteringAssistEditor: View {
         CenteringAssist.sides.filter { liveMM($0) != nil }.count
     }
 
+    private var buttonTitle: String {
+        if saving { return "Saving…" }
+        if confirming { return "Save anyway" }
+        return "Save adjustment"
+    }
+
+    private func placedWidths() -> [String: Double] {
+        var widths: [String: Double] = [:]
+        for side in CenteringAssist.sides {
+            if let mm = liveMM(side) { widths[side] = mm }
+        }
+        return widths
+    }
+
     private func chipTitle(_ side: String) -> String {
         let label = side.prefix(1).uppercased() + side.dropFirst()
         let row = snapshot.sides[side]
@@ -618,6 +773,13 @@ struct CenteringAssistEditor: View {
             ]
         }
         guard !lines.isEmpty else { return }
+        let hits = CenteringAssist.implausibleSides(snapshot: snapshot, userWidths: placedWidths())
+        if !hits.isEmpty && !confirming {
+            confirming = true
+            warningText = CenteringAssist.plausibilityWarning(hits)
+            status = ""
+            return
+        }
         saving = true
         status = "Saving…"
         let consent = CenteringAssistStore.helpImprove()
@@ -626,7 +788,8 @@ struct CenteringAssistEditor: View {
                 baseURL: serverURL,
                 scanId: scanId,
                 lines: lines,
-                consent: consent
+                consent: consent,
+                confirmImplausible: confirming
             )
             if let updated = report.centeringAssist {
                 let created = ISO8601DateFormatter().string(from: Date())
@@ -635,13 +798,24 @@ struct CenteringAssistEditor: View {
                     previous: snapshot,
                     updated: updated,
                     consent: consent,
-                    createdAt: created
+                    createdAt: created,
+                    warnings: hits
                 )
                 CenteringAssistStore.append(rows)
             }
             status = "Saved. This centering is assisted."
+            warningText = ""
+            confirming = false
             dirty = false
             onSaved(JudgeAPIClient.ledger(from: report, clientScanId: scanId))
+        } catch let error as JudgeAPIClient.APIError {
+            if case .implausible(let message) = error {
+                confirming = true
+                warningText = message
+                status = ""
+            } else {
+                status = error.localizedDescription
+            }
         } catch {
             status = error.localizedDescription
         }

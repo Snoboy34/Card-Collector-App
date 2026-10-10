@@ -1101,7 +1101,7 @@ struct ScanLedgerRows: View {
         VStack(spacing: 12) {
             if ledger.centeringAssist?.displayLine != nil {
                 HStack {
-                    Text("Engine grade")
+                    Text("Prediction")
                     Spacer()
                     Text(ledger.displayEngineGrade).bold().foregroundColor(.purple)
                 }
@@ -1115,7 +1115,7 @@ struct ScanLedgerRows: View {
                 }
             } else {
                 HStack {
-                    Text("Grade")
+                    Text("Prediction")
                     Spacer()
                     Text(ledger.displayGrade).bold().foregroundColor(.purple)
                 }

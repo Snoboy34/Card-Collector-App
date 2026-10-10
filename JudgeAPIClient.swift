@@ -202,7 +202,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         baseURL: String,
         scanId: String,
         lines: [String: [String: Double]],
-        consent: Bool
+        consent: Bool,
+        confirmImplausible: Bool = false
     ) async throws -> RemoteReport {
         guard let root = Self.normalizedBaseURL(baseURL) else {
             throw APIError.invalidServerURL
@@ -215,7 +216,11 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = ["lines": lines, "consent": consent]
+        let body: [String: Any] = [
+            "lines": lines,
+            "consent": consent,
+            "confirmImplausible": confirmImplausible
+        ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let data: Data
         let response: URLResponse
@@ -228,6 +233,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         guard (200...299).contains(status) else {
             let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let message = (parsed?["error"] as? String) ?? (String(data: data, encoding: .utf8) ?? "HTTP \(status)")
+            if parsed?["implausible"] != nil {
+                throw APIError.implausible(message)
+            }
             throw APIError.httpFailure(status, message)
         }
         return try Self.parseReport(data)
@@ -265,6 +273,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         case unreachable
         case cardNotFound(String)
         case httpFailure(Int, String)
+        case implausible(String)
         case undecodableResponse
 
         var errorDescription: String? {
@@ -277,6 +286,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 return "Card not found — retake. \(reason)"
             case .httpFailure(let code, let body):
                 return "Grade request failed (\(code)): \(body)"
+            case .implausible(let message):
+                return message
             case .undecodableResponse:
                 return "Server did not return JSON."
             }

@@ -29,10 +29,20 @@ public struct ScanLedger: Equatable {
         return String(format: "%.1f", cornersGrade)
     }
 
+    /// Engine final score is a prediction. Whole numbers drop the trailing .0.
+    public static func predictedGradeText(_ grade: Double) -> String {
+        let tenths = (grade * 10).rounded() / 10
+        let text = String(format: "%.1f", tenths)
+        if text.hasSuffix(".0") {
+            return "Predicted PSA " + String(text.dropLast(2))
+        }
+        return "Predicted PSA " + text
+    }
+
     /// Engine final score only. An assisted centering is never formatted as PSA.
     public var displayEngineGrade: String {
         guard let grade else { return Self.absent }
-        return String(format: "PSA %.1f", grade)
+        return Self.predictedGradeText(grade)
     }
 
     /// Assisted line when the user moved a border. Otherwise the engine grade.
@@ -140,7 +150,7 @@ public struct SavedCard: Identifiable, Codable {
 
     public var displayEngineGrade: String {
         guard let predictedGradePSA else { return ScanLedger.absent }
-        return String(format: "PSA %.1f", predictedGradePSA)
+        return ScanLedger.predictedGradeText(predictedGradePSA)
     }
 
     public var displayGrade: String {
