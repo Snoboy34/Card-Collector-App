@@ -34,7 +34,7 @@ That copies:
 
 - `data/database.json`, `failed_scans.jsonl`, `scan_labels.json`, `test_deck.json`
 
-`data/centering_examples.jsonl` and `data/assist_settings.json` are not copied. The database copy has the assisted label, with the user's border line in millimetres removed.
+`data/centering_examples.jsonl` and `data/assist_settings.json` are not copied. The database copy keeps the engine's border millimetres, sample lines, per-side engine widths, and scores. It drops the user's dragged millimetres, disagreement values, and `centeringExamples`.
 - every file in `uploads/`
 - `scans/<scanId>/overlay.jpg`, `oriented.jpg`, and `debug.json`
 

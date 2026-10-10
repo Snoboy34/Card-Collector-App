@@ -208,12 +208,20 @@ async function main() {
   }, { scanId: 'assist-test-scan-0001', confirmImplausible: true }).assist.headline === 'Centering (you adjusted 2 sides)');
 
   const redacted = assist.redactReportForEgress(attached.gradingReport);
-  assert('egress copy drops user millimetres and keeps the assisted label',
-    redacted.centeringAssist.redacted === true &&
-    redacted.centeringAssist.borderWidthsMm === null &&
+  assert('scan-repo copy drops the disagreement millimetres and keeps the engine width',
     redacted.centeringAssist.sides.left.userWidthMm === null &&
+    redacted.centeringAssist.sides.left.engineWidthMm === 2 &&
+    redacted.centeringAssist.borderWidthsMm.left === 2 &&
+    redacted.centeringAssist.engineBorderWidthsMm.left === 2 &&
     redacted.centeringAssist.headline === 'Centering (you adjusted 1 side)' &&
-    redacted.subGrades.centering === 9);
+    redacted.subGrades.centering === 9 &&
+    redacted.finalScore === 9 &&
+    redacted.centeringMetrics.borderWidthsMm.left === 2);
+  assert('hosted copy still strips the assist block, and the push script does not call it',
+    assist.redactReportForHostedEgress(attached.gradingReport).centeringAssist.engineBorderWidthsMm === null &&
+    assist.redactReportForHostedEgress(attached.gradingReport).centeringAssist.sides.left.engineWidthMm === null &&
+    fs.readFileSync(path.join(__dirname, 'push_scan_data.sh'), 'utf8').indexOf('redactReportForHostedEgress') === -1 &&
+    fs.readFileSync(path.join(__dirname, 'push_scan_data.sh'), 'utf8').indexOf('redactDatabaseForScanRepo') !== -1);
   assert('redact does not mutate the stored report',
     attached.gradingReport.centeringAssist.sides.left.userWidthMm === 4);
   assert('nothing is cleared to leave, including consent=true',
@@ -321,10 +329,69 @@ async function main() {
   assert('a line on the wrong warp is rejected', badWarp.status === 400);
 
   const pushCopy = assist.redactReportForEgress(diskReport);
-  assert('scan-repo copy of this report has no user millimetres',
+  assert('scan-repo copy of this report has no user millimetres and keeps the engine border',
     pushCopy.centeringAssist.sides.left.userWidthMm === null &&
-    pushCopy.centeringAssist.borderWidthsMm === null &&
+    pushCopy.centeringAssist.borderWidthsMm.left === null &&
+    pushCopy.centeringAssist.borderWidthsMm.right === 2.1 &&
+    pushCopy.centeringMetrics.borderWidthsMm.right === 2.1 &&
     pushCopy.centeringAssist.headline === 'Centering (you adjusted 1 side)');
+
+  const engineBefore = JSON.parse(JSON.stringify(diskReport));
+  engineBefore.centeringAssist.sides.right.userWidthMm = 9.876;
+  engineBefore.centeringAssist.sides.right.kind = 'disagreement';
+  engineBefore.centeringAssist.sides.right.source = 'user';
+  engineBefore.centeringAssist.borderWidthsMm.right = 9.876;
+  engineBefore.centeringAssist.sides.left.userWidthMm = 11.43;
+  engineBefore.centeringAssist.borderWidthsMm.left = 11.43;
+  const sampleBefore = JSON.stringify(engineBefore.centeringDiagnostics.sampleLines);
+  const metricsBefore = JSON.stringify(engineBefore.centeringMetrics);
+  const scoresBefore = JSON.stringify({
+    subGrades: engineBefore.subGrades,
+    finalScore: engineBefore.finalScore,
+    centering: engineBefore.centering,
+    weighted: engineBefore.weighted,
+    engineVersion: engineBefore.engineVersion
+  });
+  const engineWidthsBefore = JSON.stringify({
+    engineBorderWidthsMm: engineBefore.centeringAssist.engineBorderWidthsMm,
+    perSide: geo.SIDES.map(function (side) {
+      return engineBefore.centeringAssist.sides[side].engineWidthMm;
+    })
+  });
+  const dbBefore = {
+    inventory: [{ id: 'assist-test-scan-0001', gradingReport: engineBefore, name: 'Assist test' }],
+    centeringExamples: [{ side: 'left', userWidthMm: 11.43, engineWidthMm: null }],
+    categoryCounts: { SPORTS: 0, TCG: 0, UNKNOWN: 1 }
+  };
+  const dbCopy = assist.redactDatabaseForScanRepo(dbBefore);
+  const copied = dbCopy.inventory[0].gradingReport;
+  assert('engine sample lines, border millimetres, and scores survive the copy byte-for-byte',
+    JSON.stringify(copied.centeringDiagnostics.sampleLines) === sampleBefore &&
+    JSON.stringify(copied.centeringMetrics) === metricsBefore &&
+    JSON.stringify({
+      subGrades: copied.subGrades,
+      finalScore: copied.finalScore,
+      centering: copied.centering,
+      weighted: copied.weighted,
+      engineVersion: copied.engineVersion
+    }) === scoresBefore &&
+    JSON.stringify({
+      engineBorderWidthsMm: copied.centeringAssist.engineBorderWidthsMm,
+      perSide: geo.SIDES.map(function (side) {
+        return copied.centeringAssist.sides[side].engineWidthMm;
+      })
+    }) === engineWidthsBefore);
+  const copiedText = JSON.stringify(dbCopy);
+  assert('user millimetres and centeringExamples do not survive the copy',
+    copied.centeringAssist.sides.left.userWidthMm === null &&
+    copied.centeringAssist.sides.right.userWidthMm === null &&
+    copied.centeringAssist.borderWidthsMm.left === null &&
+    copied.centeringAssist.borderWidthsMm.right === 2.1 &&
+    dbCopy.centeringExamples === undefined &&
+    copiedText.indexOf('11.43') === -1 &&
+    copiedText.indexOf('9.876') === -1);
+  assert('a report with no user line is unchanged',
+    JSON.stringify(assist.redactReportForEgress(reportWith())) === JSON.stringify(reportWith()));
 
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });

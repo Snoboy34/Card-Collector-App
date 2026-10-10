@@ -99,14 +99,55 @@ function stripForExport(examples) {
 }
 
 /**
- * Drop user millimetres before a copy of the report is written anywhere
- * except this server. The assisted label and the coarse centering score
- * stay so the copy is still visibly not an engine measurement. Exact line
- * positions do not.
+ * Owner scan-repo copy. Removes only what the user entered: the dragged
+ * line's millimetres, a disagreement value, and any centeringExamples hung
+ * on the report. Engine border millimetres, sample lines, per-side engine
+ * widths, and scores are left as they were.
+ *
+ * A side the user moved also wrote that millimetre into the assisted
+ * border map and into the assisted ratios. Those copies of the user's
+ * number are cleared. The engine width, when the engine measured one, is
+ * what stays in that side of the map.
  */
 function redactReportForEgress(report) {
   if (!report || typeof report !== 'object') return report;
   const copy = JSON.parse(JSON.stringify(report));
+  delete copy.centeringExamples;
+  const assist = copy.centeringAssist;
+  if (!assist) return copy;
+  const widths = assist.borderWidthsMm;
+  let stripped = false;
+  if (assist.sides && typeof assist.sides === 'object') {
+    Object.keys(assist.sides).forEach(function (side) {
+      const row = assist.sides[side];
+      if (!row || typeof row !== 'object') return;
+      if (!geometry.isFiniteNumber(row.userWidthMm)) return;
+      stripped = true;
+      if (widths && typeof widths === 'object' && widths[side] === row.userWidthMm) {
+        widths[side] = geometry.isFiniteNumber(row.engineWidthMm) ? row.engineWidthMm : null;
+      }
+      row.userWidthMm = null;
+    });
+  }
+  if (stripped) {
+    assist.leftRightRatio = null;
+    assist.topBottomRatio = null;
+    assist.centering = null;
+    assist.centeringLabel = null;
+  }
+  return copy;
+}
+
+/**
+ * Future hosted / tester copy. Strips the assisted measurement entirely,
+ * including the engine widths that were repeated on the assist block.
+ * push_scan_data.sh does not call this. The owner's private scan repo
+ * uses redactReportForEgress so the engine's border millimetres survive.
+ */
+function redactReportForHostedEgress(report) {
+  if (!report || typeof report !== 'object') return report;
+  const copy = JSON.parse(JSON.stringify(report));
+  delete copy.centeringExamples;
   if (!copy.centeringAssist) return copy;
   const assist = copy.centeringAssist;
   assist.redacted = true;
@@ -114,6 +155,8 @@ function redactReportForEgress(report) {
   assist.engineBorderWidthsMm = null;
   assist.leftRightRatio = null;
   assist.topBottomRatio = null;
+  assist.centering = null;
+  assist.centeringLabel = null;
   if (assist.sides) {
     Object.keys(assist.sides).forEach(function (side) {
       const row = assist.sides[side];
@@ -122,6 +165,18 @@ function redactReportForEgress(report) {
       row.engineWidthMm = null;
     });
   }
+  return copy;
+}
+
+/** Database object written to the-judge-scans. Engine reports stay; user lines do not. */
+function redactDatabaseForScanRepo(db) {
+  const copy = JSON.parse(JSON.stringify(db && typeof db === 'object' ? db : {}));
+  (copy.inventory || []).forEach(function (item) {
+    if (item && item.gradingReport) {
+      item.gradingReport = redactReportForEgress(item.gradingReport);
+    }
+  });
+  delete copy.centeringExamples;
   return copy;
 }
 
@@ -307,6 +362,8 @@ module.exports = {
   examplesClearedToLeave: examplesClearedToLeave,
   stripForExport: stripForExport,
   redactReportForEgress: redactReportForEgress,
+  redactReportForHostedEgress: redactReportForHostedEgress,
+  redactDatabaseForScanRepo: redactDatabaseForScanRepo,
   buildFromLines: buildFromLines,
   buildFromMillimetres: buildFromMillimetres,
   attachAssist: attachAssist
