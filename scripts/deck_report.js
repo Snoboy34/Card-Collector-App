@@ -44,6 +44,22 @@ function engineLabel(e) {
   return 'engine ' + (e.version || '?') + (e.commit ? ' (' + e.commit + ')' : '');
 }
 
+/**
+ * Re-grade one saved upload with the candidate engine. The stored report
+ * only supplies the quad. A missing file is reported and not filled in
+ * from the old grade.
+ */
+async function regradeUpload(candidate, scan, uploadsDir) {
+  if (!candidate || !scan || !scan.item || !scan.item.imagePath) return null;
+  const file = path.join(uploadsDir, path.basename(scan.item.imagePath));
+  if (!fs.existsSync(file)) return { missing: file };
+  const q = candidate.cmp.quadOptions(scan.item.gradingReport);
+  const gradeOpts = Object.assign({}, q.opts);
+  if (scan.side === 'back') gradeOpts.side = 'back';
+  const report = await candidate.cmp.gradeQuietly(candidate.engine, fs.readFileSync(file), gradeOpts);
+  return { result: resultFromReport(report), engine: { version: report.engineVersion || '?' } };
+}
+
 function resultFromReport(report) {
   const r = report || {};
   const m = r.centeringMetrics || {};
@@ -217,7 +233,7 @@ async function buildDeckReport(opts) {
       '  expect ' + (expect || '—') +
       (ruler ? '  ruler L/R ' + fmt(ruler.lr) + ' T/B ' + fmt(ruler.tb) : '') +
       (known ? '  known ' + deck.formatGradeShort(known) : ''));
-    const row = { deckId: deckId, category: card.category || null, expect: expect, latest: null, previous: null, candidate: null, back: null };
+    const row = { deckId: deckId, category: card.category || null, expect: expect, latest: null, previous: null, candidate: null, back: null, backCandidate: null };
     if (!latest && !latestBack) {
       lines.push('  not scanned yet');
       rows.push(row);
@@ -233,6 +249,14 @@ async function buildDeckReport(opts) {
       lines.push('  front not scanned');
       lines.push(resultLine('back', latestBack.result, backNote(latestBack)));
       lines.push('  ' + psaBackComparison(latestBack));
+      const backOnly = await regradeUpload(candidate, latestBack, uploadsDir);
+      if (backOnly && backOnly.missing) {
+        row.backCandidate = { missing: backOnly.missing };
+        lines.push('  candidate back  upload missing: ' + backOnly.missing);
+      } else if (backOnly && backOnly.result) {
+        row.backCandidate = { result: backOnly.result, engine: backOnly.engine };
+        lines.push(resultLine('candidate back', backOnly.result, 'engine ' + (backOnly.engine.version || '?')));
+      }
       rows.push(row);
       continue;
     }
@@ -260,18 +284,22 @@ async function buildDeckReport(opts) {
       lines.push(resultLine('back', latestBack.result, backNote(latestBack)));
       lines.push('  ' + psaBackComparison(latestBack));
     }
-    if (candidate && latest.item && latest.item.imagePath) {
-      const file = path.join(uploadsDir, path.basename(latest.item.imagePath));
-      if (fs.existsSync(file)) {
-        const q = candidate.cmp.quadOptions(latest.item.gradingReport);
-        const report = await candidate.cmp.gradeQuietly(candidate.engine, fs.readFileSync(file), q.opts);
-        const res = resultFromReport(report);
-        const c = describe({ result: res });
-        row.candidate = { result: res, pass: c.pass, engine: { version: report.engineVersion || '?' } };
-        lines.push(resultLine('candidate', res, c.text + '  engine ' + (report.engineVersion || '?')));
-      } else {
-        lines.push('  candidate  upload missing: ' + file);
-      }
+    const frontCand = await regradeUpload(candidate, latest, uploadsDir);
+    if (frontCand && frontCand.missing) {
+      row.candidate = { missing: frontCand.missing };
+      lines.push('  candidate  upload missing: ' + frontCand.missing);
+    } else if (frontCand && frontCand.result) {
+      const c = describe({ result: frontCand.result });
+      row.candidate = { result: frontCand.result, pass: c.pass, engine: frontCand.engine };
+      lines.push(resultLine('candidate', frontCand.result, c.text + '  engine ' + (frontCand.engine.version || '?')));
+    }
+    const backCand = await regradeUpload(candidate, latestBack, uploadsDir);
+    if (backCand && backCand.missing) {
+      row.backCandidate = { missing: backCand.missing };
+      lines.push('  candidate back  upload missing: ' + backCand.missing);
+    } else if (backCand && backCand.result) {
+      row.backCandidate = { result: backCand.result, engine: backCand.engine };
+      lines.push(resultLine('candidate back', backCand.result, 'engine ' + (backCand.engine.version || '?')));
     }
     rows.push(row);
   }

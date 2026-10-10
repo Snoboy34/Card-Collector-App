@@ -131,9 +131,31 @@ function tdExpectPass(expect, result) {
 }
 
 /**
- * TD-01..TD-06 outcomes from fixtures/td_expectations.json. Checks stored
- * results already loaded by deck_report (no second re-grade). A data dir
- * that has none of these cards skips, so synthetic gate fixtures are not
+ * One side of the TD check. Null when the re-graded result matches.
+ * `result` is the shape from deck_report.resultFromReport.
+ */
+function tdSideFailure(cardId, side, expect, result) {
+  if (tdExpectPass(expect, result)) return null;
+  return cardId + ' ' + side + ' expected ' + tdExpectLabel(expect) + ', got ' + tdGot(result);
+}
+
+/**
+ * The result td_deck scores. The candidate re-grade wins. A missing upload
+ * is not filled in from the stored grade. Stored is used only when no
+ * candidate re-grade was requested.
+ */
+function tdScored(stored, regrade) {
+  if (regrade && regrade.missing) return { missing: regrade.missing };
+  if (regrade && regrade.result) return { result: regrade.result };
+  if (stored && stored.result) return { result: stored.result };
+  return null;
+}
+
+/**
+ * TD-01..TD-06 outcomes from fixtures/td_expectations.json. Scores the
+ * candidate engine's re-grade of the saved upload (deck_report row.candidate
+ * and row.backCandidate), not the grade stored by an older engine. A data
+ * dir that has none of these cards skips, so synthetic gate fixtures are not
  * required to be the phone deck. --require-data fails a missing card.
  */
 function tdStep(o) {
@@ -155,16 +177,28 @@ function tdStep(o) {
     }
     seen.push(card.id);
     if (front) {
-      const pass = tdExpectPass(card.expect, front.result);
-      if (!pass) {
-        failures.push(card.id + ' front expected ' + tdExpectLabel(card.expect) + ', got ' + tdGot(front.result));
+      const scored = tdScored(front, row.candidate);
+      if (!scored) {
+        if (o.requireData) failures.push(card.id + ' front not scanned');
+      } else if (scored.missing) {
+        failures.push(card.id + ' front upload missing: ' + scored.missing);
+      } else {
+        const failure = tdSideFailure(card.id, 'front', card.expect, scored.result);
+        if (failure) failures.push(failure);
       }
     } else if (o.requireData) {
       failures.push(card.id + ' front not scanned');
     }
     if (back && card.backExpect) {
-      const pass = tdExpectPass(card.backExpect, back.result);
-      if (!pass) failures.push(card.id + ' back expected ' + tdExpectLabel(card.backExpect) + ', got ' + tdGot(back.result));
+      const scored = tdScored(back, row.backCandidate);
+      if (!scored) {
+        if (o.requireData) failures.push(card.id + ' back not scanned');
+      } else if (scored.missing) {
+        failures.push(card.id + ' back upload missing: ' + scored.missing);
+      } else {
+        const failure = tdSideFailure(card.id, 'back', card.backExpect, scored.result);
+        if (failure) failures.push(failure);
+      }
     } else if (!back && card.backExpect && o.requireData) {
       failures.push(card.id + ' back not scanned');
     }
@@ -273,4 +307,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { gate, listSuites };
+module.exports = { gate, listSuites, tdExpectPass, tdGot, tdSideFailure, tdScored };
