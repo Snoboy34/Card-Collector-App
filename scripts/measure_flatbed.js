@@ -24,13 +24,31 @@
  * side's end corner.
  *
  * A patterned margin (a wave, a foil, a refractor) is margin however busy
- * it is. The outline is the outer edge of the first thin line that runs
- * the side, parallel to the edge, and closes a rectangle with the same
- * stroke on the other sides. A thin line under half a millimetre counts.
- * The outer edge of the darker band just inside that stroke is kept as a
- * cross-check; the two centering ratios are both reported. A side whose
- * stroke does not match the others does not take that outline. A plain
- * margin whose outline already sits outside such a stroke is left alone.
+ * it is. The outline is the outer edge of the first thin line that is
+ * parallel to the edge and closes a rectangle with the same stroke on the
+ * other three sides. The line may be a segment; it does not have to run
+ * the whole side. What qualifies it is the same profile on all four sides:
+ * a thin silver line, a thicker black line, and a thin silver line inside
+ * that. A thin line under half a millimetre counts. A logo, stamp, or
+ * lettering that sits on only one side does not. The width is the
+ * perpendicular distance to the outermost points of that outer edge, at
+ * least two per side. The outer edge of the black line is a cross-check;
+ * the two centering ratios are both reported. A side whose stroke does not
+ * match the others does not take that outline. A plain margin whose
+ * outline already sits outside such a stroke is left alone.
+ *
+ * A chrome margin can carry rays and angled shapes. Those are margin
+ * pattern, not the outline. The outline there is a gold line with black
+ * immediately inside it, the same profile on all four sides. A line
+ * sliding in from the card edge meets that frame at its outer corners.
+ * Each corner is the contact for the two sides that meet there, so each
+ * side is measured from its two corners. A ray that does not close that
+ * frame is not a contact.
+ *
+ * A full-bleed photo has no frame. Its top and bottom stay withheld. The
+ * ends of a player-name line may be reported as design-referenced left and
+ * right, and a corner mark or a letter descender may be recorded as an
+ * anchor. Those are not a centering measurement and they are not a grade.
  *
  * A found quad that is not a card fails closed. Each dimension has to sit
  * within SIZE_AXIS_MM of 63.5 × 88.9 mm (or swapped). Two scans of one card
@@ -936,6 +954,32 @@ function measureSide(data, w, h, quad, sideName, ppm) {
   const lengthMm = lengthPx / ppm;
   const nx = normalLine.a;
   const ny = normalLine.b;
+  const ux = (b.x - a.x) / lengthPx;
+  const uy = (b.y - a.y) / lengthPx;
+  // A gold line is a halftone. One ray can miss the warm dots, so the gold
+  // profile uses the warmest pixel in a short stretch along the edge.
+  function goldRgb(x, y, depthMm) {
+    let best = null;
+    let bestY = -1e9;
+    for (let da = -0.12; da <= 0.12; da += 0.06) {
+      const px = x + ux * da * ppm + nx * depthMm * ppm;
+      const py = y + uy * da * ppm + ny * depthMm * ppm;
+      const rgb = sampleRgb(data, w, h, px, py);
+      if (!rgb) continue;
+      const yv = Math.min(rgb[0], rgb[1]) - rgb[2];
+      if (yv > bestY) {
+        bestY = yv;
+        best = rgb;
+      }
+    }
+    return best;
+  }
+  function goldProfileAt(x, y) {
+    const nSteps = Math.round(SEARCH_TO_MM / DEPTH_STEP_MM);
+    const profile = new Array(nSteps);
+    for (let i = 0; i < nSteps; i++) profile[i] = goldRgb(x, y, i * DEPTH_STEP_MM);
+    return profile;
+  }
   const stepPx = STATION_STEP_MM * ppm;
   const stations = [];
   const start = lengthPx * SIDE_MARGIN;
@@ -969,9 +1013,31 @@ function measureSide(data, w, h, quad, sideName, ppm) {
       marginVaried: !!(marginModel && marginModel.variedColour),
       designDepth: designDepth,
       candidates: cands,
-      frameMarks: frameMarksFromProfile(profile, DEPTH_STEP_MM)
+      frameMarks: frameMarksFromProfile(profile, DEPTH_STEP_MM),
+      goldMarks: goldMarksFromProfile(goldProfileAt(x, y), DEPTH_STEP_MM)
     });
   }
+  // The design search stays off the cut corners. The gold frame's outer
+  // corners sit in that end zone, so sample them for the corner contacts
+  // only. They are not design-outline stations.
+  const goldEnds = [];
+  const endStep = 0.25 * ppm;
+  const mainStart = lengthPx * SIDE_MARGIN;
+  const mainEnd = lengthPx * (1 - SIDE_MARGIN);
+  function addGoldEnd(s) {
+    const x = a.x + (b.x - a.x) * (s / lengthPx);
+    const y = a.y + (b.y - a.y) * (s / lengthPx);
+    goldEnds.push({
+      x: x,
+      y: y,
+      nx: nx,
+      ny: ny,
+      alongMm: s / ppm,
+      goldMarks: goldMarksFromProfile(goldProfileAt(x, y), DEPTH_STEP_MM)
+    });
+  }
+  for (let s = 1.2 * ppm; s < mainStart; s += endStep) addGoldEnd(s);
+  for (let s = mainEnd + endStep; s <= lengthPx - 1.2 * ppm; s += endStep) addGoldEnd(s);
   let best = summarizeDesign(stations);
   if (best.withheld && best.reason === 'no-outline') {
     const path = linkOutline(stations, STATION_STEP_MM);
@@ -997,6 +1063,7 @@ function measureSide(data, w, h, quad, sideName, ppm) {
     process.stdout.write(sideName + ' ' + JSON.stringify(traceSide(stations)) + '\n');
   }
   best.stations = stations;
+  best.goldEnds = goldEnds;
   return best;
 }
 
@@ -1053,11 +1120,44 @@ function frameMarksFromProfile(profile, stepMm) {
     // The black line inside the silver is thicker than the silver. A dark
     // gap in a wave is about as wide as the bright ridge, so it does not count.
     if (dark * stepMm < 0.45) return null;
+    // The profile is thin silver, thicker black, thin silver. The inner
+    // silver is what separates that frame from a bright ridge in the wave.
+    let darkEnd = hi;
+    let gap = 0;
+    const hunt = Math.min(n - 1, hi + Math.round(2.4 / stepMm));
+    for (let k = hi; k <= hunt; k++) {
+      if (sm[k] < 90 && sm[k] <= sm[i] - 60) {
+        darkEnd = k;
+        gap = 0;
+      } else {
+        gap++;
+        if (gap > 2) break;
+      }
+    }
+    let innerOuter = null;
+    let innerWidth = null;
+    const after = Math.min(n - 2, darkEnd + Math.round(1.4 / stepMm));
+    for (let k = darkEnd + 1; k < after; k++) {
+      if (!(sm[k] >= sm[k - 1] && sm[k] >= sm[k + 1] && sm[k] >= 130)) continue;
+      let lo2 = k;
+      while (lo2 > darkEnd && (k - lo2) <= maxWidth && sm[k] - sm[lo2] < 40) lo2--;
+      let hi2 = k;
+      while (hi2 < n - 1 && (hi2 - k) <= maxWidth && sm[k] - sm[hi2] < 40) hi2++;
+      const w2 = hi2 - lo2;
+      if (w2 < minWidth || w2 > maxWidth) continue;
+      if (sm[k] - sm[lo2] < 40 || sm[k] - sm[hi2] < 40) continue;
+      innerOuter = lo2 * stepMm;
+      innerWidth = w2 * stepMm;
+      break;
+    }
     return {
       outer: lo * stepMm,
       width: widthPx * stepMm,
       black: hi * stepMm,
       dark: dark * stepMm,
+      blackWidth: Math.max(0, (darkEnd - hi) * stepMm),
+      inner: innerOuter,
+      innerWidth: innerWidth,
       hi: hi
     };
   }
@@ -1073,19 +1173,98 @@ function frameMarksFromProfile(profile, stepMm) {
   return marks.slice(0, 6);
 }
 
-function clusterFrameMarks(stations) {
+// A thin gold line with a black band immediately inside it. Chrome rays are
+// bright and neutral, or they are not followed by that black band, so they
+// do not count. The outer value is the shallow edge of the gold.
+function goldMarksFromProfile(profile, stepMm) {
+  const n = profile.length;
+  if (n < 8) return [];
+  const yel = new Array(n);
+  const lum = new Array(n);
+  for (let i = 0; i < n; i++) {
+    let yacc = 0;
+    let lacc = 0;
+    let wsum = 0;
+    for (let k = -3; k <= 3; k++) {
+      const j = i + k;
+      if (j < 0 || j >= n || !profile[j]) continue;
+      const rgb = profile[j];
+      yacc += Math.min(rgb[0], rgb[1]) - rgb[2];
+      lacc += profileLuma(rgb);
+      wsum++;
+    }
+    yel[i] = wsum ? yacc / wsum : 0;
+    lum[i] = wsum ? lacc / wsum : 0;
+  }
+  const marks = [];
+  const start = Math.round(0.8 / stepMm);
+  const maxWidth = Math.round(0.55 / stepMm);
+  for (let i = Math.max(1, start); i < n - 3; i++) {
+    if (!(yel[i] >= yel[i - 1] && yel[i] >= yel[i + 1] && yel[i] >= 9)) continue;
+    if (lum[i] < 26 || lum[i] > 235) continue;
+    let lo = i;
+    while (lo > 0 && (i - lo) <= maxWidth && yel[i] - yel[lo] < 5) lo--;
+    if (yel[i] - yel[lo] < 5) continue;
+    let hi = i;
+    while (hi < n - 1 && (hi - i) <= maxWidth && lum[hi + 1] >= 42 && yel[i] - yel[hi + 1] < 12) hi++;
+    const widthMm = (hi - lo) * stepMm;
+    if (widthMm < 0.06 || widthMm > 0.55) continue;
+    let dark = 0;
+    let gap = 0;
+    const lumas = [];
+    const hunt = Math.min(n - 1, hi + Math.round(2.0 / stepMm));
+    let lastDark = hi;
+    for (let k = hi; k <= hunt; k++) {
+      if (lum[k] < 45) {
+        dark++;
+        gap = 0;
+        lastDark = k;
+        lumas.push(lum[k]);
+      } else {
+        gap++;
+        if (dark > 4 && gap > 2) break;
+      }
+    }
+    const blackWidth = (lastDark - hi) * stepMm;
+    if (dark * stepMm < 0.9 || blackWidth < 0.9) continue;
+    const blackMed = median(lumas);
+    if (blackMed == null || blackMed > 32) continue;
+    marks.push({
+      outer: lo * stepMm,
+      width: widthMm,
+      black: hi * stepMm,
+      blackWidth: blackWidth
+    });
+    i = Math.max(hi, lastDark);
+  }
+  return marks.slice(0, 4);
+}
+
+function clusterFrameMarks(stations, opts) {
+  opts = opts || {};
+  const profileOnly = !!opts.profile;
+  const minPoints = opts.minPoints == null ? 6 : opts.minPoints;
+  const minSpanFrac = opts.minSpanFrac == null ? 0.48 : opts.minSpanFrac;
+  const minCov = opts.minCov == null ? 0.28 : opts.minCov;
+  const minSpanMm = opts.minSpanMm == null ? 0 : opts.minSpanMm;
   const n = stations.length;
   const marks = [];
   let sideLen = 0;
   stations.forEach(function (st, i) {
     if (st.alongMm > sideLen) sideLen = st.alongMm;
     (st.frameMarks || []).forEach(function (mk) {
+      // The black band is thicker than the silver. A dark gap in the wave is
+      // about as wide as the bright ridge, so it stays under 0.7 mm.
+      if (profileOnly && (mk.inner == null || !(mk.blackWidth >= 0.7) || !(mk.blackWidth > mk.width + 0.05))) return;
       marks.push({
         i: i,
         depth: mk.outer,
         width: mk.width,
         black: mk.black,
         dark: mk.dark,
+        blackWidth: mk.blackWidth,
+        inner: mk.inner,
+        innerWidth: mk.innerWidth,
         alongMm: st.alongMm,
         x: st.x,
         y: st.y,
@@ -1115,7 +1294,7 @@ function clusterFrameMarks(stations) {
   });
   const usable = [];
   groups.forEach(function (g) {
-    if (g.max - g.min > 0.45 || g.points.length < 6) return;
+    if (g.max - g.min > 0.45 || g.points.length < minPoints) return;
     const seen = {};
     const uniq = [];
     g.points.forEach(function (p) {
@@ -1123,11 +1302,16 @@ function clusterFrameMarks(stations) {
       seen[p.i] = true;
       uniq.push(p);
     });
+    if (uniq.length < minPoints) return;
     const along = uniq.map(function (p) { return p.alongMm; });
     const span = Math.max.apply(null, along) - Math.min.apply(null, along);
-    const cov = uniq.length / n;
+    const cov = n ? uniq.length / n : 0;
     const width = median(uniq.map(function (p) { return p.width; }));
-    if (span < sideLen * 0.48 || cov < 0.28 || !(width >= 0.06 && width < 0.5)) return;
+    if ((minSpanFrac > 0 && span < sideLen * minSpanFrac) || span < minSpanMm) return;
+    if (minCov > 0 && cov < minCov) return;
+    if (!(width >= 0.06 && width < 0.5)) return;
+    const blacks = uniq.map(function (p) { return p.blackWidth; }).filter(function (v) { return v != null; });
+    const inners = uniq.map(function (p) { return p.innerWidth; }).filter(function (v) { return v != null; });
     usable.push({
       points: uniq,
       median: median(uniq.map(function (p) { return p.depth; })),
@@ -1135,8 +1319,11 @@ function clusterFrameMarks(stations) {
       max: Math.max.apply(null, uniq.map(function (p) { return p.depth; })),
       width: width,
       black: median(uniq.map(function (p) { return p.black; })),
+      blackWidth: blacks.length ? median(blacks) : null,
+      innerWidth: inners.length ? median(inners) : null,
       cov: cov,
-      span: span
+      span: span,
+      profile: profileOnly
     });
   });
   usable.sort(function (a, b) { return a.median - b.median; });
@@ -1178,23 +1365,409 @@ function earlierFrameBand(stations, medianMm) {
   return best;
 }
 
-// Patterned colour (a wave, a refractor) is margin. The outline is the first
-// thin line that runs the side and matches the same stroke on the other sides.
-// A published outline on a plain margin is left alone.
+// The reported width is the outer edge at the points closest to the card
+// edge. One stray pixel does not count: at least two points have to agree.
+function outermostReading(line) {
+  const points = line.points || [];
+  if (!points.length) return null;
+  const minD = Math.min.apply(null, points.map(function (p) { return p.depth; }));
+  const tip = points.filter(function (p) { return p.depth <= minD + 0.08; });
+  const use = tip.length >= 2
+    ? tip
+    : points.slice().sort(function (a, b) { return a.depth - b.depth; }).slice(0, Math.min(2, points.length));
+  if (use.length < 2) return null;
+  return {
+    mm: median(use.map(function (p) { return p.depth; })),
+    black: median(use.map(function (p) { return p.black; })),
+    points: use
+  };
+}
+
+// Points at one depth are one segment only while they stay in a run. A
+// gap of a few millimetres is a design break. A gap across the side is two
+// unrelated marks, and the longer run is the line.
+function profileRuns(line) {
+  const pts = (line.points || []).slice().sort(function (a, b) { return a.alongMm - b.alongMm; });
+  if (pts.length < 2) return [];
+  const raw = [];
+  let cur = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i].alongMm - pts[i - 1].alongMm > 3.2) {
+      raw.push(cur);
+      cur = [pts[i]];
+    } else {
+      cur.push(pts[i]);
+    }
+  }
+  raw.push(cur);
+  const merged = [];
+  raw.forEach(function (run) {
+    const last = merged[merged.length - 1];
+    if (last && run[0].alongMm - last[last.length - 1].alongMm <= 12) {
+      run.forEach(function (p) { last.push(p); });
+    } else {
+      merged.push(run.slice());
+    }
+  });
+  const runs = [];
+  merged.forEach(function (run) {
+    const span = run[run.length - 1].alongMm - run[0].alongMm;
+    // Two samples are enough to measure a line that is already qualified.
+    // Qualifying takes a run long enough that a wave speck cannot close
+    // the rectangle by itself.
+    if (run.length < 6 || span < 4) return;
+    const depths = run.map(function (p) { return p.depth; });
+    runs.push({
+      points: run,
+      median: median(depths),
+      min: Math.min.apply(null, depths),
+      max: Math.max.apply(null, depths),
+      width: line.width,
+      black: median(run.map(function (p) { return p.black; })),
+      blackWidth: line.blackWidth,
+      innerWidth: line.innerWidth,
+      cov: line.points.length ? line.cov * (run.length / line.points.length) : 0,
+      span: span,
+      profile: true
+    });
+  });
+  return runs;
+}
+
+// The same silver-black-silver profile on every side, including a segment
+// that does not run the whole side. A profile that is missing on any side
+// is not the outline.
+function matchedProfileSegments(lists) {
+  const names = ['top', 'bottom', 'left', 'right'];
+  const near = {};
+  names.forEach(function (name) {
+    const list = lists[name] || [];
+    if (!list.length) {
+      near[name] = [];
+      return;
+    }
+    const floor = list[0].median;
+    // The outline is the outer stroke. A line several millimetres deeper
+    // is an interior frame, not a second try at the same edge.
+    near[name] = list.filter(function (line) { return line.median <= floor + 0.8; });
+  });
+  const idx = { top: 0, bottom: 0, left: 0, right: 0 };
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const pick = {};
+    let ready = true;
+    names.forEach(function (name) {
+      const list = near[name] || [];
+      if (idx[name] >= list.length) ready = false;
+      else pick[name] = list[idx[name]];
+    });
+    if (!ready) return null;
+    const widths = names.map(function (name) { return pick[name].width; });
+    const blacks = names.map(function (name) { return pick[name].blackWidth; });
+    const inners = names.map(function (name) { return pick[name].innerWidth; });
+    const wMed = median(widths);
+    const bMed = median(blacks);
+    const iMed = median(inners);
+    const wRange = Math.max.apply(null, widths) - Math.min.apply(null, widths);
+    const bRange = Math.max.apply(null, blacks) - Math.min.apply(null, blacks);
+    const same = wRange <= 0.15 && bRange <= 0.45 && names.every(function (name) {
+      const line = pick[name];
+      return line.points.length >= 2 &&
+        Math.abs(line.width - wMed) <= 0.12 &&
+        line.blackWidth != null && Math.abs(line.blackWidth - bMed) <= 0.3 &&
+        line.innerWidth != null && Math.abs(line.innerWidth - iMed) <= 0.2 &&
+        line.blackWidth > line.width + 0.05;
+    });
+    if (same) return pick;
+    let worst = names[0];
+    let worstD = -1;
+    names.forEach(function (name) {
+      const line = pick[name];
+      const d = Math.abs(line.width - wMed) / 0.12 +
+        Math.abs((line.blackWidth == null ? 0 : line.blackWidth) - bMed) / 0.3;
+      if (d > worstD) {
+        worstD = d;
+        worst = name;
+      }
+    });
+    idx[worst] += 1;
+  }
+  return null;
+}
+
+function publishFrameLine(side, line, stations) {
+  const reading = outermostReading(line);
+  if (!reading) return false;
+  const source = (line.points && line.points.length >= 2) ? line.points : reading.points;
+  const pts = source.map(function (p) {
+    return {
+      i: p.i,
+      depth: p.depth,
+      x: p.x,
+      y: p.y,
+      nx: p.nx,
+      ny: p.ny,
+      alongMm: p.alongMm,
+      t: side.lengthMm ? p.alongMm / side.lengthMm : 0,
+      strength: 20
+    };
+  });
+  side.frameOuterMm = reading.mm;
+  side.blackOuterMm = reading.black;
+  side.frameDiffMm = reading.black - reading.mm;
+  side.frameWidthMm = line.width;
+  side.frameCoverage = line.cov;
+  side.frameMatches = true;
+  side.mm = reading.mm;
+  side.withheld = false;
+  side.reason = null;
+  side.points = pts;
+  side.used = pts;
+  side.coverage = line.cov;
+  side.shape = 'line';
+  side.confidence = Math.round(Math.min(0.86, 0.42 + 0.5 * Math.max(line.cov, 0.2)) * 1000) / 1000;
+  side.tiltDeg = designOutline.tiltDegrees(pts);
+  side.elements = side.elements || [];
+  side.elements.unshift(layerElement(
+    { points: pts, median: reading.mm },
+    stations.length,
+    'outline',
+    false,
+    null
+  ));
+  return true;
+}
+
+// The shallowest gold-with-black mark in one end of the side. It counts only
+// when the same edge continues and deepens toward the middle, which is the
+// frame corner sticking out past the angled side. A ray does not.
+function goldEndContact(stations, fromStart, lengthMm) {
+  const len = lengthMm || 0;
+  if (!len || !stations.length) return null;
+  const windowMm = Math.min(18, Math.max(12, len * 0.28));
+  const marks = [];
+  stations.forEach(function (st, i) {
+    const mk = st.goldMarks && st.goldMarks[0];
+    if (!mk) return;
+    marks.push({
+      i: i,
+      depth: mk.outer,
+      black: mk.black,
+      width: mk.width,
+      blackWidth: mk.blackWidth,
+      alongMm: st.alongMm,
+      x: st.x,
+      y: st.y,
+      nx: st.nx,
+      ny: st.ny
+    });
+  });
+  if (marks.length < 2) return null;
+  const inWindow = marks.filter(function (m) {
+    return fromStart ? m.alongMm <= windowMm : m.alongMm >= len - windowMm;
+  });
+  const kept = inWindow.filter(function (h) {
+    return marks.some(function (o) {
+      return o !== h && Math.abs(o.alongMm - h.alongMm) <= 2 && Math.abs(o.depth - h.depth) <= 0.8;
+    });
+  });
+  if (!kept.length) return null;
+  const minD = Math.min.apply(null, kept.map(function (p) { return p.depth; }));
+  const tip = kept.filter(function (p) { return p.depth <= minD + 0.1; });
+  const corner = tip.slice().sort(function (a, b) {
+    return fromStart ? a.alongMm - b.alongMm : b.alongMm - a.alongMm;
+  })[0];
+  const towardMid = marks.some(function (m) {
+    const past = fromStart ? m.alongMm > corner.alongMm + 1.2 : m.alongMm < corner.alongMm - 1.2;
+    const near = Math.abs(m.alongMm - corner.alongMm) <= 14;
+    return past && near && m.depth >= corner.depth + 0.3;
+  });
+  if (!towardMid) return null;
+  const use = tip.length >= 2
+    ? tip
+    : kept.slice().sort(function (a, b) { return a.depth - b.depth; }).slice(0, Math.min(2, kept.length));
+  if (!use.length) return null;
+  return {
+    mm: median(use.map(function (p) { return p.depth; })),
+    black: median(use.map(function (p) { return p.black; })),
+    width: median(use.map(function (p) { return p.width; })),
+    blackWidth: median(use.map(function (p) { return p.blackWidth; })),
+    points: use,
+    corner: corner
+  };
+}
+
+function goldCornerOutline(sides) {
+  const names = ['top', 'bottom', 'left', 'right'];
+  const contacts = {};
+  const widths = [];
+  for (let n = 0; n < names.length; n++) {
+    const name = names[n];
+    const side = sides[name];
+    const stations = ((side && side.stations) || []).concat((side && side.goldEnds) || []);
+    const start = goldEndContact(stations, true, side && side.lengthMm);
+    const end = goldEndContact(stations, false, side && side.lengthMm);
+    if (!start || !end) return null;
+    if (Math.abs(start.corner.alongMm - end.corner.alongMm) < side.lengthMm * 0.35) return null;
+    // The two corners of one side are the two ends of the same frame. A
+    // reading several millimetres deeper is an interior line, not that corner.
+    if (Math.abs(start.mm - end.mm) > 1.5) return null;
+    if (start.mm > 8 || end.mm > 8) return null;
+    contacts[name] = { start: start, end: end };
+    widths.push(start.width, end.width);
+  }
+  const wRange = Math.max.apply(null, widths) - Math.min.apply(null, widths);
+  if (wRange > 0.28) return null;
+  if (process.env.TRACE_GOLD) {
+    names.forEach(function (name) {
+      const c = contacts[name];
+      process.stdout.write(name +
+        ' start ' + c.start.mm.toFixed(2) + '@' + c.start.corner.alongMm.toFixed(1) +
+        ' end ' + c.end.mm.toFixed(2) + '@' + c.end.corner.alongMm.toFixed(1) +
+        ' w ' + c.start.width.toFixed(2) + '/' + c.end.width.toFixed(2) + '\n');
+    });
+  }
+  return contacts;
+}
+
+function publishGoldSide(side, contact) {
+  const raw = contact.start.points.concat(contact.end.points);
+  const pts = raw.map(function (p) {
+    return {
+      i: p.i,
+      depth: p.depth,
+      black: p.black,
+      width: p.width,
+      x: p.x,
+      y: p.y,
+      nx: p.nx,
+      ny: p.ny,
+      alongMm: p.alongMm,
+      t: side.lengthMm ? p.alongMm / side.lengthMm : 0,
+      strength: 20
+    };
+  });
+  const reading = outermostReading({ points: pts });
+  if (!reading) return false;
+  side.cornerContact = true;
+  side.cornerDepths = [contact.start.mm, contact.end.mm].map(function (v) {
+    return Math.round(v * 1000) / 1000;
+  });
+  side.frameOuterMm = reading.mm;
+  side.blackOuterMm = reading.black;
+  side.frameDiffMm = reading.black - reading.mm;
+  side.frameWidthMm = median(pts.map(function (p) { return p.width; }));
+  side.frameMatches = true;
+  side.mm = reading.mm;
+  side.withheld = false;
+  side.reason = null;
+  side.points = pts;
+  side.used = pts;
+  side.coverage = pts.length / Math.max(1, (side.stations || []).length + (side.goldEnds || []).length);
+  side.shape = 'corners';
+  side.confidence = 0.62;
+  side.tiltDeg = designOutline.tiltDegrees(pts);
+  return true;
+}
+
+// Patterned colour (a wave, a refractor) is margin. The outline is the outer
+// edge of the silver-black-silver stroke when that same profile is on every
+// side, even as a segment. A published outline on a plain margin is left alone.
 function applyRectangularFrame(sides) {
   const names = ['top', 'bottom', 'left', 'right'];
   const found = {};
+  const segments = {};
   const chromaticSide = {};
   names.forEach(function (name) {
     const side = sides[name];
     const stations = side && side.stations ? side.stations : [];
     const clusters = stations.length ? clusterFrameMarks(stations) : [];
     found[name] = clusters[0] || null;
+    const rawSegments = stations.length
+      ? clusterFrameMarks(stations, { profile: true, minPoints: 2, minSpanFrac: 0, minCov: 0, minSpanMm: 1.2 })
+      : [];
+    segments[name] = [];
+    rawSegments.forEach(function (line) {
+      profileRuns(line).forEach(function (run) { segments[name].push(run); });
+    });
+    segments[name].sort(function (a, b) { return a.median - b.median; });
     chromaticSide[name] = stations.filter(function (st) {
       return (st.marginPattern && !st.marginTextured) || st.marginVaried;
     }).length > stations.length * 0.5;
   });
   const chromaticCount = names.filter(function (name) { return chromaticSide[name]; }).length;
+  const allOpen = names.every(function (name) {
+    const side = sides[name];
+    return !side || side.withheld || side.mm == null;
+  });
+  if (process.env.TRACE_FRAME) {
+    names.forEach(function (name) {
+      const list = segments[name] || [];
+      process.stdout.write(name + ' chromatic ' + chromaticSide[name] + '\n');
+      list.forEach(function (line) {
+        if (line.median > 5 || line.points.length < 6) return;
+        const along = line.points.map(function (p) { return p.alongMm; }).sort(function (a, b) { return a - b; });
+        const runs = [];
+        let cur = [along[0]];
+        for (let i = 1; i < along.length; i++) {
+          if (along[i] - along[i - 1] > 2.4) {
+            runs.push(cur);
+            cur = [along[i]];
+          } else cur.push(along[i]);
+        }
+        runs.push(cur);
+        const brief = runs.filter(function (r) { return r.length >= 2; }).map(function (r) {
+          return r.length + '@' + r[0].toFixed(0) + '-' + r[r.length - 1].toFixed(0);
+        }).join(',');
+        process.stdout.write('  ' + line.median.toFixed(2) + ' w' + line.width.toFixed(2) + ' b' +
+          (line.blackWidth == null ? '-' : line.blackWidth.toFixed(2)) + ' runs ' + brief + '\n');
+      });
+    });
+  }
+  const profileMatch = matchedProfileSegments(segments);
+  if (process.env.TRACE_FRAME) {
+    process.stdout.write('match ' + (profileMatch ? names.map(function (name) {
+      const line = profileMatch[name];
+      return name + ' ' + line.median.toFixed(2) + ' w' + line.width.toFixed(2) + ' b' +
+        (line.blackWidth == null ? '-' : line.blackWidth.toFixed(2)) + ' n' + line.points.length;
+    }).join(' | ') : 'none') + ' chromatic ' + chromaticCount + ' open ' + allOpen + '\n');
+  }
+  if (profileMatch && (chromaticCount >= 3 || allOpen)) {
+    names.forEach(function (name) {
+      const side = sides[name];
+      if (!side) return;
+      side.marginPatterned = !!chromaticSide[name];
+      side.sawProfile = segments[name].length > 0;
+      publishFrameLine(side, profileMatch[name], side.stations || []);
+      delete side.stations;
+      delete side.goldEnds;
+    });
+    return;
+  }
+  // No silver-black-silver rectangle. A gold line with black immediately
+  // inside, the same profile at all four outer corners, is the outline when
+  // every side is still open. The contact on each side is those two corners.
+  // A published outline on any side is left alone.
+  if (allOpen) {
+    const gold = goldCornerOutline(sides);
+    if (gold) {
+      let published = true;
+      names.forEach(function (name) {
+        const side = sides[name];
+        if (!side || !publishGoldSide(side, gold[name])) published = false;
+      });
+      if (published) {
+        names.forEach(function (name) {
+          const side = sides[name];
+          if (!side) return;
+          side.marginPatterned = !!chromaticSide[name];
+          side.sawProfile = segments[name].length > 0;
+          delete side.stations;
+          delete side.goldEnds;
+        });
+        return;
+      }
+    }
+  }
   const widths = [];
   names.forEach(function (name) {
     if (found[name]) widths.push(found[name].width);
@@ -1210,9 +1783,10 @@ function applyRectangularFrame(sides) {
     const line = found[name];
     const matches = !!(line && widthMed != null && Math.abs(line.width - widthMed) <= 0.15);
     if (line) {
-      side.frameOuterMm = line.median;
-      side.blackOuterMm = line.black;
-      side.frameDiffMm = line.black - line.median;
+      const reading = outermostReading(line);
+      side.frameOuterMm = reading ? reading.mm : line.median;
+      side.blackOuterMm = reading ? reading.black : line.black;
+      side.frameDiffMm = side.blackOuterMm - side.frameOuterMm;
       side.frameWidthMm = line.width;
       side.frameCoverage = line.cov;
       side.frameMatches = matches;
@@ -1239,38 +1813,12 @@ function applyRectangularFrame(sides) {
       side.reason = 'unclear';
       side.confidence = Math.min(side.confidence || 0, 0.34);
     } else if (matches && chromatic && line) {
-      const pts = line.points.map(function (p) {
-        return {
-          i: p.i,
-          depth: p.depth,
-          x: p.x,
-          y: p.y,
-          nx: p.nx,
-          ny: p.ny,
-          alongMm: p.alongMm,
-          t: side.lengthMm ? p.alongMm / side.lengthMm : 0,
-          strength: 20
-        };
-      });
-      side.mm = line.median;
-      side.withheld = false;
-      side.reason = null;
-      side.points = pts;
-      side.used = pts;
-      side.coverage = line.cov;
-      side.shape = 'line';
-      side.confidence = Math.round(Math.min(0.86, 0.42 + 0.5 * line.cov) * 1000) / 1000;
-      side.tiltDeg = designOutline.tiltDegrees(pts);
-      side.elements = side.elements || [];
-      side.elements.unshift(layerElement(
-        { points: pts, median: line.median },
-        stations.length,
-        'outline',
-        false,
-        null
-      ));
+      publishFrameLine(side, line, stations);
     }
+    side.marginPatterned = !!chromaticSide[name];
+    side.sawProfile = segments[name].length > 0;
     delete side.stations;
+    delete side.goldEnds;
   });
 }
 
@@ -1632,6 +2180,236 @@ function measureImage(data, w, h, dpi, bedModel) {
   return first;
 }
 
+function pointOnCard(quad, u, v) {
+  const tl = quad.corners.tl;
+  const tr = quad.corners.tr;
+  const bl = quad.corners.bl;
+  const br = quad.corners.br;
+  const ax = tl.x + (tr.x - tl.x) * u;
+  const ay = tl.y + (tr.y - tl.y) * u;
+  const bx = bl.x + (br.x - bl.x) * u;
+  const by = bl.y + (br.y - bl.y) * u;
+  return { x: ax + (bx - ax) * v, y: ay + (by - ay) * v };
+}
+
+function rgbLuma(rgb) {
+  return profileLuma(rgb);
+}
+
+function rgbChroma(rgb) {
+  if (!rgb) return 0;
+  return Math.max(rgb[0], rgb[1], rgb[2]) - Math.min(rgb[0], rgb[1], rgb[2]);
+}
+
+// Full-bleed cards have no frame. A player-name line can be reported as a
+// design reference, and a corner diamond or a letter descender can be stored
+// as an anchor. Neither one is a centering grade.
+function collectDesignReference(data, w, h, quad, sides) {
+  const top = sides.top;
+  const bottom = sides.bottom;
+  if (!top || !bottom || top.mm != null || bottom.mm != null) return null;
+  if (!top.withheld || !bottom.withheld) return null;
+  // A card that already has the silver-black-silver profile is a framed
+  // card, even when that frame was withheld. Do not read its lettering as
+  // a border. A full-bleed photo has no such profile.
+  const framed = ['top', 'bottom', 'left', 'right'].filter(function (name) {
+    return sides[name] && sides[name].sawProfile;
+  }).length;
+  if (framed >= 3) return null;
+  const widthMm = quad.widthMm;
+  const heightMm = quad.heightMm;
+  if (!(widthMm > 20 && heightMm > 20)) return null;
+  const rows = [];
+  for (let y = heightMm * 0.62; y < heightMm - 0.35; y += 0.12) {
+    const samples = [];
+    for (let x = 0.6; x < widthMm - 0.6; x += 0.16) {
+      const p = pointOnCard(quad, x / widthMm, y / heightMm);
+      const rgb = sampleRgb(data, w, h, p.x, p.y);
+      samples.push({ x: x, y: y, L: rgbLuma(rgb) });
+    }
+    if (samples.length < 20) continue;
+    const sorted = samples.map(function (s) { return s.L; }).sort(function (a, b) { return a - b; });
+    const med = sorted[Math.floor(sorted.length / 2)];
+    // Lettering for a design reference sits on a dark field. A bright photo
+    // (a uniform, the grass) is not that field, so it is not used.
+    if (med > 105) continue;
+    const ink = samples.filter(function (s) { return s.L >= med + 32 && s.L >= 120; });
+    if (ink.length < 10) continue;
+    const xs = ink.map(function (s) { return s.x; });
+    const x0 = Math.min.apply(null, xs);
+    const x1 = Math.max.apply(null, xs);
+    if (x1 - x0 < 10 || x1 - x0 > widthMm * 0.82) continue;
+    rows.push({ y: y, x0: x0, x1: x1, n: ink.length });
+  }
+  const bands = [];
+  rows.forEach(function (row) {
+    const last = bands[bands.length - 1];
+    if (last && row.y - last.to <= 0.45) {
+      last.to = row.y;
+      last.x0 = Math.min(last.x0, row.x0);
+      last.x1 = Math.max(last.x1, row.x1);
+      last.rows.push(row);
+    } else {
+      bands.push({ from: row.y, to: row.y, x0: row.x0, x1: row.x1, rows: [row] });
+    }
+  });
+  const named = bands.filter(function (b) {
+    return (b.to - b.from) >= 0.45 && (b.to - b.from) <= 6.5 && (b.x1 - b.x0) >= 14;
+  });
+  let playerName = null;
+  let teamDescender = null;
+  if (named.length) {
+    const name = named[0];
+    const left = pointOnCard(quad, name.x0 / widthMm, ((name.from + name.to) / 2) / heightMm);
+    const right = pointOnCard(quad, name.x1 / widthMm, ((name.from + name.to) / 2) / heightMm);
+    playerName = {
+      role: 'design-referenced',
+      grade: false,
+      source: 'player-name',
+      leftMm: roundMm(name.x0),
+      rightMm: roundMm(widthMm - name.x1),
+      left: { x: left.x, y: left.y },
+      right: { x: right.x, y: right.y }
+    };
+    const team = named.length >= 2 ? named[1] : null;
+    if (team) {
+      let lowY = team.from;
+      let lowX = (team.x0 + team.x1) / 2;
+      for (let y = team.from; y <= Math.min(heightMm - 0.2, team.to + 1.2); y += 0.06) {
+        for (let x = Math.max(0.4, team.x0 - 1); x <= Math.min(widthMm - 0.4, team.x1 + 1); x += 0.1) {
+          const p = pointOnCard(quad, x / widthMm, y / heightMm);
+          const rgb = sampleRgb(data, w, h, p.x, p.y);
+          const L = rgbLuma(rgb);
+          if (L < 120) continue;
+          const around = [];
+          for (let k = -3; k <= 3; k++) {
+            const q = pointOnCard(quad, x / widthMm, Math.min(0.99, (y + k * 0.2) / heightMm));
+            around.push(rgbLuma(sampleRgb(data, w, h, q.x, q.y)));
+          }
+          around.sort(function (a, b) { return a - b; });
+          const med = around[3];
+          if (L >= med + 28 && y >= lowY) {
+            lowY = y;
+            lowX = x;
+          }
+        }
+      }
+      const tip = pointOnCard(quad, lowX / widthMm, lowY / heightMm);
+      teamDescender = {
+        role: 'anchor',
+        grade: false,
+        source: 'team-name-descender',
+        fromBottomMm: roundMm(heightMm - lowY),
+        fromLeftMm: roundMm(lowX),
+        x: tip.x,
+        y: tip.y
+      };
+    }
+  }
+  let diamondTip = null;
+  const step = 0.2;
+  const ys = [];
+  const xs = [];
+  for (let y = 1.0; y < heightMm * 0.36; y += step) ys.push(y);
+  for (let x = 0.8; x < widthMm * 0.5; x += step) xs.push(x);
+  let textureN = 0;
+  const grid = ys.map(function () { return xs.map(function () { return 0; }); });
+  for (let j = 0; j < ys.length; j++) {
+    for (let i = 0; i < xs.length; i++) {
+      let lo = 255;
+      let hi = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const p = pointOnCard(quad,
+            Math.min(0.98, Math.max(0.01, (xs[i] + dx * 0.18) / widthMm)),
+            Math.min(0.98, Math.max(0.01, (ys[j] + dy * 0.18) / heightMm)));
+          const L = rgbLuma(sampleRgb(data, w, h, p.x, p.y));
+          if (L < lo) lo = L;
+          if (L > hi) hi = L;
+        }
+      }
+      // Fine hatching in a metal logo, not a smooth photo.
+      if (hi - lo >= 45) {
+        grid[j][i] = 1;
+        textureN++;
+      }
+    }
+  }
+  if (process.env.TRACE_ANCHOR) process.stdout.write('texture cells ' + textureN + '\n');
+  const seen = ys.map(function () { return xs.map(function () { return 0; }); });
+  let bestDiamond = null;
+  for (let j = 0; j < ys.length; j++) {
+    for (let i = 0; i < xs.length; i++) {
+      if (!grid[j][i] || seen[j][i]) continue;
+      const stack = [[j, i]];
+      seen[j][i] = 1;
+      const cells = [];
+      while (stack.length) {
+        const cur = stack.pop();
+        cells.push(cur);
+        const cj = cur[0];
+        const ci = cur[1];
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) {
+          const nj = cj + d[0];
+          const ni = ci + d[1];
+          if (nj < 0 || ni < 0 || nj >= ys.length || ni >= xs.length) return;
+          if (!grid[nj][ni] || seen[nj][ni]) return;
+          seen[nj][ni] = 1;
+          stack.push([nj, ni]);
+        });
+      }
+      if (cells.length < 40 || cells.length > 6000) continue;
+      let minJ = cells[0][0];
+      let maxJ = cells[0][0];
+      let minI = cells[0][1];
+      let maxI = cells[0][1];
+      cells.forEach(function (c) {
+        if (c[0] < minJ) minJ = c[0];
+        if (c[0] > maxJ) maxJ = c[0];
+        if (c[1] < minI) minI = c[1];
+        if (c[1] > maxI) maxI = c[1];
+      });
+      const boxH = (maxJ - minJ + 1) * step;
+      const boxW = (maxI - minI + 1) * step;
+      if (boxW < 3.5 || boxW > 22 || boxH < 3.5 || boxH > 20) continue;
+      if (process.env.TRACE_ANCHOR) {
+        process.stdout.write('blob ' + cells.length + ' ' + boxW.toFixed(1) + 'x' + boxH.toFixed(1) +
+          ' at ' + xs[minI].toFixed(1) + ',' + ys[minJ].toFixed(1) + '\n');
+      }
+      const topCells = cells.filter(function (c) { return c[0] <= minJ + 1; });
+      const midCells = cells.filter(function (c) {
+        return c[0] >= minJ + (maxJ - minJ) * 0.35 && c[0] <= minJ + (maxJ - minJ) * 0.65;
+      });
+      const topW = topCells.length ? (Math.max.apply(null, topCells.map(function (c) { return c[1]; })) - Math.min.apply(null, topCells.map(function (c) { return c[1]; })) + 1) * step : boxW;
+      const midW = midCells.length ? (Math.max.apply(null, midCells.map(function (c) { return c[1]; })) - Math.min.apply(null, midCells.map(function (c) { return c[1]; })) + 1) * step : boxW;
+      if (!(topW < midW * 0.7 && topCells.length <= 12)) continue;
+      const tipX = median(topCells.map(function (c) { return xs[c[1]]; }));
+      const tipY = ys[minJ];
+      if (!bestDiamond || tipY < bestDiamond.fromTopMm) {
+        const at = pointOnCard(quad, tipX / widthMm, tipY / heightMm);
+        bestDiamond = {
+          role: 'anchor',
+          grade: false,
+          source: 'diamond-tip',
+          fromTopMm: roundMm(tipY),
+          fromLeftMm: roundMm(tipX),
+          x: at.x,
+          y: at.y
+        };
+      }
+    }
+  }
+  diamondTip = bestDiamond;
+  if (!playerName && !teamDescender && !diamondTip) return null;
+  return {
+    grade: false,
+    centering: false,
+    playerName: playerName,
+    diamondTip: diamondTip,
+    teamDescender: teamDescender
+  };
+}
+
 function measureWithPaper(data, w, h, dpi, ppm, paperModel) {
   const bbox = largestComponentBBox(data, w, h, paperModel.paper, paperModel.threshold);
   if (!bbox) {
@@ -1648,6 +2426,7 @@ function measureWithPaper(data, w, h, dpi, ppm, paperModel) {
   applyRectangularFrame(sides);
   const sizeOk = dimensionsAreCard(quad.widthMm, quad.heightMm);
   if (!sizeOk) withholdNotCardSized(sides);
+  const designReference = sizeOk ? collectDesignReference(data, w, h, quad, sides) : null;
   return {
     ok: true,
     dpi: dpi,
@@ -1660,6 +2439,7 @@ function measureWithPaper(data, w, h, dpi, ppm, paperModel) {
     sizeOk: sizeOk,
     corners: quad.corners,
     frameCheck: frameCheck(sides),
+    designReference: designReference,
     sides: sides
   };
 }
@@ -1903,6 +2683,7 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
         sizeOk: entry.result.sizeOk,
         ratios: borderRatios(sides),
         frameCheck: entry.result.frameCheck || null,
+        designReference: entry.result.designReference || null,
         sides: sides
       };
     }
@@ -1921,7 +2702,7 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
     dpi: dpi,
     nominalCardMm: { width: NOMINAL_W_MM, height: NOMINAL_H_MM },
     biasAgreeMm: BIAS_AGREE_MM,
-    definition: 'Border is the perpendicular distance from the card edge to the outermost points of the continuous design-block outline on that side. A mark that covers only part of a side is not the outline. Texture or shading inside a uniform margin is not an edge. The published value is the mean of the upright scan and the swapped 180 degree scan. An axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. That bias is reported and is not subtracted as a constant. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. Unapproved until a person checks the overlay.',
+    definition: 'Border is the perpendicular distance from the card edge to the outermost points of the design-block outline on that side. A patterned margin is margin, including chrome rays and angled shapes. The outline may be a segment: the same thin-silver, thicker-black, thin-silver profile has to appear on all four sides, parallel to the edges. A gold line with black immediately inside it is the outline when that same profile is on all four sides; the contacts are the outer corners, two per side. A logo, stamp, lettering, or ray on only one side is not the outline. The published value is the mean of the upright scan and the swapped 180 degree scan. An axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. That bias is reported and is not subtracted as a constant. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. A design-referenced name edge or an anchor (a diamond tip, a letter descender) is not a centering measurement and is not a grade. Unapproved until a person checks the overlay.',
     cards: outCards
   };
 }
@@ -2013,17 +2794,18 @@ function buildOverlaySvg(result, geom) {
       );
     }
     const col = side.withheld ? '#ff5a36' : '#ffe14a';
+    const markR = side.cornerContact ? pointR * 2.4 : pointR;
     (side.points || []).forEach(function (p) {
       const px = p.x + side.edge.nx * p.depth * pxPerMm(result.dpi);
       const py = p.y + side.edge.ny * p.depth * pxPerMm(result.dpi);
-      parts.push('<circle cx="' + sx(px) + '" cy="' + sy(py) + '" r="' + pointR + '" fill="' + col + '" fill-opacity="0.9"/>');
+      parts.push('<circle cx="' + sx(px) + '" cy="' + sy(py) + '" r="' + markR + '" fill="' + col + '" fill-opacity="0.95"/>');
     });
     (side.used || []).forEach(function (p) {
       const px = p.x + side.edge.nx * p.depth * pxPerMm(result.dpi);
       const py = p.y + side.edge.ny * p.depth * pxPerMm(result.dpi);
       parts.push('<circle cx="' + sx(px) + '" cy="' + sy(py) + '" r="' + (pointR + 1.5) + '" fill="none" stroke="#ffffff" stroke-width="' + Math.max(1, stroke * 0.35) + '"/>');
     });
-    const poly = outlinePolyline(side, result.dpi) || [];
+    const poly = side.cornerContact ? [] : (outlinePolyline(side, result.dpi) || []);
     if (poly.length >= 2) {
       const pointsAttr = poly.map(function (p) { return sx(p.x) + ',' + sy(p.y); }).join(' ');
       parts.push(
@@ -2055,6 +2837,18 @@ function buildOverlaySvg(result, geom) {
       esc(text) + '</text>'
     );
   });
+  const ref = !onlySide && result.designReference;
+  if (ref) {
+    const marks = [];
+    if (ref.diamondTip) marks.push(ref.diamondTip);
+    if (ref.teamDescender) marks.push(ref.teamDescender);
+    if (ref.playerName && ref.playerName.left) marks.push(ref.playerName.left);
+    if (ref.playerName && ref.playerName.right) marks.push(ref.playerName.right);
+    marks.forEach(function (p) {
+      if (!p || p.x == null) return;
+      parts.push('<circle cx="' + sx(p.x) + '" cy="' + sy(p.y) + '" r="' + (pointR + 2) + '" fill="none" stroke="#ff4dff" stroke-width="' + stroke + '"/>');
+    });
+  }
   if (labels && result.cardMm) {
     const sizeText = 'card ' + result.cardMm.width.toFixed(2) + ' x ' + result.cardMm.height.toFixed(2) + ' mm';
     parts.push(
@@ -2250,6 +3044,22 @@ function shiftResult(result, origin) {
       p.y += origin.y;
     });
   });
+  const ref = result.designReference;
+  if (ref) {
+    [ref.diamondTip, ref.teamDescender].forEach(function (p) {
+      if (!p || p.x == null) return;
+      p.x += origin.x;
+      p.y += origin.y;
+    });
+    if (ref.playerName) {
+      ['left', 'right'].forEach(function (k) {
+        const p = ref.playerName[k];
+        if (!p || p.x == null) return;
+        p.x += origin.x;
+        p.y += origin.y;
+      });
+    }
+  }
   return result;
 }
 
@@ -2603,14 +3413,32 @@ function sideCaption(side, result) {
   const cov = s.coverage == null ? '' : '   cov ' + Math.round(s.coverage * 100) + '%';
   const conf = s.confidence == null ? '' : '   conf ' + s.confidence.toFixed(2);
   const shown = s.mm != null ? s.mm : candidateDepth(s);
-  const black = s.blackOuterMm == null
+  const ref = result && result.designReference;
+  let design = '';
+  if (ref && ref.grade === false) {
+    if (side === 'left' && ref.playerName) {
+      design = '   design-referenced ' + ref.playerName.leftMm.toFixed(3) + ' mm (player name, not a grade)';
+    } else if (side === 'right' && ref.playerName) {
+      design = '   design-referenced ' + ref.playerName.rightMm.toFixed(3) + ' mm (player name, not a grade)';
+    } else if (side === 'top' && ref.diamondTip) {
+      design = '   anchor diamond tip ' + ref.diamondTip.fromTopMm.toFixed(3) + ' mm from top, ' +
+        ref.diamondTip.fromLeftMm.toFixed(3) + ' mm from left (not a grade)';
+    } else if (side === 'bottom' && ref.teamDescender) {
+      design = '   anchor team-name descender ' + ref.teamDescender.fromBottomMm.toFixed(3) +
+        ' mm from bottom (not a grade)';
+    }
+  }
+  const black = s.blackOuterMm == null || (s.mm != null && s.frameOuterMm != null && Math.abs(s.frameOuterMm - s.mm) > 0.08)
     ? ''
     : '   black ' + s.blackOuterMm.toFixed(3) + ' diff ' + (s.frameDiffMm == null ? '—' : s.frameDiffMm.toFixed(3));
+  const corners = s.cornerContact && s.cornerDepths
+    ? '   corners ' + s.cornerDepths.map(function (d) { return d.toFixed(2); }).join(' / ')
+    : '';
   if (s.withheld || s.mm == null) {
     const cand = shown == null ? '' : '   candidate ' + shown.toFixed(3) + ' mm';
-    return side + '  withheld' + (s.reason ? ' (' + s.reason + ')' : '') + cand + black + cov + conf + tilt;
+    return side + '  withheld' + (s.reason ? ' (' + s.reason + ')' : '') + cand + black + corners + design + cov + conf + tilt;
   }
-  return side + '  ' + s.mm.toFixed(3) + ' mm' + black + cov + conf + tilt;
+  return side + '  ' + s.mm.toFixed(3) + ' mm' + black + corners + design + cov + conf + tilt;
 }
 
 async function writeCardReviewSheet(cardId, scans, dest) {
@@ -3332,6 +4160,148 @@ async function selfTest() {
     check('wave black ratio matches the outline ratio',
       share && share.diff != null && Math.abs(share.diff) < 0.02,
       share);
+  }
+
+  // The silver-black-silver stroke is only a segment on each side. It is
+  // still the outline because the same profile closes the rectangle. A
+  // bright bar on one side only is not.
+  const segment = drawSynthetic({
+    dpi: dpi,
+    marginMm: 6,
+    cardWmm: NOMINAL_W_MM,
+    cardHmm: NOMINAL_H_MM,
+    pink: pink,
+    white: [40, 40, 160],
+    photo: [70, 90, 120],
+    frameMm: 0.2,
+    top: constantEdge(6.2, [40, 40, 160], []),
+    bottom: constantEdge(6.2, [40, 40, 160], []),
+    left: constantEdge(6.2, [40, 40, 160], []),
+    right: constantEdge(6.2, [40, 40, 160], [])
+  });
+  const segPpm = pxPerMm(dpi);
+  const segMargin = Math.round(6 * segPpm);
+  for (let y = 0; y < segment.height; y++) {
+    for (let x = 0; x < segment.width; x++) {
+      const dTop = (y - segMargin) / segPpm;
+      const dBot = (segMargin + NOMINAL_H_MM * segPpm - y) / segPpm;
+      const dLeft = (x - segMargin) / segPpm;
+      const dRight = (segMargin + NOMINAL_W_MM * segPpm - x) / segPpm;
+      const depth = Math.min(dTop, dBot, dLeft, dRight);
+      let along = 0;
+      if (depth === dTop || depth === dBot) along = (x - segMargin) / (NOMINAL_W_MM * segPpm);
+      else along = (y - segMargin) / (NOMINAL_H_MM * segPpm);
+      const i = (y * segment.width + x) * 3;
+      if (depth >= 0 && depth < 2.6) {
+        const band = Math.floor(depth / 0.35) % 2;
+        if (band) {
+          segment.data[i] = 180;
+          segment.data[i + 1] = 40;
+          segment.data[i + 2] = 80;
+        } else {
+          segment.data[i] = 40;
+          segment.data[i + 1] = 40;
+          segment.data[i + 2] = 180;
+        }
+      }
+      const onSegment = along >= 0.32 && along <= 0.68;
+      const loneBar = depth === dTop && along >= 0.08 && along <= 0.18 && depth >= 1.15 && depth < 1.35;
+      if (loneBar) {
+        segment.data[i] = 245;
+        segment.data[i + 1] = 245;
+        segment.data[i + 2] = 245;
+      }
+      if (!onSegment || depth < 2.8) continue;
+      if (depth < 3.0) {
+        segment.data[i] = 245;
+        segment.data[i + 1] = 245;
+        segment.data[i + 2] = 245;
+      } else if (depth < 3.8) {
+        segment.data[i] = 8;
+        segment.data[i + 1] = 8;
+        segment.data[i + 2] = 8;
+      } else if (depth < 4.0) {
+        segment.data[i] = 230;
+        segment.data[i + 1] = 230;
+        segment.data[i + 2] = 230;
+      }
+    }
+  }
+  const segM = measureImage(segment.data, segment.width, segment.height, dpi);
+  check('segment card found', segM.ok && segM.sizeOk, segM.ok ? segM.cardMm : segM.error);
+  if (segM.ok) {
+    ['top', 'bottom', 'left', 'right'].forEach(function (name) {
+      const side = segM.sides[name];
+      check('segment ' + name + ' is the outer silver',
+        side.withheld === false && near(side.mm, 2.8, 0.2) && (side.used || []).length >= 2,
+        sideBrief(side));
+      check('segment ' + name + ' black ratio uses the black edge',
+        side.blackOuterMm != null && near(side.blackOuterMm, 3.0, 0.25),
+        { mm: side.mm, black: side.blackOuterMm });
+    });
+    const segShare = segM.frameCheck && segM.frameCheck.topShare;
+    check('segment black ratio matches the outline ratio',
+      segShare && segShare.diff != null && Math.abs(segShare.diff) < 0.02,
+      segShare);
+    check('segment ignores the single-side bar',
+      segM.sides.top.mm > 2.2,
+      segM.sides.top.mm);
+  }
+
+  // Gold line, black immediately inside, shallowest at the four outer
+  // corners. A neutral ray in the margin is not the contact.
+  function goldCornerEdge() {
+    return {
+      depth: function (along) {
+        const t = Math.min(Math.abs(along - 0.08), Math.abs(along - 0.92)) / 0.4;
+        return 3.5 + 4.0 * Math.max(0, Math.min(1, t));
+      },
+      color: [190, 150, 40],
+      marks: []
+    };
+  }
+  const goldCard = drawSynthetic({
+    dpi: dpi,
+    marginMm: 6,
+    cardWmm: NOMINAL_W_MM,
+    cardHmm: NOMINAL_H_MM,
+    pink: pink,
+    white: [36, 36, 38],
+    photo: [12, 12, 14],
+    frameMm: 0.28,
+    top: goldCornerEdge(),
+    bottom: goldCornerEdge(),
+    left: goldCornerEdge(),
+    right: goldCornerEdge()
+  });
+  const goldPpm = pxPerMm(dpi);
+  const goldMargin = Math.round(6 * goldPpm);
+  for (let y = 0; y < goldCard.height; y++) {
+    for (let x = 0; x < goldCard.width; x++) {
+      const dTop = (y - goldMargin) / goldPpm;
+      const along = (x - goldMargin) / (NOMINAL_W_MM * goldPpm);
+      if (dTop >= 1.35 && dTop < 1.6 && along >= 0.3 && along <= 0.55) {
+        const i = (y * goldCard.width + x) * 3;
+        goldCard.data[i] = 236;
+        goldCard.data[i + 1] = 236;
+        goldCard.data[i + 2] = 236;
+      }
+    }
+  }
+  const goldM = measureImage(goldCard.data, goldCard.width, goldCard.height, dpi);
+  check('gold-corner card found', goldM.ok && goldM.sizeOk, goldM.ok ? goldM.cardMm : goldM.error);
+  if (goldM.ok) {
+    ['top', 'bottom', 'left', 'right'].forEach(function (name) {
+      const side = goldM.sides[name];
+      check('gold-corner ' + name + ' is the outer corner',
+        side.cornerContact === true && side.withheld === false && near(side.mm, 3.5, 0.25) &&
+        (side.points || []).length >= 2,
+        sideBrief(side));
+      check('gold-corner ' + name + ' black is inside the gold',
+        side.blackOuterMm != null && side.blackOuterMm > side.mm && side.blackOuterMm < side.mm + 0.6,
+        { mm: side.mm, black: side.blackOuterMm });
+    });
+    check('gold-corner ignores the margin ray', goldM.sides.top.mm > 2.5, goldM.sides.top.mm);
   }
 
   const slant = drawSynthetic({
