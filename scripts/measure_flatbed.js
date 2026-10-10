@@ -167,7 +167,7 @@ function estimatePaper(data, w, h) {
   return { paper: paper, threshold: threshold };
 }
 
-function largestComponentBBox(data, w, h, paper, threshold) {
+function componentBoxes(data, w, h, paper, threshold) {
   const step = Math.max(1, Math.floor(Math.max(w, h) / 900));
   const gw = Math.ceil(w / step);
   const gh = Math.ceil(h / step);
@@ -183,8 +183,7 @@ function largestComponentBBox(data, w, h, paper, threshold) {
     }
   }
   const seen = new Uint8Array(gw * gh);
-  let best = null;
-  let bestArea = 0;
+  const boxes = [];
   const qx = new Int32Array(gw * gh);
   const qy = new Int32Array(gw * gh);
   for (let sy = 0; sy < gh; sy++) {
@@ -226,20 +225,192 @@ function largestComponentBBox(data, w, h, paper, threshold) {
           }
         }
       }
-      if (area > bestArea) {
-        bestArea = area;
-        best = { minX: minX, maxX: maxX, minY: minY, maxY: maxY, area: area };
-      }
+      if (area < 50) continue;
+      boxes.push({
+        left: minX * step,
+        right: Math.min(w - 1, maxX * step + step),
+        top: minY * step,
+        bottom: Math.min(h - 1, maxY * step + step),
+        area: area * step * step
+      });
     }
   }
-  if (!best || bestArea < 50) return null;
-  return {
-    left: best.minX * step,
-    right: Math.min(w - 1, best.maxX * step + step),
-    top: best.minY * step,
-    bottom: Math.min(h - 1, best.maxY * step + step),
-    area: bestArea * step * step
-  };
+  return boxes;
+}
+
+function largestComponentBBox(data, w, h, paper, threshold) {
+  const boxes = componentBoxes(data, w, h, paper, threshold);
+  if (!boxes.length) return null;
+  let best = boxes[0];
+  for (let i = 1; i < boxes.length; i++) {
+    if (boxes[i].area > best.area) best = boxes[i];
+  }
+  return best;
+}
+
+/**
+ * One row on a letter glass (215.9 mm wide), every card portrait and upright
+ * the same way as its single-card "up" scan. Reading order is left to right.
+ * Gap is bare pink paper. The row is centered, so the side paper is whatever
+ * the glass has left. Crop the full glass width and 110 mm of height at 1200 dpi.
+ */
+const MULTI_GAP_MM = 6;
+const MULTI_CROP_MARGIN_MM = 3;
+const MULTI_GLASS_WIDTH_MM = 215.9;
+const MULTI_CROP_HEIGHT_MM = 110;
+const MULTI_TOLERANCE_MM = 0.05;
+
+function readingOrder(boxes) {
+  if (!boxes.length) return [];
+  const heights = boxes.map(function (b) { return b.bottom - b.top; }).sort(function (a, b) { return a - b; });
+  const medianH = heights[Math.floor(heights.length / 2)] || 1;
+  const rowBand = Math.max(8, medianH * 0.5);
+  const pending = boxes.slice().sort(function (a, b) { return a.top - b.top || a.left - b.left; });
+  const rows = [];
+  pending.forEach(function (box) {
+    let row = null;
+    for (let i = 0; i < rows.length; i++) {
+      if (Math.abs(rows[i].top - box.top) <= rowBand) { row = rows[i]; break; }
+    }
+    if (!row) rows.push({ top: box.top, boxes: [box] });
+    else row.boxes.push(box);
+  });
+  const ordered = [];
+  rows.forEach(function (row) {
+    row.boxes.sort(function (a, b) { return a.left - b.left; });
+    ordered.push.apply(ordered, row.boxes);
+  });
+  return ordered;
+}
+
+function cardComponents(data, w, h, paper, threshold) {
+  const boxes = componentBoxes(data, w, h, paper, threshold);
+  if (!boxes.length) return [];
+  let largest = 0;
+  boxes.forEach(function (b) { if (b.area > largest) largest = b.area; });
+  const kept = boxes.filter(function (b) { return b.area >= largest * 0.45; });
+  return readingOrder(kept);
+}
+
+function cropRgb(data, w, h, box, marginPx) {
+  const left = Math.max(0, Math.floor(box.left - marginPx));
+  const top = Math.max(0, Math.floor(box.top - marginPx));
+  const right = Math.min(w - 1, Math.ceil(box.right + marginPx));
+  const bottom = Math.min(h - 1, Math.ceil(box.bottom + marginPx));
+  const cw = right - left + 1;
+  const ch = bottom - top + 1;
+  const out = Buffer.alloc(cw * ch * 3);
+  for (let y = 0; y < ch; y++) {
+    const src = ((top + y) * w + left) * 3;
+    data.copy(out, y * cw * 3, src, src + cw * 3);
+  }
+  return { data: out, width: cw, height: ch, origin: { x: left, y: top } };
+}
+
+function measureMultiImage(data, w, h, dpi, cardIds) {
+  const ids = cardIds || [];
+  const est = estimatePaper(data, w, h);
+  const boxes = cardComponents(data, w, h, est.paper, est.threshold);
+  if (boxes.length !== ids.length) {
+    return {
+      ok: false,
+      error: 'found ' + boxes.length + ' cards, manifest lists ' + ids.length,
+      count: boxes.length,
+      boxes: boxes
+    };
+  }
+  const marginPx = Math.round(MULTI_CROP_MARGIN_MM * pxPerMm(dpi));
+  const cards = [];
+  for (let i = 0; i < boxes.length; i++) {
+    const crop = cropRgb(data, w, h, boxes[i], marginPx);
+    const result = shiftResult(measureImage(crop.data, crop.width, crop.height, dpi), crop.origin);
+    cards.push({ id: ids[i], box: boxes[i], result: result });
+  }
+  return { ok: true, cards: cards, gapMm: MULTI_GAP_MM };
+}
+
+function finiteMm(v) {
+  return typeof v === 'number' && isFinite(v);
+}
+
+/**
+ * Each approved edge must be within tolerance of the multi-card measurement.
+ * An edge the answer key did not approve is not a pass and is not a fail.
+ * No approved edge means the check does not pass.
+ */
+function compareMultiToApproved(measuredById, answerKey, toleranceMm) {
+  const tol = toleranceMm == null ? MULTI_TOLERANCE_MM : toleranceMm;
+  const cards = {};
+  let pass = true;
+  let compared = 0;
+  Object.keys(measuredById).forEach(function (id) {
+    const approvedCard = answerKey && answerKey.cards && answerKey.cards[id];
+    const got = measuredById[id] && measuredById[id].sides;
+    const edges = {};
+    ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+      const approved = approvedCard && approvedCard.sides && approvedCard.sides[edge];
+      const measured = got && got[edge];
+      if (!approved || approved.approved !== true || approved.withheld || !finiteMm(approved.mm)) {
+        edges[edge] = { compared: false, reason: 'not-an-approved-value' };
+        return;
+      }
+      compared += 1;
+      if (!measured || measured.withheld || !finiteMm(measured.mm)) {
+        edges[edge] = { compared: true, pass: false, reason: 'multi-withheld', approvedMm: approved.mm };
+        pass = false;
+        return;
+      }
+      const delta = Math.round((measured.mm - approved.mm) * 1000) / 1000;
+      const ok = Math.abs(delta) <= tol + 1e-9;
+      if (!ok) pass = false;
+      edges[edge] = { compared: true, pass: ok, deltaMm: delta, approvedMm: approved.mm, multiMm: measured.mm };
+      if (finiteMm(approved.upMm)) {
+        edges[edge].upDeltaMm = Math.round((measured.mm - approved.upMm) * 1000) / 1000;
+      }
+    });
+    cards[id] = { edges: edges };
+  });
+  if (!compared) pass = false;
+  return { pass: pass, pending: false, toleranceMm: tol, cards: cards };
+}
+
+function loadFlatbedManifest(file) {
+  if (!file || !fs.existsSync(file)) return {};
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return raw && typeof raw === 'object' ? raw : {};
+}
+
+function multiEntries(manifest) {
+  const out = [];
+  Object.keys(manifest || {}).forEach(function (name) {
+    const entry = manifest[name];
+    if (!entry || !Array.isArray(entry.cards) || !entry.cards.length) return;
+    out.push({
+      file: name,
+      cards: entry.cards.map(function (id) { return String(id).toUpperCase(); }),
+      orientation: entry.orientation === '180' ? '180' : 'up'
+    });
+  });
+  out.sort(function (a, b) { return a.file < b.file ? -1 : a.file > b.file ? 1 : 0; });
+  return out;
+}
+
+function checkMultiFile(imagePath, cardIds, answerKey, dpi) {
+  if (!imagePath || !fs.existsSync(imagePath)) {
+    return { pass: false, pending: true, reason: 'not-scanned', file: imagePath || null };
+  }
+  return loadFullRaster(imagePath).then(function (loaded) {
+    if (loaded.error) return { pass: false, pending: false, reason: loaded.error };
+    const measured = measureMultiImage(loaded.full.data, loaded.full.width, loaded.full.height, dpi || loaded.dpi || DEFAULT_DPI, cardIds);
+    if (!measured.ok) return { pass: false, pending: false, reason: measured.error, count: measured.count };
+    const byId = {};
+    measured.cards.forEach(function (card) {
+      byId[card.id] = card.result;
+    });
+    const cmp = compareMultiToApproved(byId, answerKey, MULTI_TOLERANCE_MM);
+    cmp.file = imagePath;
+    return cmp;
+  });
 }
 
 function solve3(A, b) {
@@ -1852,6 +2023,14 @@ async function writeReviewSet(file, result, dir, stem) {
   return full;
 }
 
+async function loadFullRaster(file) {
+  const raw = await sharp(file).rotate().removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  return {
+    full: { data: raw.data, width: raw.info.width, height: raw.info.height },
+    origin: { x: 0, y: 0 }
+  };
+}
+
 async function loadRaster(file) {
   const meta = await sharp(file).rotate().metadata();
   const w = meta.width;
@@ -2439,6 +2618,66 @@ async function selfTest() {
   await writeOverlay(tmpCard, curvedM, tmpCurve);
   check('overlay written', fs.existsSync(tmpOver) && fs.statSync(tmpOver).size > 1000 && fs.statSync(tmpCurve).size > 1000, tmpOver);
 
+  const mw = 480;
+  const mh = 220;
+  const sheet = Buffer.alloc(mw * mh * 3);
+  for (let i = 0; i < sheet.length; i += 3) {
+    sheet[i] = pink[0];
+    sheet[i + 1] = pink[1];
+    sheet[i + 2] = pink[2];
+  }
+  function paint(x0, y0, x1, y1) {
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const i = (y * mw + x) * 3;
+        sheet[i] = 20;
+        sheet[i + 1] = 20;
+        sheet[i + 2] = 20;
+      }
+    }
+  }
+  paint(30, 40, 110, 170);
+  paint(180, 40, 260, 170);
+  paint(330, 40, 410, 170);
+  const sheetPaper = estimatePaper(sheet, mw, mh);
+  const foundCards = cardComponents(sheet, mw, mh, sheetPaper.paper, sheetPaper.threshold);
+  check('three cards in left-to-right order', foundCards.length === 3 &&
+    foundCards[0].left < foundCards[1].left && foundCards[1].left < foundCards[2].left,
+    foundCards.map(function (b) { return b.left; }));
+  const rowOrder = readingOrder([
+    { left: 200, right: 260, top: 40, bottom: 100 },
+    { left: 20, right: 80, top: 40, bottom: 100 },
+    { left: 20, right: 80, top: 140, bottom: 200 }
+  ]);
+  check('reading order is a row left to right, then the next row',
+    rowOrder.length === 3 && rowOrder[0].left === 20 && rowOrder[1].left === 200 && rowOrder[2].top === 140, rowOrder);
+  const approvedKey = { cards: { 'TD-01': { sides: {
+    left: { mm: 3.1, withheld: false, approved: true },
+    right: { mm: 3.2, withheld: false, approved: true },
+    top: { mm: 3.6, withheld: false, approved: true },
+    bottom: { mm: 3.1, withheld: false, approved: true }
+  } } } };
+  function moved(dx) {
+    return { sides: {
+      left: { mm: 3.1 + dx, withheld: false },
+      right: { mm: 3.2, withheld: false },
+      top: { mm: 3.6, withheld: false },
+      bottom: { mm: 3.1, withheld: false }
+    } };
+  }
+  check('multi-card within 0.05 mm passes', compareMultiToApproved({ 'TD-01': moved(0.05) }, approvedKey).pass === true);
+  check('multi-card past 0.05 mm fails', compareMultiToApproved({ 'TD-01': moved(0.051) }, approvedKey).pass === false);
+  const manifest = {
+    'TD-01_TD-02_KARROS_up.png': { cards: ['TD-01', 'TD-02', 'KARROS'], orientation: 'up' },
+    'TD-01_up.png': { deck: 'TD-01', orientation: 'up' }
+  };
+  const listed = multiEntries(manifest);
+  check('manifest cards stay in reading order', listed.length === 1 &&
+    listed[0].cards.join(',') === 'TD-01,TD-02,KARROS', listed);
+  const notScanned = await checkMultiFile(path.join(os.tmpdir(), 'judge-multi-not-scanned.png'),
+    ['TD-01', 'TD-02', 'KARROS'], approvedKey, 1200);
+  check('a multi scan that is not on disk does not pass', notScanned.pass === false && notScanned.pending === true, notScanned);
+
   if (failed) {
     console.error(failed + ' self-test failure(s)');
     process.exitCode = 1;
@@ -2517,5 +2756,14 @@ module.exports = {
   writeReviewSet: writeReviewSet,
   agreeEdges: agreeEdges,
   buildAnswerKey: buildAnswerKey,
-  BIAS_AGREE_MM: BIAS_AGREE_MM
+  BIAS_AGREE_MM: BIAS_AGREE_MM,
+  cardComponents: cardComponents,
+  measureMultiImage: measureMultiImage,
+  compareMultiToApproved: compareMultiToApproved,
+  multiEntries: multiEntries,
+  checkMultiFile: checkMultiFile,
+  MULTI_TOLERANCE_MM: MULTI_TOLERANCE_MM,
+  MULTI_GAP_MM: MULTI_GAP_MM,
+  MULTI_GLASS_WIDTH_MM: MULTI_GLASS_WIDTH_MM,
+  MULTI_CROP_HEIGHT_MM: MULTI_CROP_HEIGHT_MM
 };
