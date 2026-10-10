@@ -353,6 +353,7 @@ button:focus, a:focus{ outline:2px solid rgba(0,212,255,0.12); outline-offset:3p
 }
 .assist-chip.is-selected { color: #ffb020; border-color: #ffb020; }
 .assist-readout { margin: 6px 0; font-weight: 700; }
+.assist-warning { margin: 6px 0; font-weight: 700; color: #ffb020; }
 .assist-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .assist-legend { margin-top: 6px; }
 .assist-consent { display: flex; gap: 8px; align-items: center; font-weight: 700; margin: 12px 0; }

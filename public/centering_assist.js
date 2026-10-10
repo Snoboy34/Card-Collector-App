@@ -173,6 +173,95 @@
     };
   }
 
+  function edgeMm(side) {
+    if (side === 'left' || side === 'right') return CARD_WIDTH_MM;
+    if (side === 'top' || side === 'bottom') return CARD_HEIGHT_MM;
+    return null;
+  }
+
+  /**
+   * Plausible millimetre range for one border. Built only from the engine
+   * widths on this card and the length of each edge. No per-card constants.
+   *
+   * Each measured width becomes a fraction of its own edge. The spread of
+   * those fractions is how much this card's borders already disagree. A new
+   * border may sit that same spread outside the smallest and largest
+   * fraction. If the measured borders all agree, the spread is zero and the
+   * unit is the fraction itself, so the band is one border-width wide.
+   *
+   * With no measured border, the only fact left is the edge length. The face
+   * has to be at least as large as the two borders on that edge, and those
+   * borders are unknown so they count as equal: one border is at most a
+   * quarter of the edge.
+   */
+  function plausibleRangeMm(side, measuredWidthsMm) {
+    var edge = edgeMm(side);
+    if (!edge) return null;
+    var fractions = [];
+    SIDES.forEach(function (name) {
+      var width = measuredWidthsMm && measuredWidthsMm[name];
+      var length = edgeMm(name);
+      if (!isFiniteNumber(width) || width < 0 || !length) return;
+      fractions.push(width / length);
+    });
+    var cardCap = roundMm(edge / 4);
+    if (!fractions.length) return { minMm: 0, maxMm: cardCap };
+    var lo = fractions[0];
+    var hi = fractions[0];
+    fractions.forEach(function (fraction) {
+      if (fraction < lo) lo = fraction;
+      if (fraction > hi) hi = fraction;
+    });
+    var spread = hi - lo;
+    var unit = spread > 0 ? spread : lo;
+    var minMm = roundMm(Math.max(0, lo - unit) * edge);
+    var maxMm = roundMm((hi + unit) * edge);
+    if (maxMm > cardCap) maxMm = cardCap;
+    if (maxMm < minMm) maxMm = minMm;
+    return { minMm: minMm, maxMm: maxMm };
+  }
+
+  function measuredWidthsMm(report) {
+    var status = sideStatus(report);
+    var out = { left: null, right: null, top: null, bottom: null };
+    SIDES.forEach(function (side) {
+      out[side] = status[side].measured ? status[side].engineWidthMm : null;
+    });
+    return out;
+  }
+
+  /** User widths outside plausibleRangeMm. Engine-matched lines are not user widths. */
+  function implausibleSides(report, userWidthsMm) {
+    var measured = measuredWidthsMm(report);
+    var hits = [];
+    SIDES.forEach(function (side) {
+      var placed = userWidthsMm && userWidthsMm[side];
+      if (!isFiniteNumber(placed)) return;
+      if (isFiniteNumber(measured[side]) && Math.abs(placed - measured[side]) < 0.0005) return;
+      var range = plausibleRangeMm(side, measured);
+      if (!range) return;
+      if (placed < range.minMm - 0.0005 || placed > range.maxMm + 0.0005) {
+        hits.push({
+          side: side,
+          userWidthMm: roundMm(placed),
+          minMm: range.minMm,
+          maxMm: range.maxMm
+        });
+      }
+    });
+    return hits;
+  }
+
+  function plausibilityWarning(hits) {
+    if (!hits || !hits.length) return '';
+    var parts = hits.map(function (hit) {
+      var label = hit.side.charAt(0).toUpperCase() + hit.side.slice(1);
+      return label + ' is ' + hit.userWidthMm + ' mm. The borders measured on this card, and the card size, put a ' +
+        hit.side + ' border between ' + hit.minMm + ' mm and ' + hit.maxMm + ' mm.';
+    });
+    return parts.join(' ') + ' This is outside that range. Save again to keep this line.';
+  }
+
   function warpBox(report) {
     var box = report && report.centeringDiagnostics && report.centeringDiagnostics.box;
     if (!box || !isFiniteNumber(box.width) || !isFiniteNumber(box.height)) return null;
@@ -194,6 +283,10 @@
     candidateLines: candidateLines,
     headline: headline,
     ratiosFromWidthsMm: ratiosFromWidthsMm,
+    plausibleRangeMm: plausibleRangeMm,
+    measuredWidthsMm: measuredWidthsMm,
+    implausibleSides: implausibleSides,
+    plausibilityWarning: plausibilityWarning,
     warpBox: warpBox
   };
 

@@ -91,11 +91,24 @@ async function main() {
 
   const originalCentering = withheld.subGrades.centering;
   const originalWidths = JSON.stringify(withheld.centeringMetrics.borderWidthsMm);
+  const demoRange = geo.plausibleRangeMm('left', { left: null, right: 4.737, top: 4.148, bottom: 4.936 });
+  assert('11.43 mm is outside the range taken from the measured borders',
+    demoRange && 11.43 > demoRange.maxMm && demoRange.minMm >= 0, demoRange);
+  const inRange = geo.plausibleRangeMm('left', geo.measuredWidthsMm(withheld));
+  assert('2.2 mm is inside the fixture range', inRange && 2.2 >= inRange.minMm && 2.2 <= inRange.maxMm, inRange);
+  const quiet = assist.buildFromLines(withheld, { left: lineForMm('left', 2.2) }, { scanId: 'assist-test-scan-0001' });
+  assert('a plausible line saves without a warning',
+    quiet.ok === true && quiet.examples[0].warningShown === false, quiet);
+  const blocked = assist.buildFromLines(withheld, { left: lineForMm('left', 4) }, { scanId: 'assist-test-scan-0001' });
+  assert('an implausible line is refused until it is confirmed',
+    blocked.ok === false && blocked.implausible && blocked.implausible[0].side === 'left' && blocked.examples == null,
+    blocked);
   const built = assist.buildFromLines(withheld, { left: lineForMm('left', 4) }, {
     scanId: 'assist-test-scan-0001',
     engineVersion: '2026.10.01-border-band',
     engineCommit: 'abc1234',
-    consent: false
+    consent: false,
+    confirmImplausible: true
   });
   assert('assisted build ok', built.ok === true, built);
   assert('headline names one side', built.assist.headline === 'Centering (you adjusted 1 side)', built.assist.headline);
@@ -111,6 +124,7 @@ async function main() {
   assert('example is assisted, not an engine row', built.examples.length === 1 && built.examples[0].kind === 'assisted');
   assert('example keeps candidate lines, mm, engine stamp, consent false',
     built.examples[0].consent === false &&
+    built.examples[0].warningShown === true &&
     built.examples[0].userWidthMm === 4 &&
     built.examples[0].engineWidthMm === null &&
     built.examples[0].engineVersion === '2026.10.01-border-band' &&
@@ -118,18 +132,28 @@ async function main() {
     built.examples[0].scanId === 'assist-test-scan-0001' &&
     built.examples[0].side === 'left' &&
     built.examples[0].engineCandidateLines.length === 2 &&
-    built.examples[0].engineCandidateLines[1].pos === 22.5);
+    built.examples[0].engineCandidateLines[1].pos === 22.5, built.examples[0]);
   assert('omitted consent is false', assist.buildFromLines(withheld, { left: lineForMm('left', 4) }, {
-    scanId: 'assist-test-scan-0001'
+    scanId: 'assist-test-scan-0001',
+    confirmImplausible: true
   }).examples[0].consent === false);
   const repeatReport = assist.attachAssist({ gradingReport: withheld }, built.assist).gradingReport;
-  const repeat = assist.buildFromLines(repeatReport, { left: lineForMm('left', 4) }, { scanId: 'assist-test-scan-0001' });
+  const repeatBlocked = assist.buildFromLines(repeatReport, { left: lineForMm('left', 4) }, { scanId: 'assist-test-scan-0001' });
+  assert('repeating an implausible line without confirmation does not save',
+    repeatBlocked.ok === false && repeatBlocked.implausible && repeatBlocked.implausible.length === 1, repeatBlocked);
+  const repeat = assist.buildFromLines(repeatReport, { left: lineForMm('left', 4) }, {
+    scanId: 'assist-test-scan-0001',
+    confirmImplausible: true
+  });
   assert('the same user line is kept and not stored as a second example',
     repeat.ok === true && repeat.examples.length === 0 &&
     repeat.assist.sides.left.userWidthMm === 4 &&
     repeat.assist.headline === 'Centering (you adjusted 1 side)', repeat);
 
-  const partial = assist.buildFromLines(withheld, { left: lineForMm('left', 4) }, { scanId: 'assist-test-scan-0001' });
+  const partial = assist.buildFromLines(withheld, { left: lineForMm('left', 4) }, {
+    scanId: 'assist-test-scan-0001',
+    confirmImplausible: true
+  });
   assert('one withheld side plus measured opposites can score', partial.assist.centering === 7);
   const onlyLeftCard = reportWith();
   onlyLeftCard.centeringMetrics.borderWidthsMm = { left: null, right: null, top: null, bottom: null };
@@ -156,11 +180,13 @@ async function main() {
   const disagree = assist.buildFromLines(measured, { left: lineForMm('left', 4) }, {
     scanId: 'assist-test-scan-0001',
     engineVersion: '2026.10.01-border-band',
-    engineCommit: 'abc1234'
+    engineCommit: 'abc1234',
+    confirmImplausible: true
   });
   assert('disagreement keeps both numbers',
     disagree.ok === true &&
     disagree.examples[0].kind === 'disagreement' &&
+    disagree.examples[0].warningShown === true &&
     disagree.examples[0].engineWidthMm === 2 &&
     disagree.examples[0].userWidthMm === 4, disagree.examples[0]);
   assert('engine sub-grade and final score stay on the report',
@@ -179,7 +205,7 @@ async function main() {
   assert('two sides pluralize', assist.buildFromLines(measured, {
     left: lineForMm('left', 4),
     top: lineForMm('top', 5)
-  }, { scanId: 'assist-test-scan-0001' }).assist.headline === 'Centering (you adjusted 2 sides)');
+  }, { scanId: 'assist-test-scan-0001', confirmImplausible: true }).assist.headline === 'Centering (you adjusted 2 sides)');
 
   const redacted = assist.redactReportForEgress(attached.gradingReport);
   assert('egress copy drops user millimetres and keeps the assisted label',
@@ -230,10 +256,20 @@ async function main() {
   const pref = await fetch(base + '/api/settings/assist-consent').then(function (r) { return r.json(); });
   assert('consent preference defaults to false', pref.ok === true && pref.consent === false, pref);
 
-  const posted = await fetch(base + '/api/scans/' + scanId + '/centering-assist', {
+  const refused = await fetch(base + '/api/scans/' + scanId + '/centering-assist', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ lines: { left: lineForMm('left', 4) } })
+  }).then(function (r) { return r.json(); });
+  assert('POST of an implausible line does not save',
+    refused.ok === false && refused.implausible && refused.implausible[0].userWidthMm === 4, refused);
+  assert('refused line is not in the example file',
+    !fs.existsSync(path.join(process.env.JUDGE_DATA_DIR, 'centering_examples.jsonl')));
+
+  const posted = await fetch(base + '/api/scans/' + scanId + '/centering-assist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lines: { left: lineForMm('left', 4) }, confirmImplausible: true })
   }).then(function (r) { return r.json(); });
   assert('POST stores an assisted grade',
     posted.ok === true &&
@@ -255,7 +291,8 @@ async function main() {
   const exampleText = fs.readFileSync(path.join(process.env.JUDGE_DATA_DIR, 'centering_examples.jsonl'), 'utf8');
   const example = JSON.parse(exampleText.trim().split('\n')[0]);
   assert('example file has the labelled row and consent false',
-    example.kind === 'assisted' && example.consent === false && example.userWidthMm === 4 &&
+    example.kind === 'assisted' && example.consent === false && example.warningShown === true &&
+    example.userWidthMm === 4 &&
     example.engineCommit === 'abc1234' && example.engineCandidateLines[1].pos === 22.5, example);
 
   const turnedOn = await fetch(base + '/api/settings/assist-consent', {
@@ -267,7 +304,7 @@ async function main() {
   const consented = await fetch(base + '/api/scans/' + scanId + '/centering-assist', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lines: { left: lineForMm('left', 5) }, consent: true })
+    body: JSON.stringify({ lines: { left: lineForMm('left', 5) }, consent: true, confirmImplausible: true })
   }).then(function (r) { return r.json(); });
   assert('consent true is stored on that example only',
     consented.ok === true && consented.assist.sides.left.userWidthMm === 5);

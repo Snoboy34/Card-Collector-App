@@ -82,6 +82,9 @@
     var readout = el('p', 'assist-readout');
     readout.textContent = 'Choose a side, then drag.';
     wrap.appendChild(readout);
+    var warning = el('p', 'assist-warning');
+    warning.hidden = true;
+    wrap.appendChild(warning);
     var actions = el('div', 'assist-actions');
     var save = el('button', 'small');
     save.type = 'button';
@@ -102,6 +105,7 @@
     var userPx = { left: null, right: null, top: null, bottom: null };
     var dragging = false;
     var dirty = false;
+    var confirming = false;
 
     function imageReady() {
       return img.naturalWidth > 1 && img.naturalHeight > 1;
@@ -260,12 +264,29 @@
       });
     }
 
+    function clearConfirmation() {
+      confirming = false;
+      warning.hidden = true;
+      warning.textContent = '';
+      save.textContent = 'Save adjustment';
+    }
+
+    function placedWidths() {
+      var widths = { left: null, right: null, top: null, bottom: null };
+      SIDES.forEach(function (side) {
+        var mm = liveMm(side);
+        if (mm != null) widths[side] = mm;
+      });
+      return widths;
+    }
+
     function onPointerDown(event) {
       if (!imageReady()) return;
       var point = pointerToImage(event);
       if (!point) return;
       dragging = true;
       dirty = true;
+      clearConfirmation();
       canvas.setPointerCapture(event.pointerId);
       userPx[selected] = clampToCard(selected, axisValue(selected, point));
       draw();
@@ -315,14 +336,37 @@
         };
       });
       if (!Object.keys(lines).length) return;
+      var hits = g.implausibleSides(report, placedWidths());
+      if (hits.length && !confirming) {
+        confirming = true;
+        warning.hidden = false;
+        warning.textContent = g.plausibilityWarning(hits);
+        save.textContent = 'Save anyway';
+        save.disabled = false;
+        status.textContent = '';
+        return;
+      }
       save.disabled = true;
       status.textContent = 'Saving…';
       fetch('/api/scans/' + encodeURIComponent(scanId) + '/centering-assist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lines: lines, consent: options.consent === true })
+        body: JSON.stringify({
+          lines: lines,
+          consent: options.consent === true,
+          confirmImplausible: confirming === true
+        })
       }).then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
         .then(function (result) {
+          if (result.body && result.body.implausible) {
+            confirming = true;
+            warning.hidden = false;
+            warning.textContent = result.body.error || g.plausibilityWarning(result.body.implausible);
+            save.textContent = 'Save anyway';
+            save.disabled = false;
+            status.textContent = '';
+            return;
+          }
           if (!result.ok || !result.body || !result.body.ok) {
             var message = (result.body && result.body.error) || 'Could not save';
             status.textContent = message;

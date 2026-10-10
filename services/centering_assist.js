@@ -178,6 +178,16 @@ function buildFromMillimetres(report, userMm, meta) {
   let adjusted = 0;
   const createdAt = meta.createdAt || new Date().toISOString();
   const consent = meta.consent === true;
+  const flagged = geometry.implausibleSides(report, userMm);
+  if (flagged.length && meta.confirmImplausible !== true) {
+    return {
+      ok: false,
+      error: geometry.plausibilityWarning(flagged),
+      implausible: flagged
+    };
+  }
+  const flaggedBySide = {};
+  flagged.forEach(function (hit) { flaggedBySide[hit.side] = hit; });
 
   geometry.SIDES.forEach(function (side) {
     const placed = userMm && geometry.isFiniteNumber(userMm[side]) ? geometry.roundMm(userMm[side]) : null;
@@ -227,6 +237,8 @@ function buildFromMillimetres(report, userMm, meta) {
       engineWidthMm: rawEngine,
       userWidthMm: placed
     };
+    const range = geometry.plausibleRangeMm(side, geometry.measuredWidthsMm(report));
+    const hit = flaggedBySide[side];
     examples.push({
       id: newId(),
       kind: kind,
@@ -238,6 +250,9 @@ function buildFromMillimetres(report, userMm, meta) {
       engineVersion: meta.engineVersion || (report && report.engineVersion) || null,
       engineCommit: meta.engineCommit || null,
       consent: consent,
+      warningShown: Boolean(hit),
+      plausibleMinMm: hit ? hit.minMm : (range && range.minMm),
+      plausibleMaxMm: hit ? hit.maxMm : (range && range.maxMm),
       createdAt: createdAt
     });
   });

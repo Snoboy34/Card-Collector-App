@@ -90,6 +90,13 @@ function itemImage(item) {
 function itemReport(item) {
   return (item && (item.gradingReport || item.gradingReport)) || null;
 }
+/** Engine final score is a prediction, not a grade a company has issued. */
+function predictedGradeText(score) {
+  if (typeof score !== 'number' || !isFinite(score)) return '—';
+  const text = (Math.round(score * 10) / 10).toFixed(1);
+  return 'Predicted PSA ' + (text.slice(-2) === '.0' ? text.slice(0, -2) : text);
+}
+
 /** Assisted centering is never presented as the engine grade. */
 function assistedGradeLine(report) {
   const assist = report && report.centeringAssist;
@@ -106,7 +113,7 @@ function itemHeadlineGrade(report) {
   const assisted = assistedGradeLine(report);
   if (assisted) return assisted;
   if (typeof report.finalScore === 'number') {
-    return report.finalScore.toFixed(1) + ' ' + (report.label || '');
+    return predictedGradeText(report.finalScore);
   }
   return report.label || '—';
 }
@@ -939,14 +946,12 @@ function openReportModal(item) {
   const report = itemReport(item);
   const modal = document.createElement('div');
   modal.className = 'modal';
-  const scoreLine = report && typeof report.finalScore === 'number'
-    ? report.finalScore.toFixed(1) + ' ' + (report.label || '')
-    : '—';
+  const scoreLine = predictedGradeText(report && report.finalScore);
   const assistedLine = assistedGradeLine(report);
   const gradeHeading = assistedLine
-    ? '<h4 style="margin:0 0 8px 0;">Engine grade: <span style="color:var(--accent)">' + escapeHtml(scoreLine) + '</span></h4>' +
+    ? '<h4 style="margin:0 0 8px 0;">Prediction: <span style="color:var(--accent)">' + escapeHtml(scoreLine) + '</span></h4>' +
       '<h4 style="margin:0 0 8px 0;">' + escapeHtml(assistedLine) + '</h4>'
-    : '<h4 style="margin:0 0 8px 0;">Judge Grade: <span style="color:var(--accent)">' + escapeHtml(scoreLine) + '</span></h4>';
+    : '<h4 style="margin:0 0 8px 0;">Prediction: <span style="color:var(--accent)">' + escapeHtml(scoreLine) + '</span></h4>';
   const canAdjust = Boolean(report && window.CenteringAssist && CenteringAssist.warpBox(report) && !report.cardNotFound);
   const showAssistNow = Boolean(canAdjust && window.CenteringAssistUI && CenteringAssistUI.needsAssist(report));
   const scanId = item.scanId || (report && report.scanId) || '';

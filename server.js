@@ -713,9 +713,16 @@ app.post('/api/scans/:scanId/centering-assist', (req, res) => {
     scanId: scanId,
     engineVersion: engineStamp.version || item.gradingReport.engineVersion || grading.ENGINE_VERSION,
     engineCommit: engineStamp.commit || ENGINE.commit || null,
-    consent: consent
+    consent: consent,
+    confirmImplausible: req.body && req.body.confirmImplausible === true
   });
-  if (!built.ok) return res.status(400).json({ ok: false, error: built.error });
+  if (!built.ok) {
+    return res.status(400).json({
+      ok: false,
+      error: built.error,
+      implausible: built.implausible || null
+    });
+  }
   assistStore().append(built.examples);
   const next = centeringAssist.attachAssist(item, built.assist);
   persistGradedItem(next, next.category || 'UNKNOWN');
