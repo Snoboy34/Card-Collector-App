@@ -130,10 +130,16 @@ function marginModelFromProfile(profile, designStart, stepMm) {
   const chrHi = Math.max.apply(null, chrs);
   const busy = (lumHi - lumLo) >= 45;
   const textured = busy && chrHi <= 30;
+  const dists = colors.map(function (c) { return rgbDist(c, med); }).sort(function (a, b) { return a - b; });
+  const distHi = dists[Math.min(dists.length - 1, Math.ceil((dists.length - 1) * 0.9))];
+  // A wave can change hue without a 45-point brightness jump. Two colours in
+  // the same window are still a pattern. Neutral foil stays textured.
+  const variedColour = chrHi > 30 && distHi >= MARGIN_DIST;
   return {
     med: med,
     textured: textured,
     pattern: busy,
+    variedColour: variedColour,
     chrLimit: Math.max(26, chrHi + 14),
     lumLo: lumLo,
     lumHi: lumHi

@@ -23,10 +23,22 @@
  * the card edge, in degrees. Positive means the border widens toward the
  * side's end corner.
  *
- * A found quad that is not a card fails closed. sizeOk is true only when
- * the quad is within 2.5 mm (sum of absolute edge errors) of 63.5 × 88.9 mm
- * in either orientation. Otherwise every side is withheld with reason
- * not-card-sized, and no width is published.
+ * A patterned margin (a wave, a foil, a refractor) is margin however busy
+ * it is. The outline is the outer edge of the first thin line that runs
+ * the side, parallel to the edge, and closes a rectangle with the same
+ * stroke on the other sides. A thin line under half a millimetre counts.
+ * The outer edge of the darker band just inside that stroke is kept as a
+ * cross-check; the two centering ratios are both reported. A side whose
+ * stroke does not match the others does not take that outline. A plain
+ * margin whose outline already sits outside such a stroke is left alone.
+ *
+ * A found quad that is not a card fails closed. Each dimension has to sit
+ * within SIZE_AXIS_MM of 63.5 × 88.9 mm (or swapped). Two scans of one card
+ * repeat its width and height to within 0.2 mm. Real cards on this deck sit
+ * within 0.83 mm of nominal. A lost edge is the next step out, about 1.9 mm,
+ * and the two scans agree on it, so it is not the repeat. 1.0 mm per
+ * dimension covers the real cards plus the repeat and rejects the lost edge.
+ * Otherwise every side is withheld with reason not-card-sized.
  *
  * The card edge is the paper-to-card colour step. A tight crop's corners
  * include the card, and that raises the bed gate until a silver or yellow
@@ -54,6 +66,7 @@ const NOMINAL_W_MM = 63.5;
 const NOMINAL_H_MM = 88.9;
 const DEFAULT_DPI = 1200;
 const BIAS_AGREE_MM = 0.02;
+const SIZE_AXIS_MM = 1;
 const PARTIAL_COVERAGE = 0.32;
 // A real outline is found along the side. Foil and gloss make some stations
 // miss it, so this is not every station. A lock on fewer than one station
@@ -953,8 +966,10 @@ function measureSide(data, w, h, quad, sideName, ppm) {
       margin: marginModel ? marginModel.med : null,
       marginTextured: !!(marginModel && marginModel.textured),
       marginPattern: !!(marginModel && marginModel.pattern),
+      marginVaried: !!(marginModel && marginModel.variedColour),
       designDepth: designDepth,
-      candidates: cands
+      candidates: cands,
+      frameMarks: frameMarksFromProfile(profile, DEPTH_STEP_MM)
     });
   }
   let best = summarizeDesign(stations);
@@ -981,7 +996,237 @@ function measureSide(data, w, h, quad, sideName, ppm) {
   if (process.env.TRACE_FLATBED) {
     process.stdout.write(sideName + ' ' + JSON.stringify(traceSide(stations)) + '\n');
   }
+  best.stations = stations;
   return best;
+}
+
+function profileLuma(rgb) {
+  if (!rgb) return 0;
+  return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+}
+
+// A thin bright stroke with a darker band just inside it. The wave in a
+// refractor is not this: it does not stay one width and it is not followed
+// by one dark band. Width stays under 0.5 mm, so a white margin is not a stroke.
+function frameMarksFromProfile(profile, stepMm) {
+  const n = profile.length;
+  if (n < 8) return [];
+  const sm = new Array(n);
+  for (let i = 0; i < n; i++) {
+    let acc = 0;
+    let wsum = 0;
+    for (let k = -2; k <= 2; k++) {
+      const j = i + k;
+      if (j < 0 || j >= n) continue;
+      acc += profileLuma(profile[j]);
+      wsum++;
+    }
+    sm[i] = wsum ? acc / wsum : 0;
+  }
+  const marks = [];
+  const start = Math.round(0.8 / stepMm);
+  for (let i = Math.max(1, start); i < n - 3; i++) {
+    if (!(sm[i] >= sm[i - 1] && sm[i] >= sm[i + 1] && sm[i] >= 150)) continue;
+    let lo = i;
+    let hi = i;
+    while (lo > 0 && sm[lo] >= 130 && sm[lo] >= sm[i] - 45) lo--;
+    while (hi < n - 1 && sm[hi] >= 130 && sm[hi] >= sm[i] - 45) hi++;
+    const width = (hi - lo) * stepMm;
+    if (width < 0.06 || width > 0.5) continue;
+    let dark = 0;
+    const end = Math.min(n, hi + Math.round(1.6 / stepMm));
+    for (let k = hi; k < end; k++) {
+      if (sm[k] < 95) dark++;
+      else if (dark > 2) break;
+    }
+    if (dark * stepMm < 0.3) continue;
+    marks.push({
+      outer: lo * stepMm,
+      width: width,
+      black: hi * stepMm,
+      dark: dark * stepMm
+    });
+    i = hi;
+  }
+  return marks.slice(0, 6);
+}
+
+function clusterFrameMarks(stations) {
+  const n = stations.length;
+  const marks = [];
+  let sideLen = 0;
+  stations.forEach(function (st, i) {
+    if (st.alongMm > sideLen) sideLen = st.alongMm;
+    (st.frameMarks || []).forEach(function (mk) {
+      marks.push({
+        i: i,
+        depth: mk.outer,
+        width: mk.width,
+        black: mk.black,
+        dark: mk.dark,
+        alongMm: st.alongMm,
+        x: st.x,
+        y: st.y,
+        nx: st.nx,
+        ny: st.ny
+      });
+    });
+  });
+  const items = marks.slice().sort(function (a, b) { return a.depth - b.depth; });
+  const groups = [];
+  items.forEach(function (item) {
+    let g = null;
+    for (let gi = 0; gi < groups.length; gi++) {
+      if (Math.abs(item.depth - groups[gi].median) <= 0.22 && item.depth <= groups[gi].min + 0.45) {
+        g = groups[gi];
+        break;
+      }
+    }
+    if (!g) {
+      groups.push({ points: [item], median: item.depth, min: item.depth, max: item.depth });
+      return;
+    }
+    g.points.push(item);
+    g.min = Math.min(g.min, item.depth);
+    g.max = Math.max(g.max, item.depth);
+    g.median = median(g.points.map(function (p) { return p.depth; }));
+  });
+  const usable = [];
+  groups.forEach(function (g) {
+    if (g.max - g.min > 0.45 || g.points.length < 6) return;
+    const seen = {};
+    const uniq = [];
+    g.points.forEach(function (p) {
+      if (seen[p.i]) return;
+      seen[p.i] = true;
+      uniq.push(p);
+    });
+    const along = uniq.map(function (p) { return p.alongMm; });
+    const span = Math.max.apply(null, along) - Math.min.apply(null, along);
+    const cov = uniq.length / n;
+    const width = median(uniq.map(function (p) { return p.width; }));
+    if (span < sideLen * 0.55 || cov < 0.28 || !(width >= 0.06 && width < 0.5)) return;
+    usable.push({
+      points: uniq,
+      median: median(uniq.map(function (p) { return p.depth; })),
+      min: Math.min.apply(null, uniq.map(function (p) { return p.depth; })),
+      max: Math.max.apply(null, uniq.map(function (p) { return p.depth; })),
+      width: width,
+      black: median(uniq.map(function (p) { return p.black; })),
+      cov: cov,
+      span: span
+    });
+  });
+  usable.sort(function (a, b) { return a.median - b.median; });
+  return usable;
+}
+
+// Patterned colour (a wave, a refractor) is margin. The outline is the first
+// thin line that runs the side and matches the same stroke on the other sides.
+// A published outline on a plain margin is left alone.
+function applyRectangularFrame(sides) {
+  const names = ['top', 'bottom', 'left', 'right'];
+  const found = {};
+  names.forEach(function (name) {
+    const side = sides[name];
+    found[name] = side && side.stations ? clusterFrameMarks(side.stations)[0] || null : null;
+  });
+  const widths = [];
+  names.forEach(function (name) {
+    if (found[name]) widths.push(found[name].width);
+  });
+  const widthMed = widths.length >= 3 ? median(widths) : null;
+  names.forEach(function (name) {
+    const side = sides[name];
+    if (!side) return;
+    const stations = side.stations || [];
+    const chromatic = stations.filter(function (st) {
+      return (st.marginPattern && !st.marginTextured) || st.marginVaried;
+    }).length > stations.length * 0.5;
+    const line = found[name];
+    const matches = !!(line && widthMed != null && Math.abs(line.width - widthMed) <= 0.15);
+    if (line) {
+      side.frameOuterMm = line.median;
+      side.blackOuterMm = line.black;
+      side.frameDiffMm = line.black - line.median;
+      side.frameWidthMm = line.width;
+      side.frameCoverage = line.cov;
+      side.frameMatches = matches;
+    }
+    // A published border that sits well outside this stroke stays (it is the
+    // real edge, and this stroke is further in). A withheld side, or a lock
+    // on this same stroke, takes the stroke's outer edge.
+    const sameStroke = !!(line && side.mm != null && side.mm >= line.median - 0.45);
+    if (matches && chromatic && line && (side.withheld || side.mm == null || sameStroke)) {
+      const pts = line.points.map(function (p) {
+        return {
+          i: p.i,
+          depth: p.depth,
+          x: p.x,
+          y: p.y,
+          nx: p.nx,
+          ny: p.ny,
+          alongMm: p.alongMm,
+          t: side.lengthMm ? p.alongMm / side.lengthMm : 0,
+          strength: 20
+        };
+      });
+      side.mm = line.median;
+      side.withheld = false;
+      side.reason = null;
+      side.points = pts;
+      side.used = pts;
+      side.coverage = line.cov;
+      side.shape = 'line';
+      side.confidence = Math.round(Math.min(0.86, 0.42 + 0.5 * line.cov) * 1000) / 1000;
+      side.tiltDeg = designOutline.tiltDegrees(pts);
+      side.elements = side.elements || [];
+      side.elements.unshift(layerElement(
+        { points: pts, median: line.median },
+        stations.length,
+        'outline',
+        false,
+        null
+      ));
+    }
+    delete side.stations;
+  });
+}
+
+function frameShare(sides, field, a, b) {
+  const sa = sides[a];
+  const sb = sides[b];
+  if (!sa || !sb) return null;
+  const va = field === 'mm' ? sa.mm : sa[field];
+  const vb = field === 'mm' ? sb.mm : sb[field];
+  if (va == null || vb == null || va + vb <= 0) return null;
+  return va / (va + vb);
+}
+
+function frameCheck(sides) {
+  const top = frameShare(sides, 'mm', 'top', 'bottom');
+  const topBlack = frameShare(sides, 'blackOuterMm', 'top', 'bottom');
+  const left = frameShare(sides, 'mm', 'left', 'right');
+  const leftBlack = frameShare(sides, 'blackOuterMm', 'left', 'right');
+  function pack(share, black) {
+    if (share == null && black == null) return null;
+    return {
+      outline: share == null ? null : Math.round(share * 1000) / 1000,
+      black: black == null ? null : Math.round(black * 1000) / 1000,
+      diff: share == null || black == null ? null : Math.round((share - black) * 1000) / 1000
+    };
+  }
+  return {
+    topShare: pack(top, topBlack),
+    leftShare: pack(left, leftBlack)
+  };
+}
+
+function dimensionsAreCard(widthMm, heightMm) {
+  function fit(w, h) {
+    return Math.abs(w - NOMINAL_W_MM) <= SIZE_AXIS_MM && Math.abs(h - NOMINAL_H_MM) <= SIZE_AXIS_MM;
+  }
+  return fit(widthMm, heightMm) || fit(heightMm, widthMm);
 }
 
 function traceSide(stations) {
@@ -1319,11 +1564,8 @@ function measureWithPaper(data, w, h, dpi, ppm, paperModel) {
   ['top', 'bottom', 'left', 'right'].forEach(function (name) {
     sides[name] = measureSide(data, w, h, quad, name, ppm);
   });
-  const widthErr = Math.abs(quad.widthMm - NOMINAL_W_MM);
-  const heightErr = Math.abs(quad.heightMm - NOMINAL_H_MM);
-  const swapped = Math.abs(quad.widthMm - NOMINAL_H_MM) + Math.abs(quad.heightMm - NOMINAL_W_MM);
-  const direct = widthErr + heightErr;
-  const sizeOk = Math.min(direct, swapped) < 2.5;
+  applyRectangularFrame(sides);
+  const sizeOk = dimensionsAreCard(quad.widthMm, quad.heightMm);
   if (!sizeOk) withholdNotCardSized(sides);
   return {
     ok: true,
@@ -1336,6 +1578,7 @@ function measureWithPaper(data, w, h, dpi, ppm, paperModel) {
     },
     sizeOk: sizeOk,
     corners: quad.corners,
+    frameCheck: frameCheck(sides),
     sides: sides
   };
 }
@@ -1385,6 +1628,10 @@ function sidePublic(side) {
     shape: side.shape || null,
     coverage: side.coverage == null ? null : Math.round(side.coverage * 1000) / 1000,
     tiltDeg: side.tiltDeg == null || !isFinite(side.tiltDeg) ? null : Math.round(side.tiltDeg * 1000) / 1000,
+    frameOuterMm: side.frameOuterMm == null ? null : roundMm(side.frameOuterMm),
+    blackOuterMm: side.blackOuterMm == null ? null : roundMm(side.blackOuterMm),
+    frameDiffMm: side.frameDiffMm == null ? null : roundMm(side.frameDiffMm),
+    frameWidthMm: side.frameWidthMm == null ? null : roundMm(side.frameWidthMm),
     points: (side.used || []).map(function (p) {
       return { alongMm: roundMm(p.alongMm), depthMm: roundMm(p.depth) };
     }),
@@ -1574,6 +1821,7 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
         cardMm: entry.result.cardMm,
         sizeOk: entry.result.sizeOk,
         ratios: borderRatios(sides),
+        frameCheck: entry.result.frameCheck || null,
         sides: sides
       };
     }
@@ -1713,10 +1961,13 @@ function buildOverlaySvg(result, geom) {
     const covNote = side.coverage == null ? '' : '  cov ' + Math.round(side.coverage * 100) + '%';
     const confNote = side.confidence == null ? '' : '  conf ' + side.confidence.toFixed(2);
     const shown = side.mm != null ? side.mm : candidateDepth(side);
+    const blackNote = side.blackOuterMm == null
+      ? ''
+      : '  black ' + side.blackOuterMm.toFixed(2);
     const text = side.withheld
       ? name + ' withheld' + (side.reason ? ' (' + side.reason + ')' : '') +
-        (shown == null ? '' : '  candidate ' + shown.toFixed(2) + ' mm') + covNote + confNote + tiltNote
-      : name + ' ' + side.mm.toFixed(2) + ' mm' + covNote + confNote + tiltNote;
+        (shown == null ? '' : '  candidate ' + shown.toFixed(2) + ' mm') + blackNote + covNote + confNote + tiltNote
+      : name + ' ' + side.mm.toFixed(2) + ' mm' + blackNote + covNote + confNote + tiltNote;
     const anchor = name === 'right' ? 'end' : (name === 'left' ? 'start' : 'middle');
     parts.push(
       '<text x="' + sx(labelX) + '" y="' + sy(labelY) + '" fill="#ffffff" font-size="22" font-family="sans-serif" stroke="#000000" stroke-width="3" paint-order="stroke" text-anchor="' + anchor + '" dominant-baseline="middle">' +
@@ -2271,11 +2522,14 @@ function sideCaption(side, result) {
   const cov = s.coverage == null ? '' : '   cov ' + Math.round(s.coverage * 100) + '%';
   const conf = s.confidence == null ? '' : '   conf ' + s.confidence.toFixed(2);
   const shown = s.mm != null ? s.mm : candidateDepth(s);
+  const black = s.blackOuterMm == null
+    ? ''
+    : '   black ' + s.blackOuterMm.toFixed(3) + ' diff ' + (s.frameDiffMm == null ? '—' : s.frameDiffMm.toFixed(3));
   if (s.withheld || s.mm == null) {
     const cand = shown == null ? '' : '   candidate ' + shown.toFixed(3) + ' mm';
-    return side + '  withheld' + (s.reason ? ' (' + s.reason + ')' : '') + cand + cov + conf + tilt;
+    return side + '  withheld' + (s.reason ? ' (' + s.reason + ')' : '') + cand + black + cov + conf + tilt;
   }
-  return side + '  ' + s.mm.toFixed(3) + ' mm' + cov + conf + tilt;
+  return side + '  ' + s.mm.toFixed(3) + ' mm' + black + cov + conf + tilt;
 }
 
 async function writeCardReviewSheet(cardId, scans, dest) {
@@ -2904,6 +3158,100 @@ async function selfTest() {
     kept.ok && kept.sizeOk && partialM.sides.top.mm === kept.sides.top.mm &&
     near(kept.cardMm.width, partialM.cardMm.width, 0.001),
     { own: partialM.cardMm, kept: kept.ok ? kept.cardMm : kept.error });
+
+  const short = drawSynthetic({
+    dpi: dpi,
+    marginMm: 6,
+    cardWmm: NOMINAL_W_MM,
+    cardHmm: 86.9,
+    pink: pink,
+    white: white,
+    photo: photo,
+    frameMm: 1.0,
+    top: constantEdge(3.0, blue, []),
+    bottom: constantEdge(3.2, blue, []),
+    left: constantEdge(3.1, blue, []),
+    right: constantEdge(3.3, blue, [])
+  });
+  const shortM = measureImage(short.data, short.width, short.height, dpi);
+  check('short height is not card-sized', shortM.ok === true && shortM.sizeOk === false, shortM.ok ? shortM.cardMm : shortM.error);
+  if (shortM.ok) {
+    check('short height withholds the sides', shortM.sides.top.reason === 'not-card-sized' && shortM.sides.top.mm == null,
+      sideBrief(shortM.sides.top));
+  }
+
+  // Coloured stripes are the margin. The outline is the thin light line
+  // outside the black band, the same stroke on every side. The inner light
+  // line is not the outline.
+  const wave = drawSynthetic({
+    dpi: dpi,
+    marginMm: 6,
+    cardWmm: NOMINAL_W_MM,
+    cardHmm: NOMINAL_H_MM,
+    pink: pink,
+    white: [40, 40, 160],
+    photo: [80, 100, 140],
+    frameMm: 0.2,
+    top: constantEdge(2.4, [245, 245, 245], []),
+    bottom: constantEdge(2.4, [245, 245, 245], []),
+    left: constantEdge(2.4, [245, 245, 245], []),
+    right: constantEdge(2.4, [245, 245, 245], [])
+  });
+  const wavePpm = pxPerMm(dpi);
+  const waveMargin = Math.round(6 * wavePpm);
+  for (let y = 0; y < wave.height; y++) {
+    for (let x = 0; x < wave.width; x++) {
+      const dTop = (y - waveMargin) / wavePpm;
+      const dBot = (waveMargin + NOMINAL_H_MM * wavePpm - y) / wavePpm;
+      const dLeft = (x - waveMargin) / wavePpm;
+      const dRight = (waveMargin + NOMINAL_W_MM * wavePpm - x) / wavePpm;
+      const depth = Math.min(dTop, dBot, dLeft, dRight);
+      if (depth < 0 || depth >= 2.4) continue;
+      const band = Math.floor(depth / 0.35) % 2;
+      const i = (y * wave.width + x) * 3;
+      if (band) {
+        wave.data[i] = 180;
+        wave.data[i + 1] = 40;
+        wave.data[i + 2] = 80;
+      } else {
+        wave.data[i] = 40;
+        wave.data[i + 1] = 40;
+        wave.data[i + 2] = 180;
+      }
+    }
+  }
+  for (let y = 0; y < wave.height; y++) {
+    for (let x = 0; x < wave.width; x++) {
+      const dTop = (y - waveMargin) / wavePpm;
+      const dBot = (waveMargin + NOMINAL_H_MM * wavePpm - y) / wavePpm;
+      const dLeft = (x - waveMargin) / wavePpm;
+      const dRight = (waveMargin + NOMINAL_W_MM * wavePpm - x) / wavePpm;
+      const depth = Math.min(dTop, dBot, dLeft, dRight);
+      if (depth < 2.6 || depth >= 3.5) continue;
+      const i = (y * wave.width + x) * 3;
+      wave.data[i] = 12;
+      wave.data[i + 1] = 12;
+      wave.data[i + 2] = 12;
+    }
+  }
+  const waveM = measureImage(wave.data, wave.width, wave.height, dpi);
+  check('wave card found', waveM.ok && waveM.sizeOk, waveM.ok ? waveM.cardMm : waveM.error);
+  if (waveM.ok) {
+    ['top', 'bottom', 'left', 'right'].forEach(function (name) {
+      const side = waveM.sides[name];
+      check('wave ' + name + ' is the outer light line',
+        side.withheld === false && near(side.mm, 2.4, 0.2),
+        sideBrief(side));
+      check('wave ' + name + ' black is inside that line',
+        side.blackOuterMm != null && near(side.blackOuterMm, 2.6, 0.25) &&
+        side.frameDiffMm != null && side.frameDiffMm > 0.05 && side.frameDiffMm < 0.5,
+        { mm: side.mm, black: side.blackOuterMm, diff: side.frameDiffMm });
+    });
+    const share = waveM.frameCheck && waveM.frameCheck.topShare;
+    check('wave black ratio matches the outline ratio',
+      share && share.diff != null && Math.abs(share.diff) < 0.02,
+      share);
+  }
 
   const slant = drawSynthetic({
     dpi: dpi,
