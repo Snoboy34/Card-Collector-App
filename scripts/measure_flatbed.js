@@ -27,6 +27,16 @@
  * estimated from each of its two sides agrees. The bias is reported and
  * is never subtracted as a fixed correction.
  *
+ * Which files are measured is reference/flatbed_manifest.json. Each filename
+ * maps to a deck id and an orientation (up or 180). A scan name that is not
+ * in the manifest is ignored, so a new card is a new manifest line. Cards
+ * already in the answer key and not in this run are left as they were.
+ *
+ * The review artifact is one JPEG per card, reference/overlays/<id>_review.jpg,
+ * at most 3 MB: both orientations, the full card, and a middle crop of each
+ * side. Green is the card edge, yellow the outline points, cyan the measured
+ * line.
+ *
  * Run: node scripts/measure_flatbed.js [--flatbed DIR] [--self-test]
  */
 'use strict';
@@ -1852,6 +1862,238 @@ async function writeReviewSet(file, result, dir, stem) {
   return full;
 }
 
+const REVIEW_MAX_BYTES = 3 * 1024 * 1024;
+
+function reviewCropBox(side, dpi, imageW, imageH) {
+  const ppm = pxPerMm(dpi);
+  const outside = 2.2 * ppm;
+  const inside = 8 * ppm;
+  const along = 14 * ppm;
+  const a = side.edge.a;
+  const b = side.edge.b;
+  const nx = side.edge.nx;
+  const ny = side.edge.ny;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.max(1, hypot(dx, dy));
+  const ux = dx / len;
+  const uy = dy / len;
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const a2 = { x: mx - ux * along, y: my - uy * along };
+  const b2 = { x: mx + ux * along, y: my + uy * along };
+  const pts = [
+    { x: a2.x - nx * outside, y: a2.y - ny * outside },
+    { x: b2.x - nx * outside, y: b2.y - ny * outside },
+    { x: b2.x + nx * inside, y: b2.y + ny * inside },
+    { x: a2.x + nx * inside, y: a2.y + ny * inside }
+  ];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  pts.forEach(function (p) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  });
+  const left = Math.max(0, Math.floor(minX));
+  const top = Math.max(0, Math.floor(minY));
+  const right = Math.min(imageW, Math.ceil(maxX));
+  const bottom = Math.min(imageH, Math.ceil(maxY));
+  return {
+    left: left,
+    top: top,
+    width: Math.max(1, right - left),
+    height: Math.max(1, bottom - top)
+  };
+}
+
+async function composeOverlay(file, result, options) {
+  const meta = await sharp(file).rotate().metadata();
+  let originX = 0;
+  let originY = 0;
+  let srcW = meta.width;
+  let srcH = meta.height;
+  let img = sharp(file).rotate();
+  if (options.extract) {
+    const box = options.extract;
+    img = img.extract(box);
+    originX = box.left;
+    originY = box.top;
+    srcW = box.width;
+    srcH = box.height;
+  }
+  const rot = options.rotate || 0;
+  const rotMod = Math.abs(rot % 180);
+  const quarterTurn = rotMod > 45 && rotMod < 135;
+  const limitW = quarterTurn ? options.maxHeight : options.maxWidth;
+  const limitH = quarterTurn ? options.maxWidth : options.maxHeight;
+  let scale = 1;
+  if (limitW) scale = Math.min(scale, limitW / srcW);
+  if (limitH) scale = Math.min(scale, limitH / srcH);
+  if (!isFinite(scale) || scale <= 0) scale = 1;
+  const dw = Math.max(1, Math.round(srcW * scale));
+  const dh = Math.max(1, Math.round(srcH * scale));
+  const base = await img.resize(dw, dh).png().toBuffer();
+  const stroke = options.stroke == null ? Math.max(2, Math.round(2.5 / Math.max(scale, 0.2))) : options.stroke;
+  const svg = buildOverlaySvg(result, {
+    scale: scale,
+    originX: originX,
+    originY: originY,
+    width: dw,
+    height: dh,
+    stroke: stroke,
+    pointR: options.pointR == null ? Math.max(2.2, stroke * 0.7) : options.pointR,
+    labels: options.labels !== false,
+    side: options.side || null
+  });
+  let out = await sharp(base).composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).png().toBuffer();
+  if (options.rotate) {
+    out = await sharp(out).rotate(options.rotate, { background: { r: 18, g: 18, b: 18 } }).png().toBuffer();
+  }
+  return out;
+}
+
+// Clockwise degrees that lay the edge horizontal with the card interior below it.
+function rotateInwardDown(edge) {
+  const dx = edge.b.x - edge.a.x;
+  const dy = edge.b.y - edge.a.y;
+  const along = Math.atan2(dy, dx);
+  let deg = -along * 180 / Math.PI;
+  const rad = deg * Math.PI / 180;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  const iy = edge.nx * s + edge.ny * c;
+  if (iy < 0) deg += 180;
+  return Math.round(deg);
+}
+
+function reviewCaption(text, width) {
+  const h = 28;
+  return Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + h + '">' +
+    '<text x="8" y="20" fill="#ffffff" font-size="18" font-family="sans-serif">' + esc(text) + '</text></svg>'
+  );
+}
+
+function sideCaption(side, result) {
+  const s = result && result.sides && result.sides[side];
+  if (!s) return side + '  no edge';
+  if (s.withheld || s.mm == null) return side + '  withheld' + (s.reason ? ' (' + s.reason + ')' : '');
+  return side + '  ' + s.mm.toFixed(3) + ' mm';
+}
+
+/**
+ * One JPEG for a card: each orientation's full card, then a middle crop of
+ * each side. Green card edge, yellow outline points, cyan measured line.
+ * The file is kept at or under 3 MB.
+ */
+async function writeCardReviewSheet(cardId, scans, dest) {
+  const canvasW = 1500;
+  const gap = 14;
+  const pieces = [];
+  let y = gap;
+  function add(buf, left, top) {
+    pieces.push({ input: buf, left: left, top: top });
+  }
+  const ordered = scans.slice().sort(function (a, b) {
+    if (a.orientation === b.orientation) return 0;
+    return a.orientation === 'up' ? -1 : 1;
+  });
+  for (let i = 0; i < ordered.length; i++) {
+    const scan = ordered[i];
+    const result = scan.result;
+    const cardMm = result && result.cardMm;
+    const sizeText = cardMm ? cardMm.width.toFixed(2) + ' x ' + cardMm.height.toFixed(2) + ' mm' : 'no card';
+    const header = cardId + '  ' + scan.orientation + '  ' + sizeText +
+      (result && result.sizeOk === false ? '  NOT CARD SIZED' : '');
+    add(reviewCaption(header, canvasW), 0, y);
+    y += 28;
+    if (!result || !result.ok) {
+      add(reviewCaption('not measured', canvasW), 0, y);
+      y += 28 + gap;
+      continue;
+    }
+    const full = await composeOverlay(scan.file, result, { maxHeight: 520, maxWidth: 420, labels: false });
+    const fullMeta = await sharp(full).metadata();
+    add(full, Math.round((canvasW - fullMeta.width) / 2), y);
+    y += fullMeta.height + 8;
+    const meta = await sharp(scan.file).rotate().metadata();
+    const stripW = canvasW - gap * 2;
+    for (let s = 0; s < 4; s++) {
+      const name = ['top', 'bottom', 'left', 'right'][s];
+      const side = result.sides[name];
+      add(reviewCaption(sideCaption(name, result), stripW), gap, y);
+      y += 26;
+      if (!side || !side.edge) {
+        y += 4;
+        continue;
+      }
+      const box = reviewCropBox(side, result.dpi, meta.width, meta.height);
+      const turn = (name === 'left' || name === 'right') ? rotateInwardDown(side.edge) : 0;
+      const crop = await composeOverlay(scan.file, result, {
+        extract: box,
+        maxWidth: stripW,
+        maxHeight: 190,
+        labels: false,
+        side: name,
+        stroke: 4,
+        pointR: 3.5,
+        rotate: turn || null
+      });
+      const cm = await sharp(crop).metadata();
+      add(crop, gap, y);
+      y += cm.height + 8;
+    }
+    y += gap;
+  }
+  const canvasH = Math.max(y, 32);
+  let quality = 78;
+  let scale = 1;
+  let jpg = null;
+  while (scale >= 0.55) {
+    quality = 78;
+    const w = Math.round(canvasW * scale);
+    const h = Math.round(canvasH * scale);
+    const base = sharp({
+      create: { width: canvasW, height: canvasH, channels: 3, background: { r: 18, g: 18, b: 18 } }
+    }).composite(pieces);
+    while (quality >= 42) {
+      let pipe = base.clone();
+      if (scale < 0.999) pipe = pipe.resize(w, h);
+      jpg = await pipe.jpeg({ quality: quality, mozjpeg: true }).toBuffer();
+      if (jpg.length <= REVIEW_MAX_BYTES) {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, jpg);
+        return { file: dest, bytes: jpg.length };
+      }
+      quality -= 8;
+    }
+    scale -= 0.12;
+  }
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, jpg);
+  return { file: dest, bytes: jpg.length };
+}
+
+function mergeAnswerKey(file, key) {
+  if (!file || !fs.existsSync(file)) return key;
+  let prev;
+  try {
+    prev = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (err) {
+    return key;
+  }
+  if (!prev || !prev.cards) return key;
+  const out = JSON.parse(JSON.stringify(prev));
+  Object.keys(key.cards).forEach(function (id) {
+    out.cards[id] = key.cards[id];
+  });
+  return out;
+}
+
 async function loadRaster(file) {
   const meta = await sharp(file).rotate().metadata();
   const w = meta.width;
@@ -1925,11 +2167,31 @@ async function measureFile(file, dpi) {
   return shiftResult(result, loaded.origin);
 }
 
-function parseScanName(file) {
+function flatbedManifestPath() {
+  return path.join(__dirname, '..', 'reference', 'flatbed_manifest.json');
+}
+
+function loadFlatbedManifest(file) {
+  const manifestFile = file || flatbedManifestPath();
+  const raw = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  const byName = {};
+  Object.keys(raw).forEach(function (name) {
+    const entry = raw[name];
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return;
+    const deck = String(entry.deck || '').trim().toUpperCase();
+    const orientation = String(entry.orientation || '').trim().toLowerCase();
+    if (!deck || (orientation !== 'up' && orientation !== '180')) return;
+    byName[name] = { card: deck, orientation: orientation };
+  });
+  return byName;
+}
+
+function parseScanName(file, manifest) {
   const base = path.basename(file);
-  const m = /^(TD-\d+)_(up|180)\.png$/i.exec(base);
-  if (!m) return null;
-  return { card: m[1].toUpperCase(), orientation: m[2].toLowerCase(), file: file };
+  const table = manifest || loadFlatbedManifest();
+  const hit = table[base];
+  if (!hit) return null;
+  return { card: hit.card, orientation: hit.orientation, file: file };
 }
 
 function readPngDpi(file) {
@@ -1989,12 +2251,19 @@ function defaultFlatbedDir() {
   return candidates[0] || candidates[candidates.length - 1];
 }
 
-function listScans(dir) {
+function listScans(dir, manifest) {
   if (!dir || !fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(function (name) { return /^TD-\d+_(up|180)\.png$/i.test(name); })
+  const table = manifest || loadFlatbedManifest();
+  return Object.keys(table)
+    .filter(function (name) { return fs.existsSync(path.join(dir, name)); })
     .map(function (name) { return path.join(dir, name); })
-    .sort();
+    .sort(function (a, b) {
+      const pa = table[path.basename(a)];
+      const pb = table[path.basename(b)];
+      const ka = pa.card + '\0' + (pa.orientation === 'up' ? '0' : '1');
+      const kb = pb.card + '\0' + (pb.orientation === 'up' ? '0' : '1');
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
 }
 
 function printReport(key) {
@@ -2134,26 +2403,41 @@ async function runDirectory(dir, opts) {
       fileDpi: fileDpi,
       result: result
     });
-    if (opts.overlayDir) {
-      fs.mkdirSync(opts.overlayDir, { recursive: true });
-      const stem = parsed.card + '_' + parsed.orientation;
-      const dest = path.join(opts.overlayDir, stem + '.png');
-      await writeOverlay(files[i], result, dest);
-      await writeReviewSet(files[i], result, opts.overlayDir, stem);
+  }
+  if (opts.overlayDir) {
+    const groups = {};
+    measurements.forEach(function (m) {
+      if (!groups[m.card]) groups[m.card] = [];
+      groups[m.card].push(m);
+    });
+    fs.mkdirSync(opts.overlayDir, { recursive: true });
+    if (opts.artifactDir) fs.mkdirSync(opts.artifactDir, { recursive: true });
+    const ids = Object.keys(groups).sort();
+    for (let g = 0; g < ids.length; g++) {
+      const dest = path.join(opts.overlayDir, ids[g] + '_review.jpg');
+      const sheet = await writeCardReviewSheet(ids[g], groups[ids[g]], dest);
+      const mb = sheet.bytes / (1024 * 1024);
+      console.log('review ' + path.basename(dest) + '  ' + mb.toFixed(2) + ' MB');
+      if (sheet.bytes > REVIEW_MAX_BYTES) {
+        console.error('review sheet over 3 MB: ' + dest);
+      }
       if (opts.artifactDir) {
-        fs.mkdirSync(opts.artifactDir, { recursive: true });
-        const copy = path.join(opts.artifactDir, parsed.card + '_' + parsed.orientation + '.png');
-        fs.copyFileSync(dest, copy);
+        try {
+          fs.copyFileSync(dest, path.join(opts.artifactDir, path.basename(dest)));
+        } catch (err) {
+          console.error('artifact copy skipped: ' + (err && err.message ? err.message : err));
+        }
       }
     }
   }
   const previous = loadApproved(opts.out);
   const key = buildAnswerKey(measurements, dpiUsed, previous);
-  if (opts.out) {
-    fs.mkdirSync(path.dirname(opts.out), { recursive: true });
-    fs.writeFileSync(opts.out, JSON.stringify(key, null, 2) + '\n');
-  }
   printReport(key);
+  if (opts.out) {
+    const merged = mergeAnswerKey(opts.out, key);
+    fs.mkdirSync(path.dirname(opts.out), { recursive: true });
+    fs.writeFileSync(opts.out, JSON.stringify(merged, null, 2) + '\n');
+  }
   return { ok: true, key: key, measurements: measurements };
 }
 
@@ -2394,6 +2678,23 @@ async function selfTest() {
   check('across-scan needs both sides', bias.axes.acrossScan.agree === false && bias.sides.right.reason === 'needs-both-sides', bias.sides.right);
   check('no fixed correction', bias.sides.top.mm === roundMm((3.777 + 3.526) / 2), bias.sides.top.mm);
 
+  const manifest = loadFlatbedManifest();
+  const lavitar = parseScanName('flatbed/Lavitar_up.png', manifest);
+  const fouts = parseScanName('/scans/Fouts_180.png', manifest);
+  const td01 = parseScanName('TD-01_up.png', manifest);
+  const karros = parseScanName('KARROS_180.png', manifest);
+  const laporta = parseScanName('flatbed/Laporta_up.png', manifest);
+  const td05 = parseScanName('TD-05_up.png', manifest);
+  const td11 = parseScanName('flatbed/TD-11_180.png', manifest);
+  check('manifest maps Lavitar_up to TD-03', lavitar && lavitar.card === 'TD-03' && lavitar.orientation === 'up', lavitar);
+  check('manifest maps Fouts_180 to TD-04', fouts && fouts.card === 'TD-04' && fouts.orientation === '180', fouts);
+  check('manifest keeps TD-01_up', td01 && td01.card === 'TD-01' && td01.orientation === 'up', td01);
+  check('manifest maps KARROS_180 to KARROS', karros && karros.card === 'KARROS' && karros.orientation === '180', karros);
+  check('manifest maps Laporta_up to LAPORTA', laporta && laporta.card === 'LAPORTA' && laporta.orientation === 'up', laporta);
+  check('manifest maps TD-05_up', td05 && td05.card === 'TD-05' && td05.orientation === 'up', td05);
+  check('manifest maps TD-11_180', td11 && td11.card === 'TD-11' && td11.orientation === '180', td11);
+  check('manifest ignores a name it does not list', parseScanName('not-a-scan.png', manifest) == null);
+
   const tiltedPng = await sharp(mixed.data, {
     raw: { width: mixed.width, height: mixed.height, channels: 3 }
   }).rotate(2, { background: { r: pink[0], g: pink[1], b: pink[2] } }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -2438,6 +2739,15 @@ async function selfTest() {
   await sharp(curved.data, { raw: { width: curved.width, height: curved.height, channels: 3 } }).png().toFile(tmpCard);
   await writeOverlay(tmpCard, curvedM, tmpCurve);
   check('overlay written', fs.existsSync(tmpOver) && fs.statSync(tmpOver).size > 1000 && fs.statSync(tmpCurve).size > 1000, tmpOver);
+  const tmpPartial = path.join(os.tmpdir(), 'flatbed-selftest-partial.png');
+  const tmpSheet = path.join(os.tmpdir(), 'flatbed-selftest-review.jpg');
+  await sharp(partial.data, { raw: { width: partial.width, height: partial.height, channels: 3 } }).png().toFile(tmpPartial);
+  const sheet = await writeCardReviewSheet('SYN', [{
+    orientation: 'up',
+    file: tmpPartial,
+    result: partialM
+  }], tmpSheet);
+  check('review sheet under 3 MB', sheet.bytes > 1000 && sheet.bytes <= REVIEW_MAX_BYTES, sheet.bytes);
 
   if (failed) {
     console.error(failed + ' self-test failure(s)');
@@ -2515,7 +2825,11 @@ module.exports = {
   measureImage: measureImage,
   measureFile: measureFile,
   writeReviewSet: writeReviewSet,
+  writeCardReviewSheet: writeCardReviewSheet,
   agreeEdges: agreeEdges,
   buildAnswerKey: buildAnswerKey,
-  BIAS_AGREE_MM: BIAS_AGREE_MM
+  loadFlatbedManifest: loadFlatbedManifest,
+  mergeAnswerKey: mergeAnswerKey,
+  BIAS_AGREE_MM: BIAS_AGREE_MM,
+  REVIEW_MAX_BYTES: REVIEW_MAX_BYTES
 };
