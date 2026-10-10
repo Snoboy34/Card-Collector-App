@@ -46,6 +46,7 @@ const dumpScans = require('./scripts/dump_scans');
 const testDeck = require('./services/test_deck');
 const scanMetadata = require('./services/scan_metadata');
 const backScan = require('./services/back_scan');
+const centeringAssist = require('./services/centering_assist');
 const deckReport = require('./scripts/deck_report');
 const childProcess = require('child_process');
 
@@ -297,6 +298,21 @@ function attachBackMetadata(report, body, pairId) {
   report.copyrightLine = info.copyrightLine;
   report.pairId = pairId;
   return report;
+}
+
+function findGradedItem(scanId) {
+  const mem = inventory.find(function (item) { return item && item.scanId === scanId; });
+  if (mem) return mem;
+  const db = loadDatabase();
+  const items = db.inventory || [];
+  for (let i = 0; i < items.length; i++) {
+    if (items[i] && items[i].scanId === scanId) return items[i];
+  }
+  return null;
+}
+
+function assistStore() {
+  return centeringAssist.createStore(DATA_DIR);
 }
 
 function labelFromCapture(scanId, body) {
@@ -669,6 +685,51 @@ app.get('/scans/:scanId/:file', localNetworkOnly, (req, res) => {
   if (!fs.existsSync(filePath)) return res.status(404).type('text/plain').send('not found');
   res.type(type);
   return res.sendFile(filePath);
+});
+
+/**
+ * User-placed centering lines. Stored beside the engine measurement and
+ * labelled assisted. consent defaults to false; the example file never
+ * leaves this machine (see services/centering_assist.js).
+ */
+app.get('/api/settings/assist-consent', (req, res) => {
+  res.json({ ok: true, consent: assistStore().consentPreference() });
+});
+
+app.put('/api/settings/assist-consent', (req, res) => {
+  const consent = req.body && req.body.consent === true;
+  assistStore().setConsentPreference(consent);
+  res.json({ ok: true, consent: consent });
+});
+
+app.post('/api/scans/:scanId/centering-assist', (req, res) => {
+  const scanId = grading.normalizeScanId(req.params.scanId);
+  if (!scanId) return res.status(400).json({ ok: false, error: 'invalid scan id' });
+  const item = findGradedItem(scanId);
+  if (!item || !item.gradingReport) return res.status(404).json({ ok: false, error: 'scan not found' });
+  const consent = req.body && req.body.consent === true;
+  const engineStamp = item.engine || {};
+  const built = centeringAssist.buildFromLines(item.gradingReport, req.body && req.body.lines, {
+    scanId: scanId,
+    engineVersion: engineStamp.version || item.gradingReport.engineVersion || grading.ENGINE_VERSION,
+    engineCommit: engineStamp.commit || ENGINE.commit || null,
+    consent: consent,
+    confirmImplausible: req.body && req.body.confirmImplausible === true
+  });
+  if (!built.ok) {
+    return res.status(400).json({
+      ok: false,
+      error: built.error,
+      implausible: built.implausible || null
+    });
+  }
+  assistStore().append(built.examples);
+  const next = centeringAssist.attachAssist(item, built.assist);
+  persistGradedItem(next, next.category || 'UNKNOWN');
+  console.log('[centering-assist] scanId=' + scanId +
+    ' adjusted=' + built.assist.adjustedCount +
+    ' consent=' + (consent ? 'true' : 'false'));
+  return res.json({ ok: true, item: next, assist: built.assist, exampleCount: built.examples.length });
 });
 
 app.get('/api/debug/scan/:scanId', localNetworkOnly, (req, res) => {

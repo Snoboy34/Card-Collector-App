@@ -90,10 +90,30 @@ function itemImage(item) {
 function itemReport(item) {
   return (item && (item.gradingReport || item.gradingReport)) || null;
 }
+/** Engine final score is a prediction, not a grade a company has issued. */
+function predictedGradeText(score) {
+  if (typeof score !== 'number' || !isFinite(score)) return '—';
+  const text = (Math.round(score * 10) / 10).toFixed(1);
+  return 'Predicted PSA ' + (text.slice(-2) === '.0' ? text.slice(0, -2) : text);
+}
+
+/** Assisted centering is never presented as the engine grade. */
+function assistedGradeLine(report) {
+  const assist = report && report.centeringAssist;
+  if (!assist || !(assist.adjustedCount > 0) || !assist.headline) return '';
+  if (assist.gradeSource && assist.gradeSource !== 'assisted') return '';
+  if (typeof assist.centering === 'number') {
+    return assist.centering.toFixed(1) + ' assisted — ' + assist.headline;
+  }
+  return assist.headline;
+}
+
 function itemHeadlineGrade(report) {
   if (!report) return '—';
+  const assisted = assistedGradeLine(report);
+  if (assisted) return assisted;
   if (typeof report.finalScore === 'number') {
-    return report.finalScore.toFixed(1) + ' ' + (report.label || '');
+    return predictedGradeText(report.finalScore);
   }
   return report.label || '—';
 }
@@ -115,7 +135,9 @@ let activeRoute = null;
 let state = {
   inventory: [],
   user: null,
-  stats: null
+  stats: null,
+  /** Help improve The Judge. Default off. Stamped onto new examples only. */
+  assistConsent: false
 };
 
 /* -------------------------
@@ -140,6 +162,8 @@ function renderRoute(route) {
     renderInventory();
   } else if (key === 'scan') {
     renderScanView();
+  } else if (key === 'settings') {
+    renderSettings();
   } else {
     renderDashboard();
   }
@@ -261,6 +285,46 @@ function renderInventory() {
       <div><button class="small" onclick="openReportFromId('${item.id}')">Report</button></div>
     </div>
   `).join('');
+}
+
+function renderSettings() {
+  appRoot.innerHTML = `
+    <section class="panel">
+      <h2>Settings</h2>
+      <p class="muted">Corrections you make to a border stay on this device and this home server.</p>
+      <label class="assist-consent">
+        <input id="helpImprove" type="checkbox" />
+        <span>Help improve The Judge</span>
+      </label>
+      <p class="muted">Off by default. When it is off, a border correction is saved with consent turned off and is not sent anywhere else. Turning this on applies only to corrections you save after that. Corrections already saved stay as they were.</p>
+      <p id="settingsStatus" class="muted"></p>
+    </section>
+  `;
+  const box = document.getElementById('helpImprove');
+  const status = document.getElementById('settingsStatus');
+  if (!box) return;
+  box.checked = state.assistConsent === true;
+  box.addEventListener('change', async function () {
+    const next = box.checked === true;
+    box.disabled = true;
+    try {
+      const res = await fetch('/api/settings/assist-consent', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ consent: next })
+      }).then(function (r) { return r.json(); });
+      if (!res || !res.ok) throw new Error('not saved');
+      state.assistConsent = res.consent === true;
+      box.checked = state.assistConsent;
+      status.textContent = state.assistConsent
+        ? 'On. New corrections are marked consent on. They still stay on this server.'
+        : 'Off. New corrections stay on this device and this server.';
+    } catch (err) {
+      box.checked = state.assistConsent === true;
+      status.textContent = 'Could not save the setting. It stays off unless it was already on.';
+    }
+    box.disabled = false;
+  });
 }
 
 /* Scan view (for hash navigation) */
@@ -882,9 +946,14 @@ function openReportModal(item) {
   const report = itemReport(item);
   const modal = document.createElement('div');
   modal.className = 'modal';
-  const scoreLine = report && typeof report.finalScore === 'number'
-    ? report.finalScore.toFixed(1) + ' ' + (report.label || '')
-    : '—';
+  const scoreLine = predictedGradeText(report && report.finalScore);
+  const assistedLine = assistedGradeLine(report);
+  const gradeHeading = assistedLine
+    ? '<h4 style="margin:0 0 8px 0;">Prediction: <span style="color:var(--accent)">' + escapeHtml(scoreLine) + '</span></h4>' +
+      '<h4 style="margin:0 0 8px 0;">' + escapeHtml(assistedLine) + '</h4>'
+    : '<h4 style="margin:0 0 8px 0;">Prediction: <span style="color:var(--accent)">' + escapeHtml(scoreLine) + '</span></h4>';
+  const canAdjust = Boolean(report && window.CenteringAssist && CenteringAssist.warpBox(report) && !report.cardNotFound);
+  const showAssistNow = Boolean(canAdjust && window.CenteringAssistUI && CenteringAssistUI.needsAssist(report));
   const scanId = item.scanId || (report && report.scanId) || '';
   const scanStamp = item.createdAt
     ? new Date(item.createdAt).toLocaleString()
@@ -972,18 +1041,21 @@ function openReportModal(item) {
         ? '<p class="muted">Debug: ' + escapeHtml(report.debugArtifacts.dir) + '/ (debug.json, oriented.jpg)</p>'
         : ''}
       ${scanId ? '<p><button id="copyDiagnostics" class="small">Copy diagnostics</button> <span id="copyStatus" class="muted"></span></p><pre id="diagnosticsText" class="muted" style="display:none; white-space:pre-wrap; word-break:break-word; font-size:11px;"></pre>' : ''}
-      ${report && report.debugArtifacts && report.debugArtifacts.orientedJpg
+      ${report && report.debugArtifacts && report.debugArtifacts.orientedJpg && !showAssistNow
         ? '<figure style="margin:8px 0;"><img src="/scans/' + encodeURIComponent(scanId) + '/oriented.jpg" alt="Warped card with detected border lines" style="width:100%; max-width:420px; border-radius:6px;" /><figcaption class="muted">Cyan: inner border lines used for L/R and T/B · yellow: each sample line hit · red: line found no border</figcaption></figure>'
         : ''}
+      ${canAdjust && !showAssistNow ? '<p><button type="button" id="adjustCentering" class="small">Adjust a side</button></p>' : ''}
+      <div id="assistMount"></div>
       <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
         <img src="${itemImage(item)}" alt="${escapeHtml(item.name || 'Unidentified')}" style="width:180px; height:220px; object-fit:cover; border-radius:8px; flex-shrink:0;" />
         <div>
-          <h4 style="margin:0 0 8px 0;">Judge Grade: <span style="color:var(--accent)">${escapeHtml(scoreLine)}</span></h4>
+          ${gradeHeading}
           ${subLine}
           ${ceiling}
           ${report ? `
             <ul>
-              <li>Centering (0–100 projection): ${dash(report.centering)}</li>
+              <li>${assistedLine ? 'Engine centering (0–100 projection)' : 'Centering (0–100 projection)'}: ${dash(report.centering)}</li>
+              ${report.centeringAssist && report.centeringAssist.borderWidthsMm ? '<li>Assisted borders (mm): L ' + dash(report.centeringAssist.borderWidthsMm.left) + ' · R ' + dash(report.centeringAssist.borderWidthsMm.right) + ' · T ' + dash(report.centeringAssist.borderWidthsMm.top) + ' · B ' + dash(report.centeringAssist.borderWidthsMm.bottom) + '</li>' : ''}
               <li>Corners: ${dash(report.corners)}</li>
               <li>Edges (0–100 projection): ${dash(report.edges)}</li>
               <li>Surface (0–100 projection): ${dash(report.surface)}</li>
@@ -1015,6 +1087,33 @@ function openReportModal(item) {
     });
   }
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+  const assistMount = modal.querySelector('#assistMount');
+  function openAssistEditor() {
+    if (!assistMount || !window.CenteringAssistUI) return;
+    CenteringAssistUI.mount(assistMount, item, {
+      consent: state.assistConsent === true,
+      onSaved: function (updated) {
+        const idx = state.inventory.findIndex(function (row) {
+          return row && (row.scanId === updated.scanId || row.id === updated.id);
+        });
+        if (idx >= 0) state.inventory[idx] = updated;
+        else state.inventory.unshift(updated);
+        modal.remove();
+        if (activeRoute === 'dashboard') renderDashboard();
+        else if (activeRoute === 'inventory') renderInventory();
+        openReportModal(updated);
+      }
+    });
+  }
+  if (showAssistNow) openAssistEditor();
+  const adjustBtn = modal.querySelector('#adjustCentering');
+  if (adjustBtn) {
+    adjustBtn.addEventListener('click', function () {
+      adjustBtn.parentElement.remove();
+      openAssistEditor();
+    });
+  }
 }
 
 /* For inline onclick in inventory HTML */
@@ -1161,6 +1260,15 @@ async function bootstrap() {
 
   // Paint the route immediately so Scan is not blocked on inventory/stats.
   renderRoute(location.hash.replace('#','') || 'dashboard');
+
+  try {
+    const consent = await fetch('/api/settings/assist-consent').then(function (r) { return r.json(); });
+    state.assistConsent = Boolean(consent && consent.ok && consent.consent === true);
+    const box = document.getElementById('helpImprove');
+    if (box) box.checked = state.assistConsent;
+  } catch (err) {
+    state.assistConsent = false;
+  }
 
   try {
     const res = await api.getInventory();

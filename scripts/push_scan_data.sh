@@ -42,7 +42,18 @@ copy_if() {
   fi
 }
 
-copy_if "$DATA_DIR/database.json" "$REPO/data/database.json"
+# The owner's private scan repo keeps engine measurements. This copy drops
+# only the user's dragged millimetres, disagreement values, and
+# centeringExamples. Do not add centering_examples.jsonl to this list.
+if [[ -f "$DATA_DIR/database.json" ]]; then
+  node -e '
+    const fs = require("fs");
+    const assist = require(process.argv[1]);
+    const db = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+    fs.writeFileSync(process.argv[3], JSON.stringify(assist.redactDatabaseForScanRepo(db), null, 2));
+  ' "$ROOT/services/centering_assist.js" "$DATA_DIR/database.json" "$REPO/data/database.json"
+fi
+rm -f "$REPO/data/centering_examples.jsonl" "$REPO/data/assist_settings.json"
 copy_if "$DATA_DIR/failed_scans.jsonl" "$REPO/data/failed_scans.jsonl"
 copy_if "$DATA_DIR/scan_labels.json" "$REPO/data/scan_labels.json"
 copy_if "$DATA_DIR/test_deck.json" "$REPO/data/test_deck.json"
