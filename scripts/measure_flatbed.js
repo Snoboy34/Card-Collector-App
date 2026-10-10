@@ -2517,5 +2517,6 @@ module.exports = {
   writeReviewSet: writeReviewSet,
   agreeEdges: agreeEdges,
   buildAnswerKey: buildAnswerKey,
+  defaultFlatbedDir: defaultFlatbedDir,
   BIAS_AGREE_MM: BIAS_AGREE_MM
 };
