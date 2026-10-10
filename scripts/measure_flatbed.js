@@ -334,9 +334,11 @@ function finiteMm(v) {
 }
 
 /**
- * Each approved edge must be within tolerance of the multi-card measurement.
- * An edge the answer key did not approve is not a pass and is not a fail.
- * No approved edge means the check does not pass.
+ * The trio is scanned upright, the same way as each card's single upright
+ * scan. Each approved edge has to be within tolerance of that upright value.
+ * The mean of the upright and 180 scans is not the comparison. An edge the
+ * answer key did not approve is not a pass and is not a fail. No compared
+ * edge means the check does not pass.
  */
 function compareMultiToApproved(measuredById, answerKey, toleranceMm) {
   const tol = toleranceMm == null ? MULTI_TOLERANCE_MM : toleranceMm;
@@ -354,19 +356,33 @@ function compareMultiToApproved(measuredById, answerKey, toleranceMm) {
         edges[edge] = { compared: false, reason: 'not-an-approved-value' };
         return;
       }
+      if (!finiteMm(approved.upMm)) {
+        edges[edge] = { compared: false, reason: 'no-upright-value', approvedMm: approved.mm };
+        return;
+      }
       compared += 1;
       if (!measured || measured.withheld || !finiteMm(measured.mm)) {
-        edges[edge] = { compared: true, pass: false, reason: 'multi-withheld', approvedMm: approved.mm };
+        edges[edge] = {
+          compared: true,
+          pass: false,
+          reason: 'multi-withheld',
+          approvedMm: approved.mm,
+          uprightMm: approved.upMm
+        };
         pass = false;
         return;
       }
-      const delta = Math.round((measured.mm - approved.mm) * 1000) / 1000;
-      const ok = Math.abs(delta) <= tol + 1e-9;
+      const upDeltaMm = Math.round((measured.mm - approved.upMm) * 1000) / 1000;
+      const ok = Math.abs(upDeltaMm) <= tol + 1e-9;
       if (!ok) pass = false;
-      edges[edge] = { compared: true, pass: ok, deltaMm: delta, approvedMm: approved.mm, multiMm: measured.mm };
-      if (finiteMm(approved.upMm)) {
-        edges[edge].upDeltaMm = Math.round((measured.mm - approved.upMm) * 1000) / 1000;
-      }
+      edges[edge] = {
+        compared: true,
+        pass: ok,
+        upDeltaMm: upDeltaMm,
+        uprightMm: approved.upMm,
+        approvedMm: approved.mm,
+        multiMm: measured.mm
+      };
     });
     cards[id] = { edges: edges };
   });
@@ -2652,21 +2668,24 @@ async function selfTest() {
   check('reading order is a row left to right, then the next row',
     rowOrder.length === 3 && rowOrder[0].left === 20 && rowOrder[1].left === 200 && rowOrder[2].top === 140, rowOrder);
   const approvedKey = { cards: { 'TD-01': { sides: {
-    left: { mm: 3.1, withheld: false, approved: true },
-    right: { mm: 3.2, withheld: false, approved: true },
-    top: { mm: 3.6, withheld: false, approved: true },
-    bottom: { mm: 3.1, withheld: false, approved: true }
+    left: { mm: 3.1, upMm: 3.2, withheld: false, approved: true },
+    right: { mm: 3.2, upMm: 3.2, withheld: false, approved: true },
+    top: { mm: 3.6, upMm: 3.6, withheld: false, approved: true },
+    bottom: { mm: 3.1, upMm: 3.1, withheld: false, approved: true }
   } } } };
   function moved(dx) {
     return { sides: {
-      left: { mm: 3.1 + dx, withheld: false },
+      left: { mm: 3.2 + dx, withheld: false },
       right: { mm: 3.2, withheld: false },
       top: { mm: 3.6, withheld: false },
       bottom: { mm: 3.1, withheld: false }
     } };
   }
-  check('multi-card within 0.05 mm passes', compareMultiToApproved({ 'TD-01': moved(0.05) }, approvedKey).pass === true);
-  check('multi-card past 0.05 mm fails', compareMultiToApproved({ 'TD-01': moved(0.051) }, approvedKey).pass === false);
+  check('multi-card within 0.05 mm of the upright passes', compareMultiToApproved({ 'TD-01': moved(0.05) }, approvedKey).pass === true);
+  check('multi-card past 0.05 mm of the upright fails', compareMultiToApproved({ 'TD-01': moved(0.051) }, approvedKey).pass === false);
+  const matchedMean = compareMultiToApproved({ 'TD-01': moved(-0.1) }, approvedKey);
+  check('multi-card matching the mean but not the upright fails', matchedMean.pass === false &&
+    matchedMean.cards['TD-01'].edges.left.upDeltaMm === -0.1, matchedMean.cards['TD-01'].edges.left);
   const manifest = {
     'TD-01_TD-02_KARROS_up.png': { cards: ['TD-01', 'TD-02', 'KARROS'], orientation: 'up' },
     'TD-01_up.png': { deck: 'TD-01', orientation: 'up' }
