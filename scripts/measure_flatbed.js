@@ -1025,27 +1025,49 @@ function frameMarksFromProfile(profile, stepMm) {
   }
   const marks = [];
   const start = Math.round(0.8 / stepMm);
-  for (let i = Math.max(1, start); i < n - 3; i++) {
-    if (!(sm[i] >= sm[i - 1] && sm[i] >= sm[i + 1] && sm[i] >= 150)) continue;
+  const maxWidth = Math.round(0.5 / stepMm);
+  const minWidth = Math.max(2, Math.round(0.06 / stepMm));
+  // A thin line falls away on both sides within half a millimetre. Try the
+  // steeper fall first so a bright wave next to the line does not widen it
+  // past 0.5 mm and hide it. A lower line can still use the gentler fall.
+  function ridge(i, drop) {
     let lo = i;
+    while (lo > 0 && (i - lo) <= maxWidth && sm[i] - sm[lo] < drop) lo--;
     let hi = i;
-    while (lo > 0 && sm[lo] >= 130 && sm[lo] >= sm[i] - 45) lo--;
-    while (hi < n - 1 && sm[hi] >= 130 && sm[hi] >= sm[i] - 45) hi++;
-    const width = (hi - lo) * stepMm;
-    if (width < 0.06 || width > 0.5) continue;
+    while (hi < n - 1 && (hi - i) <= maxWidth && sm[i] - sm[hi] < drop) hi++;
+    if (sm[i] - sm[lo] < drop || sm[i] - sm[hi] < drop) return null;
+    const widthPx = hi - lo;
+    if (widthPx < minWidth || widthPx > maxWidth) return null;
     let dark = 0;
+    let darkGap = 0;
     const end = Math.min(n, hi + Math.round(1.6 / stepMm));
     for (let k = hi; k < end; k++) {
-      if (sm[k] < 95) dark++;
-      else if (dark > 2) break;
+      if (sm[k] < 90 && sm[k] <= sm[i] - 60) {
+        dark++;
+        darkGap = 0;
+      } else {
+        darkGap++;
+        if (dark > 3 && darkGap > 2) break;
+      }
     }
-    if (dark * stepMm < 0.3) continue;
-    marks.push({
+    // The black line inside the silver is thicker than the silver. A dark
+    // gap in a wave is about as wide as the bright ridge, so it does not count.
+    if (dark * stepMm < 0.45) return null;
+    return {
       outer: lo * stepMm,
-      width: width,
+      width: widthPx * stepMm,
       black: hi * stepMm,
-      dark: dark * stepMm
-    });
+      dark: dark * stepMm,
+      hi: hi
+    };
+  }
+  for (let i = Math.max(1, start); i < n - 3; i++) {
+    if (!(sm[i] >= sm[i - 1] && sm[i] >= sm[i + 1] && sm[i] >= 140)) continue;
+    const mark = ridge(i, 70) || ridge(i, 40);
+    if (!mark) continue;
+    const hi = mark.hi;
+    delete mark.hi;
+    marks.push(mark);
     i = hi;
   }
   return marks.slice(0, 6);
@@ -1105,7 +1127,7 @@ function clusterFrameMarks(stations) {
     const span = Math.max.apply(null, along) - Math.min.apply(null, along);
     const cov = uniq.length / n;
     const width = median(uniq.map(function (p) { return p.width; }));
-    if (span < sideLen * 0.55 || cov < 0.28 || !(width >= 0.06 && width < 0.5)) return;
+    if (span < sideLen * 0.48 || cov < 0.28 || !(width >= 0.06 && width < 0.5)) return;
     usable.push({
       points: uniq,
       median: median(uniq.map(function (p) { return p.depth; })),
@@ -1121,16 +1143,58 @@ function clusterFrameMarks(stations) {
   return usable;
 }
 
+// Marks shallower than the chosen stroke that still run the side. That is an
+// earlier line, so the deeper stroke is not the outline.
+function earlierFrameBand(stations, medianMm) {
+  let sideLen = 0;
+  const marks = [];
+  stations.forEach(function (st, i) {
+    if (st.alongMm > sideLen) sideLen = st.alongMm;
+    (st.frameMarks || []).forEach(function (mk) {
+      if (mk.outer <= medianMm - 0.5) marks.push({ depth: mk.outer, along: st.alongMm, i: i });
+    });
+  });
+  if (marks.length < 8 || !sideLen) return null;
+  marks.sort(function (a, b) { return a.depth - b.depth; });
+  let best = null;
+  for (let a = 0; a < marks.length; a++) {
+    const win = [];
+    for (let b = a; b < marks.length && marks[b].depth <= marks[a].depth + 0.4; b++) win.push(marks[b]);
+    const seen = {};
+    const uniq = [];
+    win.forEach(function (p) {
+      if (seen[p.i]) return;
+      seen[p.i] = true;
+      uniq.push(p);
+    });
+    if (uniq.length < 6) continue;
+    const along = uniq.map(function (p) { return p.along; });
+    const span = Math.max.apply(null, along) - Math.min.apply(null, along);
+    const cov = uniq.length / stations.length;
+    if (cov < 0.2 || span < sideLen * 0.45) continue;
+    const med = median(uniq.map(function (p) { return p.depth; }));
+    if (!best || med < best.median) best = { median: med, cov: cov };
+  }
+  return best;
+}
+
 // Patterned colour (a wave, a refractor) is margin. The outline is the first
 // thin line that runs the side and matches the same stroke on the other sides.
 // A published outline on a plain margin is left alone.
 function applyRectangularFrame(sides) {
   const names = ['top', 'bottom', 'left', 'right'];
   const found = {};
+  const chromaticSide = {};
   names.forEach(function (name) {
     const side = sides[name];
-    found[name] = side && side.stations ? clusterFrameMarks(side.stations)[0] || null : null;
+    const stations = side && side.stations ? side.stations : [];
+    const clusters = stations.length ? clusterFrameMarks(stations) : [];
+    found[name] = clusters[0] || null;
+    chromaticSide[name] = stations.filter(function (st) {
+      return (st.marginPattern && !st.marginTextured) || st.marginVaried;
+    }).length > stations.length * 0.5;
   });
+  const chromaticCount = names.filter(function (name) { return chromaticSide[name]; }).length;
   const widths = [];
   names.forEach(function (name) {
     if (found[name]) widths.push(found[name].width);
@@ -1140,9 +1204,9 @@ function applyRectangularFrame(sides) {
     const side = sides[name];
     if (!side) return;
     const stations = side.stations || [];
-    const chromatic = stations.filter(function (st) {
-      return (st.marginPattern && !st.marginTextured) || st.marginVaried;
-    }).length > stations.length * 0.5;
+    // One dark side of a wave can miss the colour test. The stroke still
+    // counts when the other three sides already show the patterned margin.
+    const chromatic = chromaticSide[name] || chromaticCount >= 3;
     const line = found[name];
     const matches = !!(line && widthMed != null && Math.abs(line.width - widthMed) <= 0.15);
     if (line) {
@@ -1153,11 +1217,28 @@ function applyRectangularFrame(sides) {
       side.frameCoverage = line.cov;
       side.frameMatches = matches;
     }
-    // A published border that sits well outside this stroke stays (it is the
-    // real edge, and this stroke is further in). A withheld side, or a lock
-    // on this same stroke, takes the stroke's outer edge.
-    const sameStroke = !!(line && side.mm != null && side.mm >= line.median - 0.45);
-    if (matches && chromatic && line && (side.withheld || side.mm == null || sameStroke)) {
+    // A patterned margin has no outline outside this stroke. A plain margin
+    // never reaches here, so a border outside an interior line stays.
+    // A shallower band that already runs the side is an earlier line. Do not
+    // publish a deeper stroke over it.
+    const earlier = line ? earlierFrameBand(stations, line.median) : null;
+    if (matches && chromatic && line && earlier) {
+      side.frameOuterMm = earlier.median;
+      side.blackOuterMm = null;
+      side.frameDiffMm = null;
+      side.frameWidthMm = null;
+      side.frameCoverage = earlier.cov;
+      side.frameMatches = false;
+      side.mm = null;
+      side.withheld = true;
+      side.reason = 'unclear';
+      side.confidence = Math.min(side.confidence || 0, 0.34);
+    } else if (chromatic && line && !matches && side.mm != null && !side.withheld) {
+      side.mm = null;
+      side.withheld = true;
+      side.reason = 'unclear';
+      side.confidence = Math.min(side.confidence || 0, 0.34);
+    } else if (matches && chromatic && line) {
       const pts = line.points.map(function (p) {
         return {
           i: p.i,
