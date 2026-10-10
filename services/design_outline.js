@@ -128,10 +128,12 @@ function marginModelFromProfile(profile, designStart, stepMm) {
   const lumLo = lums[lo];
   const lumHi = lums[hi];
   const chrHi = Math.max.apply(null, chrs);
-  const textured = (lumHi - lumLo) >= 45 && chrHi <= 30;
+  const busy = (lumHi - lumLo) >= 45;
+  const textured = busy && chrHi <= 30;
   return {
     med: med,
     textured: textured,
+    pattern: busy,
     chrLimit: Math.max(26, chrHi + 14),
     lumLo: lumLo,
     lumHi: lumHi

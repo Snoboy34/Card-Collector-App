@@ -48,6 +48,10 @@ const NOMINAL_H_MM = 88.9;
 const DEFAULT_DPI = 1200;
 const BIAS_AGREE_MM = 0.02;
 const PARTIAL_COVERAGE = 0.32;
+// A real outline is found along the side. Foil and gloss make some stations
+// miss it, so this is not every station. A lock on fewer than one station
+// in five is a local mark or texture, not that boundary.
+const OUTLINE_COVERAGE = 0.20;
 
 const SEARCH_TO_MM = 14;
 const DEPTH_STEP_MM = 0.02;
@@ -941,6 +945,7 @@ function measureSide(data, w, h, quad, sideName, ppm) {
       t: t,
       margin: marginModel ? marginModel.med : null,
       marginTextured: !!(marginModel && marginModel.textured),
+      marginPattern: !!(marginModel && marginModel.pattern),
       designDepth: designDepth,
       candidates: cands
     });
@@ -956,6 +961,16 @@ function measureSide(data, w, h, quad, sideName, ppm) {
   best.edge = { a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, nx: nx, ny: ny };
   const tiltPts = (best.used && best.used.length >= 2) ? best.used : best.points;
   best.tiltDeg = designOutline.tiltDegrees(tiltPts);
+  // A repeating pattern that begins at the cut is not a margin. A step
+  // inside the first millimetre of that pattern is texture, not the
+  // design block. Withhold it instead of publishing the first wave.
+  const patterned = stations.filter(function (st) { return st.marginPattern; }).length;
+  if (!best.withheld && best.mm != null && best.mm < 1 && patterned > stations.length * 0.5) {
+    best.withheld = true;
+    best.mm = null;
+    best.reason = 'unclear';
+    best.confidence = Math.min(best.confidence || 0, 0.34);
+  }
   if (process.env.TRACE_FLATBED) {
     process.stdout.write(sideName + ' ' + JSON.stringify(traceSide(stations)) + '\n');
   }
@@ -1237,7 +1252,7 @@ function summarizeDesign(stations) {
   const coverage = extreme.length / n;
   const measDepths = measuredPts.map(function (p) { return p.depth; });
   const measSpread = Math.max.apply(null, measDepths) - Math.min.apply(null, measDepths);
-  const clear = measuredPts.length >= 2 && measSpread <= 0.36 && coverage >= 0.12 && isFinite(reported);
+  const clear = measuredPts.length >= 2 && measSpread <= 0.36 && coverage >= OUTLINE_COVERAGE && isFinite(reported);
   const covScore = clamp((coverage - 0.15) / 0.6, 0, 1);
   const tightScore = clamp(1 - measSpread / 0.36, 0, 1);
   const strScore = strength > 0 ? clamp((strength - CONTRAST_FLOOR) / 25, 0, 1) : 0.5;
@@ -2310,6 +2325,19 @@ async function writeCardReviewSheet(cardId, scans, dest) {
   return { file: dest, bytes: jpg.length };
 }
 
+function copyHeldTilt(oldCard, newCard) {
+  if (!oldCard || !newCard || !oldCard.scans || !newCard.scans) return;
+  ['up', '180'].forEach(function (ori) {
+    const oldScan = oldCard.scans[ori];
+    const newScan = newCard.scans[ori];
+    if (!oldScan || !newScan || !oldScan.sides || !newScan.sides) return;
+    ['top', 'bottom', 'left', 'right'].forEach(function (side) {
+      if (!oldScan.sides[side] || !newScan.sides[side]) return;
+      oldScan.sides[side].tiltDeg = newScan.sides[side].tiltDeg;
+    });
+  });
+}
+
 function approvedMeansHeld(oldCard, newCard) {
   if (!oldCard || !oldCard.sides || !newCard || !newCard.sides) return false;
   const names = ['top', 'bottom', 'left', 'right'];
@@ -2383,7 +2411,11 @@ async function runDirectory(dir, opts) {
         stored.definition = key.definition;
         stored.cards = stored.cards || {};
         Object.keys(key.cards).forEach(function (id) {
-          if (!approvedMeansHeld(stored.cards[id], key.cards[id])) stored.cards[id] = key.cards[id];
+          if (!approvedMeansHeld(stored.cards[id], key.cards[id])) {
+            stored.cards[id] = key.cards[id];
+          } else {
+            copyHeldTilt(stored.cards[id], key.cards[id]);
+          }
         });
       } catch (err) {
         stored = key;
@@ -2732,6 +2764,46 @@ async function selfTest() {
       sideBrief(foilM.sides.top));
     check('foil ignores the stripes', near(foilM.sides.left.mm, 2.8, 0.2) && near(foilM.sides.right.mm, 3.1, 0.2),
       { left: sideBrief(foilM.sides.left), right: sideBrief(foilM.sides.right) });
+  }
+
+  // A dark patch on a fraction of one side is a mark. It is not an outline
+  // when the rest of that side has no boundary.
+  const patch = drawSynthetic({
+    dpi: dpi,
+    marginMm: 6,
+    cardWmm: NOMINAL_W_MM,
+    cardHmm: NOMINAL_H_MM,
+    pink: pink,
+    white: white,
+    photo: white,
+    frameMm: 1.2,
+    top: constantEdge(14, white, []),
+    bottom: constantEdge(3.4, blue, []),
+    left: constantEdge(3.1, blue, []),
+    right: constantEdge(3.3, blue, [])
+  });
+  const patchPpm = pxPerMm(dpi);
+  const patchMargin = Math.round(6 * patchPpm);
+  const patchX0 = patchMargin + NOMINAL_W_MM * patchPpm * 0.42;
+  const patchX1 = patchMargin + NOMINAL_W_MM * patchPpm * 0.55;
+  const patchY0 = patchMargin + 0.55 * patchPpm;
+  const patchY1 = patchMargin + 8 * patchPpm;
+  for (let y = Math.floor(patchY0); y < Math.ceil(patchY1); y++) {
+    for (let x = Math.floor(patchX0); x < Math.ceil(patchX1); x++) {
+      const i = (y * patch.width + x) * 3;
+      if (i < 0 || i + 2 >= patch.data.length) continue;
+      patch.data[i] = 20;
+      patch.data[i + 1] = 20;
+      patch.data[i + 2] = 24;
+    }
+  }
+  const patchM = measureImage(patch.data, patch.width, patch.height, dpi);
+  check('patch card found', patchM.ok && patchM.sizeOk, patchM.ok ? patchM.cardMm : patchM.error);
+  if (patchM.ok) {
+    check('short patch is not the outline', patchM.sides.top.withheld === true && patchM.sides.top.mm == null,
+      sideBrief(patchM.sides.top));
+    check('patch leaves the other sides', near(patchM.sides.bottom.mm, 3.4, 0.12) && !patchM.sides.bottom.withheld,
+      sideBrief(patchM.sides.bottom));
   }
 
   const slant = drawSynthetic({
