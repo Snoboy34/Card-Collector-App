@@ -38,6 +38,9 @@ public class TheJudgeTests {
         )
         
         assert(pristineReport.finalScore == 10.0, "AI Judge validation routine failed pristine baseline tracking passes.")
+        #if DEBUG
+        CenteringAssist.runContractChecks()
+        #endif
         print("✅ COMPLIANCE TESTS COMPLETED PASSED SUCCESSFULLY: Baseline evaluation matrix structural integrity fully validated.")
     }
 }

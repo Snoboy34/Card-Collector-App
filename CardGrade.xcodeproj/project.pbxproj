@@ -23,6 +23,7 @@
 		BB0000000000000000000011 /* CardStillOCR.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* CardStillOCR.swift */; };
 		BB0000000000000000000012 /* CardSweepBins.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* CardSweepBins.swift */; };
 		BB0000000000000000000013 /* CaptureMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000013 /* CaptureMetadata.swift */; };
+		BB0000000000000000000014 /* CenteringAssist.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000014 /* CenteringAssist.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +45,7 @@
 		AA0000000000000000000011 /* CardStillOCR.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardStillOCR.swift; sourceTree = "<group>"; };
 		AA0000000000000000000012 /* CardSweepBins.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardSweepBins.swift; sourceTree = "<group>"; };
 		AA0000000000000000000013 /* CaptureMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureMetadata.swift; sourceTree = "<group>"; };
+		AA0000000000000000000014 /* CenteringAssist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenteringAssist.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -76,6 +78,7 @@
 				AA0000000000000000000011 /* CardStillOCR.swift */,
 				AA0000000000000000000012 /* CardSweepBins.swift */,
 				AA0000000000000000000013 /* CaptureMetadata.swift */,
+				AA0000000000000000000014 /* CenteringAssist.swift */,
 				AA0000000000000000000004 /* CenteringAnalyzer.swift */,
 				AA0000000000000000000005 /* DefectAnalyzer.swift */,
 				AA000000000000000000000C /* JudgeAPIClient.swift */,
@@ -173,6 +176,7 @@
 				BB0000000000000000000011 /* CardStillOCR.swift in Sources */,
 				BB0000000000000000000012 /* CardSweepBins.swift in Sources */,
 				BB0000000000000000000013 /* CaptureMetadata.swift in Sources */,
+				BB0000000000000000000014 /* CenteringAssist.swift in Sources */,
 				BB0000000000000000000004 /* CenteringAnalyzer.swift in Sources */,
 				BB0000000000000000000005 /* DefectAnalyzer.swift in Sources */,
 				BB000000000000000000000C /* JudgeAPIClient.swift in Sources */,

@@ -91,6 +91,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var capturedBins: [String]
         var cornersGrade: Double?
         var debugPath: String?
+        var centeringAssist: CenteringAssist.Snapshot?
         var rawJSON: String
         var summaryText: String
     }
@@ -197,6 +198,66 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         return try Self.parseReport(data)
     }
 
+    func submitCenteringAssist(
+        baseURL: String,
+        scanId: String,
+        lines: [String: [String: Double]],
+        consent: Bool,
+        confirmImplausible: Bool = false
+    ) async throws -> RemoteReport {
+        guard let root = Self.normalizedBaseURL(baseURL) else {
+            throw APIError.invalidServerURL
+        }
+        let endpoint = root
+            .appendingPathComponent("api")
+            .appendingPathComponent("scans")
+            .appendingPathComponent(scanId)
+            .appendingPathComponent("centering-assist")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "lines": lines,
+            "consent": consent,
+            "confirmImplausible": confirmImplausible
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            throw Self.transportError(error)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(status) else {
+            let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let message = (parsed?["error"] as? String) ?? (String(data: data, encoding: .utf8) ?? "HTTP \(status)")
+            if parsed?["implausible"] != nil {
+                throw APIError.implausible(message)
+            }
+            throw APIError.httpFailure(status, message)
+        }
+        return try Self.parseReport(data)
+    }
+
+    func fetch(_ url: URL) async throws -> Data {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            throw Self.transportError(error)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(status) else {
+            throw APIError.httpFailure(status, "warped card")
+        }
+        return data
+    }
+
     static func transportError(_ error: URLError) -> Error {
         switch error.code {
         case .timedOut, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
@@ -212,6 +273,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         case unreachable
         case cardNotFound(String)
         case httpFailure(Int, String)
+        case implausible(String)
         case undecodableResponse
 
         var errorDescription: String? {
@@ -224,6 +286,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 return "Card not found — retake. \(reason)"
             case .httpFailure(let code, let body):
                 return "Grade request failed (\(code)): \(body)"
+            case .implausible(let message):
+                return message
             case .undecodableResponse:
                 return "Server did not return JSON."
             }
@@ -404,6 +468,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let metrics = report?["centeringMetrics"] as? [String: Any]
         let leftRightRatio = ratioPair(metrics?["leftRightRatio"], first: "left", second: "right")
         let topBottomRatio = ratioPair(metrics?["topBottomRatio"], first: "top", second: "bottom")
+        let centeringAssist = CenteringAssist.parse(report: report, item: item)
 
         var lines: [String] = []
         if let scanId, !scanId.isEmpty { lines.append("scanId  \(scanId)") }
@@ -445,6 +510,13 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 lines.append(String(format: "upload %.0f×%.0f · graded on %.0f×%.0f warp", uw, uh, ww, wh))
             }
         }
+        if let headline = centeringAssist?.headline {
+            if let label = centeringAssist?.centeringLabel {
+                lines.append("\(label) — \(headline)")
+            } else {
+                lines.append(headline)
+            }
+        }
         if lines.isEmpty { lines.append(raw) }
 
         return RemoteReport(
@@ -472,6 +544,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             capturedBins: capturedBins,
             cornersGrade: cornersGrade,
             debugPath: debugPath,
+            centeringAssist: centeringAssist,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )
@@ -521,7 +594,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             primaryFlaw: report.primaryFlaw ?? "",
             incomplete: report.incomplete ?? false,
             cornersGrade: report.cornersGrade,
-            debugPath: report.debugPath
+            debugPath: report.debugPath,
+            centeringAssist: report.centeringAssist
         )
     }
 
