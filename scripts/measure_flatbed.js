@@ -28,6 +28,13 @@
  * in either orientation. Otherwise every side is withheld with reason
  * not-card-sized, and no width is published.
  *
+ * The card edge is the paper-to-card colour step. A tight crop's corners
+ * include the card, and that raises the bed gate until a silver or yellow
+ * edge counts as the sheet. When that gate does not yield a card-sized
+ * quad, the measurement is retried with the uncropped sheet's bed colour.
+ * A card-sized result from the crop is kept, so a lower sheet gate cannot
+ * move a card that was already found.
+ *
  * A 180° pair cancels a directional scanner bias. The answer-key value is
  * the mean of the two orientations. An axis is kept only when the bias
  * estimated from each of its two sides agrees. The bias is reported and
@@ -1282,9 +1289,24 @@ function summarizeDesign(stations) {
   };
 }
 
-function measureImage(data, w, h, dpi) {
+function measureImage(data, w, h, dpi, bedModel) {
   const ppm = pxPerMm(dpi);
   const paperModel = estimatePaper(data, w, h);
+  const first = measureWithPaper(data, w, h, dpi, ppm, paperModel);
+  // A tight crop's corners include the card, so this gate rises until silver
+  // and yellow count as the pink bed and the quad keeps only the dark half.
+  // The uncropped sheet's corners are the bed. Use that gate when the crop
+  // gate did not find a card.
+  const missed = !first.ok || !first.sizeOk;
+  if (missed && bedModel && isFinite(bedModel.threshold) &&
+      bedModel.threshold + 1 < paperModel.threshold) {
+    const retry = measureWithPaper(data, w, h, dpi, ppm, bedModel);
+    if (retry.ok && retry.sizeOk) return retry;
+  }
+  return first;
+}
+
+function measureWithPaper(data, w, h, dpi, ppm, paperModel) {
   const bbox = largestComponentBBox(data, w, h, paperModel.paper, paperModel.threshold);
   if (!bbox) {
     return { ok: false, error: 'no-card', dpi: dpi };
@@ -1584,7 +1606,8 @@ function esc(s) {
 // The cyan line follows the outline points. A single depth at the median
 // cuts through a tilted frame on the side where the frame is closer to the cut.
 function outlinePolyline(side, dpi) {
-  if (!side || !side.edge || side.mm == null) return null;
+  const hasPts = side && ((side.used && side.used.length >= 2) || (side.points && side.points.length >= 2));
+  if (!side || !side.edge || (side.mm == null && !hasPts)) return null;
   const ppm = pxPerMm(dpi);
   const a = side.edge.a;
   const b = side.edge.b;
@@ -1671,17 +1694,15 @@ function buildOverlaySvg(result, geom) {
       const py = p.y + side.edge.ny * p.depth * pxPerMm(result.dpi);
       parts.push('<circle cx="' + sx(px) + '" cy="' + sy(py) + '" r="' + (pointR + 1.5) + '" fill="none" stroke="#ffffff" stroke-width="' + Math.max(1, stroke * 0.35) + '"/>');
     });
-    if (!side.withheld && side.mm != null) {
-      const poly = outlinePolyline(side, result.dpi) || [];
-      if (poly.length >= 2) {
-        const pointsAttr = poly.map(function (p) { return sx(p.x) + ',' + sy(p.y); }).join(' ');
-        parts.push(
-          '<polyline points="' + pointsAttr + '" fill="none" stroke="#000000" stroke-width="' + (stroke + 2) + '" stroke-linejoin="round"/>'
-        );
-        parts.push(
-          '<polyline points="' + pointsAttr + '" fill="none" stroke="#3ee0ff" stroke-width="' + stroke + '" stroke-linejoin="round"/>'
-        );
-      }
+    const poly = outlinePolyline(side, result.dpi) || [];
+    if (poly.length >= 2) {
+      const pointsAttr = poly.map(function (p) { return sx(p.x) + ',' + sy(p.y); }).join(' ');
+      parts.push(
+        '<polyline points="' + pointsAttr + '" fill="none" stroke="#000000" stroke-width="' + (stroke + 2) + '" stroke-linejoin="round"/>'
+      );
+      parts.push(
+        '<polyline points="' + pointsAttr + '" fill="none" stroke="#3ee0ff" stroke-width="' + stroke + '" stroke-linejoin="round"/>'
+      );
     }
     if (!labels) return;
     const labelX = (side.edge.a.x + side.edge.b.x) / 2 + side.edge.nx * 40 / scale;
@@ -1689,9 +1710,13 @@ function buildOverlaySvg(result, geom) {
     const tiltNote = side.tiltDeg == null || !isFinite(side.tiltDeg)
       ? ''
       : '  tilt ' + side.tiltDeg.toFixed(2) + '°';
+    const covNote = side.coverage == null ? '' : '  cov ' + Math.round(side.coverage * 100) + '%';
+    const confNote = side.confidence == null ? '' : '  conf ' + side.confidence.toFixed(2);
+    const shown = side.mm != null ? side.mm : candidateDepth(side);
     const text = side.withheld
-      ? name + ' withheld' + (side.reason ? ' (' + side.reason + ')' : '') + tiltNote
-      : name + ' ' + side.mm.toFixed(2) + ' mm' + tiltNote;
+      ? name + ' withheld' + (side.reason ? ' (' + side.reason + ')' : '') +
+        (shown == null ? '' : '  candidate ' + shown.toFixed(2) + ' mm') + covNote + confNote + tiltNote
+      : name + ' ' + side.mm.toFixed(2) + ' mm' + covNote + confNote + tiltNote;
     const anchor = name === 'right' ? 'end' : (name === 'left' ? 'start' : 'middle');
     parts.push(
       '<text x="' + sx(labelX) + '" y="' + sy(labelY) + '" fill="#ffffff" font-size="22" font-family="sans-serif" stroke="#000000" stroke-width="3" paint-order="stroke" text-anchor="' + anchor + '" dominant-baseline="middle">' +
@@ -1869,7 +1894,8 @@ async function loadRaster(file) {
     full: { data: crop.data, width: crop.info.width, height: crop.info.height },
     origin: { x: left, y: top },
     sourceWidth: w,
-    sourceHeight: h
+    sourceHeight: h,
+    bedModel: paperModel
   };
 }
 
@@ -1898,7 +1924,7 @@ function shiftResult(result, origin) {
 async function measureFile(file, dpi) {
   const loaded = await loadRaster(file);
   if (loaded.error) return { ok: false, error: loaded.error, dpi: dpi };
-  const result = measureImage(loaded.full.data, loaded.full.width, loaded.full.height, dpi);
+  const result = measureImage(loaded.full.data, loaded.full.width, loaded.full.height, dpi, loaded.bedModel);
   return shiftResult(result, loaded.origin);
 }
 
@@ -2229,12 +2255,27 @@ function reviewCaption(text, width) {
   );
 }
 
+function candidateDepth(side) {
+  const pts = (side.used && side.used.length) ? side.used : (side.points || []);
+  const depths = [];
+  for (let i = 0; i < pts.length; i++) {
+    if (pts[i] && isFinite(pts[i].depth)) depths.push(pts[i].depth);
+  }
+  return median(depths);
+}
+
 function sideCaption(side, result) {
   const s = result && result.sides && result.sides[side];
   if (!s) return side + '  no edge';
   const tilt = s.tiltDeg == null || !isFinite(s.tiltDeg) ? '' : '   tilt ' + s.tiltDeg.toFixed(2) + '°';
-  if (s.withheld || s.mm == null) return side + '  withheld' + (s.reason ? ' (' + s.reason + ')' : '') + tilt;
-  return side + '  ' + s.mm.toFixed(3) + ' mm' + tilt;
+  const cov = s.coverage == null ? '' : '   cov ' + Math.round(s.coverage * 100) + '%';
+  const conf = s.confidence == null ? '' : '   conf ' + s.confidence.toFixed(2);
+  const shown = s.mm != null ? s.mm : candidateDepth(s);
+  if (s.withheld || s.mm == null) {
+    const cand = shown == null ? '' : '   candidate ' + shown.toFixed(3) + ' mm';
+    return side + '  withheld' + (s.reason ? ' (' + s.reason + ')' : '') + cand + cov + conf + tilt;
+  }
+  return side + '  ' + s.mm.toFixed(3) + ' mm' + cov + conf + tilt;
 }
 
 async function writeCardReviewSheet(cardId, scans, dest) {
@@ -2805,6 +2846,64 @@ async function selfTest() {
     check('patch leaves the other sides', near(patchM.sides.bottom.mm, 3.4, 0.12) && !patchM.sides.bottom.withheld,
       sideBrief(patchM.sides.bottom));
   }
+
+  // A grey border then a yellow panel. A minority of each corner is card
+  // ink, the way a tight crop is: the median stays the pink bed, the 98th
+  // percentile lifts the gate past the grey, and the sheet gate does not.
+  const silver = drawSynthetic({
+    dpi: dpi,
+    marginMm: 8,
+    cardWmm: NOMINAL_W_MM,
+    cardHmm: NOMINAL_H_MM,
+    pink: [209, 137, 149],
+    white: [190, 190, 190],
+    photo: [255, 225, 104],
+    frameMm: 0.4,
+    top: constantEdge(3.2, [255, 225, 104], []),
+    bottom: constantEdge(3.2, [255, 225, 104], []),
+    left: constantEdge(3.2, [255, 225, 104], []),
+    right: constantEdge(3.2, [255, 225, 104], [])
+  });
+  const silverCw = Math.max(4, Math.round(silver.width * 0.06));
+  const silverCh = Math.max(4, Math.round(silver.height * 0.06));
+  const silverCorners = [
+    [0, 0],
+    [silver.width - silverCw, 0],
+    [0, silver.height - silverCh],
+    [silver.width - silverCw, silver.height - silverCh]
+  ];
+  silverCorners.forEach(function (origin) {
+    for (let y = origin[1]; y < origin[1] + silverCh; y++) {
+      for (let x = origin[0]; x < origin[0] + silverCw; x++) {
+        if (((x + y) % 6) !== 0) continue;
+        const i = (y * silver.width + x) * 3;
+        silver.data[i] = 40;
+        silver.data[i + 1] = 30;
+        silver.data[i + 2] = 20;
+      }
+    }
+  });
+  const silverCrop = measureImage(silver.data, silver.width, silver.height, dpi);
+  check('silver-yellow crop gate misses the card', !silverCrop.ok || silverCrop.sizeOk === false,
+    silverCrop.ok ? silverCrop.cardMm : silverCrop.error);
+  const silverM = measureImage(silver.data, silver.width, silver.height, dpi, {
+    paper: [209, 137, 149],
+    threshold: 60
+  });
+  check('silver-yellow card found', silverM.ok && silverM.sizeOk, silverM.ok ? silverM.cardMm : silverM.error);
+  if (silverM.ok) {
+    check('silver-yellow keeps the outer edge',
+      near(silverM.cardMm.width, NOMINAL_W_MM, 1.2) && near(silverM.cardMm.height, NOMINAL_H_MM, 1.2),
+      silverM.cardMm);
+  }
+  const kept = measureImage(partial.data, partial.width, partial.height, dpi, {
+    paper: pink,
+    threshold: 8
+  });
+  check('size-ok card keeps its own gate',
+    kept.ok && kept.sizeOk && partialM.sides.top.mm === kept.sides.top.mm &&
+    near(kept.cardMm.width, partialM.cardMm.width, 0.001),
+    { own: partialM.cardMm, kept: kept.ok ? kept.cardMm : kept.error });
 
   const slant = drawSynthetic({
     dpi: dpi,
