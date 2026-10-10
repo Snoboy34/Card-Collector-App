@@ -34,6 +34,8 @@ npm run start:lan  # https://<en0-ip>:5000  (self-signed; required for phone cam
 npm run test:judge # formula regression (no image I/O)
 ```
 
+Scan uploads, saved grades, and debug overlays go to a private repo, not this one. After a session on the iMac run `bash scripts/push_scan_data.sh`. One-time setup and the gate command that checks TD-01..TD-06 are in `docs/scan-data.md`.
+
 `start:lan` reads the Mac's current Wi-Fi address with `ipconfig getifaddr en0`
 (never a hardcoded IP), mints a self-signed cert whose SAN covers that address,
 and serves HTTPS so Safari will grant `getUserMedia`. Open the printed
@@ -53,6 +55,19 @@ Uploads land in `./uploads`. Swap that for object storage before production.
 | `name`   | no       | display name |
 | `cardType` | no     | reserved for sports vs TCG corner templates |
 | `debug`  | no       | `"true"` attaches metrology dumps. The scan UI always sends this while we settle printed-frame vs backdrop. |
+| `scanId` | no       | client UUID, echoed and logged |
+| `cardQuad` | no     | JSON `{tl,tr,br,bl}` card corners in upload pixels (native Vision). With `quadImageWidth`, `quadImageHeight`, `quadConfidence`. |
+
+Card box: the server grades only the card. It uses `cardQuad` if valid, else
+its own detector; the card is perspective-warped to 643×900 before any
+metrology. If neither finds a card the response is
+`422 { ok: false, error: "card not found", reason, scanId, report }`, nothing
+is saved to inventory, and the attempt is appended to
+`data/failed_scans.jsonl`. Keep a little background visible around the card.
+
+SUR and EDG are reported as not measured (`null`) until their detectors are
+validated on printed borders, and CRN is always `null`; a report without
+CEN, SUR, and EDG is `incomplete` with `finalScore: null`.
 
 Response: `{ ok: true, item }` where `item.gradingReport` includes:
 
@@ -67,6 +82,43 @@ centeringDiagnostics    always-on box vs photo size, print-border px, printed-fr
 ```
 
 `POST /api/grade/upload` is the disk-backed twin of the same pipeline.
+
+Border finder (per edge, on the 643×900 warp): a per-depth median profile
+across the middle 60% of the edge, a trigger of 4σ of the border's own
+pixels (8–40), 15 voting lines where the outermost group of ≥6 agreeing hits
+(≤3px apart) is the border, and a 12% maximum inward depth. The edge is
+located at half the step height. An opposite-border share past 75/25 is a
+flag only. `node scripts/verify_top_edge.js` covers the pale-strip,
+corner-logo, glare, miscut, and depth-cap cases.
+
+Centering resolution: borders are measured on a second warp at the card's
+own decoded resolution (up to 2400 px tall, ≈20+ px/mm on a 12 MP neon
+crop); every other detector stays on 643×900. Finder constants scale with
+the warp so they keep the same physical size, widths are reported in
+643×900-equivalent px (for thresholds) and in mm
+(`centeringMetrics.borderWidthsMm`, card = 63.5 × 88.9 mm), and the cut is
+tightened with sub-pixel precision at that resolution. Pass
+`centeringResolution: 'standard'` to force the 643×900 path.
+`node scripts/verify_centering_precision.js` compares both on 12 synthetic
+phone-like captures.
+
+Test deck: a fixed benchmark deck (`TD-01`…) registered on `/deck`
+(`data/test_deck.json`) with per-scan labels in `data/scan_labels.json`
+(deck card, pre-submission, intended grader, and the returned grade).
+`/api/grade` accepts `deckId`, `preSubmission`, and `intendedGrader`.
+`/deck/report` and `node scripts/deck_report.js [--candidate <checkout>]`
+show the latest result per deck card vs the latest from a different engine,
+per-category pass rates, and ground truth per grading company (PSA, BGS, SGC,
+CGC, TAG, Other). Companies are not averaged together. A slab with no number
+is still listed. Every
+saved grade is stamped with `engine` (`ENGINE_VERSION` + git commit). See
+`docs/test-deck-protocol.md`.
+
+Scan dump: `node scripts/dump_scans.js [N] [scanIdPrefix]` prints the last N
+graded scans (`data/database.json`) and card-not-found attempts
+(`data/failed_scans.jsonl`): quad source, card box %, raw and tightened quad
+corners, border widths, per-line samples (`@offset position/threshold`),
+spread, L/R, T/B, sub-grades, and rejection reasons.
 
 ## Alignment viewport
 

@@ -68,6 +68,15 @@
 // `gradeBuffer` returns a documented fallback report instead of crashing
 // the Express process (keeps /api/health and the rest of the app alive).
 // -----------------------------------------------------------------------------
+const scanLevel = require('../public/scan_level');
+const cardQuad = require('./card_quad');
+const scanDebug = require('./scan_debug');
+const backScan = require('./back_scan');
+
+// Bump on any change that can move a saved number. Stamped on every report
+// so the deck report and re-grades can tell engines apart.
+const ENGINE_VERSION = '2026.10.01-border-band';
+
 let sharp = null;
 try {
   sharp = require('sharp');
@@ -101,30 +110,57 @@ const PSA10_CENTERING_MIN = 40.0;
 const PSA10_CENTERING_MAX = 60.0;
 
 /**
- * A printed border is a straight ink edge. Reliability uses the tightest
- * window of BORDER_SAMPLE_MIN_HITS hits (not max−min of all 7), so one
- * nameplate / photo step does not fail a real white frame.
+ * A printed border is a straight ink edge, any color. Reliability uses the
+ * tightest window of BORDER_SAMPLE_MIN_HITS hits (not max−min of every
+ * line), so one nameplate step does not fail a real frame.
  *
- * 12px at maxDim 900 is ~1.3% of the card — a nameplate can step that far
- * into a real ink frame. Star Rookie / Faulk neon-crop "frames" agreed
- * geometrically. Live 12px rescans showed their cut→photo band is as flat
- * as (or flatter than) a real white frame after normalize+blur, so texture
- * cannot be the discriminator. A vintage white frame is paper-white on the
- * un-normalized scan; a 90s photo-inset surround is not.
+ * Session exposure lock makes raw grey meaningful. The gate is no longer
+ * "paper-white, grey ≥ 165" — that rejected every non-white border. A band
+ * is a frame when it is uniform, distinct from the backdrop and from the
+ * interior, and the lines agree. Brightness alone is not a color.
+ *
+ * Median widths under 12px (643×900-equivalent) are still cut-edge slivers
+ * unless the lines agree tightly and the band passes that same check.
+ * 1.15 mm is about 11px here and is a real off-center border.
  */
 const BORDER_SAMPLE_SPREAD_MAX_PX = 12;
-/** Of the 7 attempted lines, at least this many must form the consensus window. */
+/** Of the attempted lines, at least this many must form the consensus window. */
 const BORDER_SAMPLE_MIN_HITS = 5;
-/** Median width below this is cut-edge AA / mat bleed, not a printed frame. */
+/** Default floor. Thinner than this needs the thin-border exception. */
 const BORDER_MIN_MEDIAN_WIDTH_PX = 12;
+/** Thinnest median still accepted when the lines agree and the band is real. */
+const BORDER_THIN_MIN_PX = 8;
+/** Thin exception: most of the 15 voting lines, not a 5-hit accident. */
+const BORDER_THIN_MIN_HITS = 12;
+/** Thin exception: the agreeing lines stay inside this spread. */
+const BORDER_THIN_MAX_SPREAD_PX = 6;
 /**
- * Un-normalized greyscale mean inside the putative border band.
- * Empirically this camera's neon-crop AE writes both white stock and
- * dark surrounds into ~105–152, so WHITE_BAND_MIN_GREY never fires on
- * live scans. The cutoff is frozen (not used as a new threshold) so
- * accept/reject stays unchanged while band-vs-interior is collected.
+ * Raw (un-normalized) stddev inside the border band. Chrome and full-bleed
+ * art sit well above this; flat ink, including a nameplate on one edge, does
+ * not. One noisy edge is allowed.
  */
-const WHITE_BAND_MIN_GREY = 165;
+const BORDER_BAND_UNIFORM_MAX = 28;
+/** How many edges may exceed the uniform cap before the frame is rejected. */
+const BORDER_BAND_NONUNIFORM_MAX = 1;
+/**
+ * Raw grey separation. With exposure lock, a real border is not the same
+ * grey as the pink backdrop or as the interior. 18 is enough for white
+ * stock on pink paper and for a colored border on either.
+ */
+const BORDER_BAND_DISTINCT_GREY = 18;
+/**
+ * Euclidean RGB distance. A grey border and a pink mat can share a
+ * luminance (both near 150) and still be different colors. 40 is a clear
+ * hue gap and above channel noise on a flat ink band.
+ */
+const BORDER_BAND_DISTINCT_RGB = 40;
+/**
+ * Thinnest single edge still accepted when the other three edges are
+ * already full borders. The finder cannot report anything inside the 6px
+ * inward guard, so this is that guard: one skinny side of a real frame,
+ * not a sliver around a borderless card.
+ */
+const BORDER_THIN_ANCHORED_MIN_PX = 6;
 /** BGS 10 centering window (48/52 — near 50/50). */
 const BGS10_CENTERING_MIN = 48.0;
 const BGS10_CENTERING_MAX = 52.0;
@@ -165,39 +201,62 @@ function clampLabGrade(value) {
 }
 
 /**
- * PHASE 1 — Centering sub-grade (PSA & BGS tolerances matrix).
+ * PHASE 1 — Centering sub-grade from the PSA front-centering table.
  *
  * Inputs are left/right and top/bottom print-border percentages that each
  * already sum to 100 (e.g. 55/45). The score is driven by the WORST axis
- * deviation, never an average of the two, so a perfect T/B cannot rescue a
- * blown L/R.
+ * (larger share on either axis), never an average, so a perfect T/B cannot
+ * rescue a blown L/R.
  *
- * Thresholds (The Judge.swift lines 42–48):
- *   maxDeviation <=  2.0  → 10.0   Perfect 50/50 tracking
- *   maxDeviation <=  4.0  →  9.5   BGS Pristine threshold
- *   maxDeviation <=  9.0  →  9.0   PSA 10 strict bound (≈ 55.5/44.5)
- *   maxDeviation <= 14.0  →  8.0   Near Mint 8 track
- *   maxDeviation <= 20.0  →  7.0
- *   otherwise             →  5.0
+ * Confirmed 2026-10-01 from screenshots of each grade slide on
+ * https://www.psacard.com/gradingstandards (docs/test-deck-protocol.md).
+ * Front: 10 = 55/45, 9 = 60/40, 8 = 65/35, 7 = 70/30, 6 = 80/20,
+ * 5 = 85/15, 4 = 85/15, 3 = 90/10, 2 = 90/10. Half-point grades 2.5–9.5
+ * focus on centering and are not separate rows.
+ *
+ * PSA publishes each grade as "approximately X/Y or better on the front";
+ * this uses the strict end of each published range. A shared bound keeps
+ * the best grade that bound allows:
+ *   worst share <= 55  → 10   (55/45)
+ *   worst share <= 60  →  9   (60/40)
+ *   worst share <= 65  →  8   (65/35)
+ *   worst share <= 70  →  7   (70/30)
+ *   worst share <= 80  →  6   (80/20)
+ *   worst share <= 85  →  5   (85/15; PSA 4 has the same front bound)
+ *   worst share <= 90  →  3   (90/10; PSA 2 has the same front bound)
+ *   otherwise          →  1
+ * Back centering is not a sub-grade. The comparison line uses
+ * PSA_BACK_CENTERING_TABLE in services/back_scan.js.
  *
  * @param {{ left: number, right: number }} leftRightRatio
  * @param {{ top: number, bottom: number }} topBottomRatio
- * @returns {{ score: number, maxDeviation: number, lrDiff: number, tbDiff: number }}
+ * @returns {{ score: number, worstSharePct: number, maxDeviation: number, lrDiff: number, tbDiff: number }}
  */
+const PSA_FRONT_CENTERING_TABLE = [
+  { maxShare: 55, score: 10.0 },
+  { maxShare: 60, score: 9.0 },
+  { maxShare: 65, score: 8.0 },
+  { maxShare: 70, score: 7.0 },
+  { maxShare: 80, score: 6.0 },
+  { maxShare: 85, score: 5.0 },
+  { maxShare: 90, score: 3.0 }
+];
+
 function scoreCenteringPhase(leftRightRatio, topBottomRatio) {
   const lrDiff = Math.abs(leftRightRatio.left - leftRightRatio.right);
   const tbDiff = Math.abs(topBottomRatio.top - topBottomRatio.bottom);
   const maxCenteringDeviation = Math.max(lrDiff, tbDiff);
+  const worstSharePct = 50 + maxCenteringDeviation / 2;
 
-  let centeringScore;
-  if (maxCenteringDeviation <= 2.0) centeringScore = 10.0;
-  else if (maxCenteringDeviation <= 4.0) centeringScore = 9.5;
-  else if (maxCenteringDeviation <= 9.0) centeringScore = 9.0;
-  else if (maxCenteringDeviation <= 14.0) centeringScore = 8.0;
-  else if (maxCenteringDeviation <= 20.0) centeringScore = 7.0;
-  else centeringScore = 5.0;
+  let centeringScore = 1.0;
+  for (let i = 0; i < PSA_FRONT_CENTERING_TABLE.length; i++) {
+    if (worstSharePct <= PSA_FRONT_CENTERING_TABLE[i].maxShare + 1e-9) {
+      centeringScore = PSA_FRONT_CENTERING_TABLE[i].score;
+      break;
+    }
+  }
 
-  return { score: centeringScore, maxDeviation: maxCenteringDeviation, lrDiff, tbDiff };
+  return { score: centeringScore, worstSharePct, maxDeviation: maxCenteringDeviation, lrDiff, tbDiff };
 }
 
 /**
@@ -318,7 +377,7 @@ function describePrimaryFlaw(args) {
   if (surface.surfaceCreaseDetected || surface.wrinkleOrCreaseSeverity >= 2) {
     return 'Capped Condition Grade. Volumetric frame processing tracked structural cardboard crease lines or soft wrinkles.';
   }
-  if (absoluteMaxCornerFray >= 3) {
+  if (args.cornersMeasured && absoluteMaxCornerFray >= 3) {
     return 'Pristine criteria broken due to corner layer separation or localized card paper splitting.';
   }
   if (finalSurfaceScore <= 8.5) {
@@ -365,7 +424,10 @@ function labelForFinalScore(finalScore) {
  * @param {{ leftRightRatio: {left:number, right:number}, topBottomRatio: {top:number, bottom:number} }} centering
  * @param {{ scratchCount: number, dimpleOrDentCount: number, surfaceCreaseDetected: boolean, wrinkleOrCreaseSeverity: number }} surface
  * @param {number} edgesWhiteningCount
- * @param {{ topLeftFrayingSeverity: number, topRightFrayingSeverity: number, bottomLeftFrayingSeverity: number, bottomRightFrayingSeverity: number }} corners
+ * @param {{ topLeftFrayingSeverity: number, topRightFrayingSeverity: number, bottomLeftFrayingSeverity: number, bottomRightFrayingSeverity: number }|null} corners
+ *   Pass a real fray reading to score CRN. Pass `null` when corners were
+ *   not measured — CRN is then omitted from the average and the 0.5 cap
+ *   (equal-weight mean of the remaining subs). Do not pass zeros to fake a 10.
  * @returns {object} CalculatedGrade-equivalent plus diagnostic ceiling fields
  */
 function evaluateMultiPhaseCondition(centering, surface, edgesWhiteningCount, corners) {
@@ -377,12 +439,7 @@ function evaluateMultiPhaseCondition(centering, surface, edgesWhiteningCount, co
     surfaceCreaseDetected: false,
     wrinkleOrCreaseSeverity: 0
   };
-  const cornerInput = corners || {
-    topLeftFrayingSeverity: 0,
-    topRightFrayingSeverity: 0,
-    bottomLeftFrayingSeverity: 0,
-    bottomRightFrayingSeverity: 0
-  };
+  const cornersMeasured = corners != null;
 
   // ----- Phase 1: Centering -----
   const centeringPhase = scoreCenteringPhase(leftRightRatio, topBottomRatio);
@@ -395,19 +452,25 @@ function evaluateMultiPhaseCondition(centering, surface, edgesWhiteningCount, co
   // ----- Phase 3: Edges -----
   const edgeScore = scoreEdgesPhase(edgesWhiteningCount);
 
-  // ----- Phase 4: Corners -----
-  const cornerPhase = scoreCornersPhase(cornerInput);
-  const cornerScore = cornerPhase.score;
-  const absoluteMaxCornerFray = cornerPhase.absoluteMaxCornerFray;
+  // ----- Phase 4: Corners (optional) -----
+  let cornerScore = null;
+  let absoluteMaxCornerFray = null;
+  if (cornersMeasured) {
+    const cornerPhase = scoreCornersPhase(corners);
+    cornerScore = cornerPhase.score;
+    absoluteMaxCornerFray = cornerPhase.absoluteMaxCornerFray;
+  }
 
   // ----- STRICT REAL-WORLD GRADE CEILING -----
   // A card cannot receive a final grade higher than 0.5 points above its
-  // lowest isolated sub-grade. This is the rule that stops a Gem-looking
-  // average from surviving a single 8.0 corner or a crease-killed surface.
-  const subGradesList = [centeringScore, finalSurfaceScore, edgeScore, cornerScore];
+  // lowest *measured* sub-grade. Unmeasured CRN is excluded from both the
+  // equal-weight average and the cap (it is not a 10).
+  const subGradesList = [centeringScore, finalSurfaceScore, edgeScore];
+  if (cornersMeasured) subGradesList.push(cornerScore);
   const lowestIsolatedSubGrade = Math.min.apply(null, subGradesList);
   const overallMathematicalAverage =
-    (centeringScore + finalSurfaceScore + edgeScore + cornerScore) / 4.0;
+    subGradesList.reduce(function (sum, score) { return sum + score; }, 0) /
+    subGradesList.length;
 
   const absoluteConditionCeilingLimit =
     lowestIsolatedSubGrade + GRADE_SCALE.conditionCeilingOffset;
@@ -427,14 +490,15 @@ function evaluateMultiPhaseCondition(centering, surface, edgesWhiteningCount, co
     surface: surfaceInput,
     absoluteMaxCornerFray,
     finalSurfaceScore,
-    centeringScore
+    centeringScore,
+    cornersMeasured
   });
 
   const subGradesDisplayLabel =
     'CEN: ' + centeringScore.toFixed(1) +
     ' | SUR: ' + finalSurfaceScore.toFixed(1) +
     ' | EDG: ' + edgeScore.toFixed(1) +
-    ' | CRN: ' + cornerScore.toFixed(1);
+    ' | CRN: ' + (cornersMeasured ? cornerScore.toFixed(1) : '—');
 
   const leftPct = leftRightRatio.left;
   const topPct = topBottomRatio.top;
@@ -457,8 +521,9 @@ function evaluateMultiPhaseCondition(centering, surface, edgesWhiteningCount, co
       centering: centeringScore,
       surface: finalSurfaceScore,
       edges: edgeScore,
-      corners: cornerScore
+      corners: cornersMeasured ? cornerScore : null
     },
+    cornersMeasured,
 
     // Ceiling diagnostics (not in the Swift struct; added so operators can
     // see WHEN the 0.5-point rule actually fired).
@@ -612,104 +677,6 @@ function findCardBoundingBox(pixels, width, height) {
   };
 }
 
-/**
- * Inward contrast scan for a single sample line. Port of
- * `CenteringAnalyzer.scanLineForBorder`:
- *   - baseline = mean of the first 4 pixels (the cut-edge border color)
- *   - adaptive threshold from the local 60px brightness range, floored at 12
- *     and capped at 50
- *   - require 5 consecutive pixels past the threshold (sustained run)
- *   - linearly interpolate a sub-pixel crossing
- *
- * @returns {{ pos: number, bandStddev: number|null, baseline: number, paperBandMean: number|null, paperBaseline: number|null }|null}
- */
-function scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight, getPaperPixel) {
-  const scanLength = (edge === 'left' || edge === 'right')
-    ? Math.floor(cardWidth / 2)
-    : Math.floor(cardHeight / 2);
-  if (scanLength <= 12) return null;
-
-  function pixelAt(i) {
-    switch (edge) {
-      case 'left': return getPixel(i, lineOffset);
-      case 'right': return getPixel(cardWidth - 1 - i, lineOffset);
-      case 'top': return getPixel(lineOffset, i);
-      default: return getPixel(lineOffset, cardHeight - 1 - i);
-    }
-  }
-
-  const profile = new Float32Array(scanLength);
-  for (let i = 0; i < scanLength; i++) profile[i] = pixelAt(i);
-
-  const baselineSampleCount = 4;
-  let baselineSum = 0;
-  for (let i = 0; i < baselineSampleCount; i++) baselineSum += profile[i];
-  const baseline = baselineSum / baselineSampleCount;
-
-  const localWindowSize = Math.min(scanLength, 60);
-  let localMin = profile[0];
-  let localMax = profile[0];
-  for (let i = 1; i < localWindowSize; i++) {
-    if (profile[i] < localMin) localMin = profile[i];
-    if (profile[i] > localMax) localMax = profile[i];
-  }
-  const localRange = localMax - localMin;
-  const adaptiveThreshold = Math.max(12, Math.min(50, Math.round(localRange * 0.2)));
-  const sustainedRunRequired = 5;
-
-  let i = baselineSampleCount;
-  while (i < scanLength - sustainedRunRequired) {
-    const signedDiff = profile[i] - baseline;
-    if (Math.abs(signedDiff) > adaptiveThreshold) {
-      let sustained = true;
-      for (let offset = 1; offset <= sustainedRunRequired; offset++) {
-        if (Math.abs(profile[i + offset] - baseline) <= adaptiveThreshold) {
-          sustained = false;
-          break;
-        }
-      }
-      if (sustained) {
-        const target = signedDiff > 0
-          ? baseline + adaptiveThreshold
-          : baseline - adaptiveThreshold;
-        const previous = profile[i - 1];
-        const current = profile[i];
-        const stepDelta = current - previous;
-        const fraction = stepDelta === 0 ? 0 : (target - previous) / stepDelta;
-        const clampedFraction = Math.max(0, Math.min(1, fraction));
-        const pos = (i - 1) + clampedFraction;
-        let paperBaseline = null;
-        let paperBandMean = null;
-        if (typeof getPaperPixel === 'function') {
-          function paperAt(idx) {
-            switch (edge) {
-              case 'left': return getPaperPixel(idx, lineOffset);
-              case 'right': return getPaperPixel(cardWidth - 1 - idx, lineOffset);
-              case 'top': return getPaperPixel(lineOffset, idx);
-              default: return getPaperPixel(lineOffset, cardHeight - 1 - idx);
-            }
-          }
-          const paperProfile = new Float32Array(scanLength);
-          for (let p = 0; p < scanLength; p++) paperProfile[p] = paperAt(p);
-          let paperSum = 0;
-          for (let p = 0; p < baselineSampleCount; p++) paperSum += paperProfile[p];
-          paperBaseline = paperSum / baselineSampleCount;
-          paperBandMean = bandMean(paperProfile, pos);
-        }
-        return {
-          pos: pos,
-          bandStddev: bandStddev(profile, pos),
-          baseline: baseline,
-          paperBandMean: paperBandMean,
-          paperBaseline: paperBaseline
-        };
-      }
-    }
-    i += 1;
-  }
-  return null;
-}
-
 function bandMean(profile, widthPx) {
   const start = 4;
   const end = Math.min(profile.length, Math.max(start + 4, Math.floor(widthPx) - 2));
@@ -734,56 +701,278 @@ function bandStddev(profile, widthPx) {
   return Math.sqrt(ss / (end - start));
 }
 
-/**
- * Seven-line median border width for one edge. Port of
- * `CenteringAnalyzer.findBorderWidth`. Returns null width if every sample
- * line failed — callers must NOT invent a fake 50/50 from a failed detection.
- *
- * `samples` is the raw hit list (already sorted) so a single still can show
- * whether T/B scan-lines disagree more than L/R (algorithm / keystone) vs.
- * only drifting across separate shots (camera pitch).
- *
- * @returns {{ width: number|null, samples: number[], bandStddev: number|null, baseline: number|null, paperBandMean: number|null, paperBaseline: number|null, attempted: number }}
- */
-function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
-  const sampleCount = 7;
-  const dimension = (edge === 'left' || edge === 'right') ? cardHeight : cardWidth;
-  const margin = Math.floor(dimension / 4);
-  const positions = [];
-  const stddevs = [];
-  const baselines = [];
-  const paperMeans = [];
-  const paperBaselines = [];
+// Stage C border finder (top-edge hop fix). The old per-line scan took 20%
+// of each line's 60px brightness range as its trigger, so a dark photo
+// area just inside a pale strip raised the trigger past the real
+// white-border→art step and the line stopped on the dark area instead.
+const EDGE_LINE_COUNT = 15;
+const EDGE_SPAN_START = 0.2;
+const EDGE_SPAN_END = 0.8;
+const EDGE_MAX_DEPTH_FRAC = 0.12;
+const EDGE_GROUP_MIN_FRAC = 0.4;
+const EDGE_GROUP_GAP_PX = 3;
+const EDGE_PROFILE_AGREE_PX = 4;
+const EDGE_TRIGGER_SIGMA = 4;
+const EDGE_TRIGGER_MIN = 8;
+const EDGE_TRIGGER_MAX = 40;
+// Minimum inward distance: nothing within 6px of the tightened cut edge is
+// a border. A cut-edge shadow, glare line, or a tighten a few px outside the
+// card reads as an early step there (5-scan run: hits at 3–8px). The noise
+// window and baseline also start here so a sliver cannot set the trigger.
+const EDGE_MIN_INWARD_PX = 6;
+const EDGE_BASELINE_PX = 4;
+const EDGE_SUSTAIN_PX = 3;
+const EDGE_LINE_HALF_WIDTH = 2;
+const EDGE_OPPOSITE_FLAG_SHARE = 75;
 
-  for (let sample = 0; sample < sampleCount; sample++) {
-    const span = dimension - 2 * margin;
-    const lineOffset = margin + Math.round(sample * span / (sampleCount - 1));
-    const hit = scanLineForBorder(getPixel, edge, lineOffset, cardWidth, cardHeight, getPaperPixel);
-    if (hit != null) {
-      positions.push(hit.pos);
-      if (hit.bandStddev != null) stddevs.push(hit.bandStddev);
-      if (hit.baseline != null) baselines.push(hit.baseline);
-      if (hit.paperBandMean != null) paperMeans.push(hit.paperBandMean);
-      if (hit.paperBaseline != null) paperBaselines.push(hit.paperBaseline);
+/**
+ * Pixel constants above are tuned on the 643×900 warp (≈10.1 px/mm). A
+ * finer centering warp scales them so each keeps the same physical size.
+ */
+function edgeParams(scale) {
+  const s = scale > 0 ? scale : 1;
+  return {
+    scale: s,
+    minInward: Math.round(EDGE_MIN_INWARD_PX * s),
+    baselinePx: Math.max(EDGE_BASELINE_PX, Math.round(EDGE_BASELINE_PX * s)),
+    sustainPx: Math.max(EDGE_SUSTAIN_PX, Math.round(EDGE_SUSTAIN_PX * s)),
+    lineHalfWidth: Math.max(EDGE_LINE_HALF_WIDTH, Math.round(EDGE_LINE_HALF_WIDTH * s)),
+    groupGap: EDGE_GROUP_GAP_PX * s,
+    profileAgree: EDGE_PROFILE_AGREE_PX * s
+  };
+}
+
+function edgeSampler(getPixel, edge, cardWidth, cardHeight) {
+  return function (along, depth) {
+    switch (edge) {
+      case 'left': return getPixel(depth, along);
+      case 'right': return getPixel(cardWidth - 1 - depth, along);
+      case 'top': return getPixel(along, depth);
+      default: return getPixel(along, cardHeight - 1 - depth);
+    }
+  };
+}
+
+/**
+ * First sustained step away from the border's own brightness, located at
+ * half the step height (not at the trigger), within maxDepth. Returns the
+ * border width in pixels (crossing + 0.5, i.e. count of border pixels).
+ */
+function detectBorderStep(profile, trigger, maxDepth, params) {
+  const pr = params || edgeParams(1);
+  const b0 = pr.minInward;
+  const b1 = pr.minInward + pr.baselinePx;
+  if (profile.length < b1 + pr.sustainPx + 3) return null;
+  let baseline = 0;
+  for (let i = b0; i < b1; i++) baseline += profile[i];
+  baseline /= (b1 - b0);
+  const last = Math.min(maxDepth, profile.length - pr.sustainPx - 3);
+  for (let i = b1; i <= last; i++) {
+    const d = profile[i] - baseline;
+    if (Math.abs(d) <= trigger) continue;
+    const sign = d > 0 ? 1 : -1;
+    let sustained = true;
+    for (let k = 1; k <= pr.sustainPx; k++) {
+      if ((profile[i + k] - baseline) * sign <= trigger) { sustained = false; break; }
+    }
+    if (!sustained) continue;
+    // Plateau = where the step has finished (profile flattens), not the
+    // pixels right after the trigger, which are still on the blurred slope
+    // and pull the half-step crossing toward the cut.
+    const flatStep = Math.max(1, trigger / 4);
+    const flatLimit = Math.min(profile.length - 3, i + 4 * pr.sustainPx);
+    let k0 = i;
+    while (k0 < flatLimit && Math.abs(profile[k0 + 1] - profile[k0]) > flatStep) k0 += 1;
+    const plateau = (profile[k0] + profile[k0 + 1] + profile[k0 + 2]) / 3;
+    const half = (baseline + plateau) / 2;
+    // The trigger fires on the slope; the half-level crossing can be before
+    // it (sharp edge) or after it (soft edge). Find the first sample on the
+    // plateau side of `half`, then interpolate against the one before it.
+    let j = i;
+    if ((profile[j] - half) * sign > 0) {
+      while (j > b0 + 1 && (profile[j - 1] - half) * sign > 0) j -= 1;
+    } else {
+      while (j < k0 + 2 && (profile[j] - half) * sign <= 0) j += 1;
+    }
+    const before = profile[j - 1];
+    const after = profile[j];
+    const step = after - before;
+    const frac = step === 0 ? 0.5 : Math.max(0, Math.min(1, (half - before) / step));
+    return { width: (j - 1) + frac + 0.5, baseline: baseline, plateau: plateau };
+  }
+  return null;
+}
+
+function linearProfile(sample, along, halfWidth, alongMax, length) {
+  const out = new Float32Array(length);
+  const a0 = Math.max(0, along - halfWidth);
+  const a1 = Math.min(alongMax - 1, along + halfWidth);
+  for (let d = 0; d < length; d++) {
+    let sum = 0;
+    for (let a = a0; a <= a1; a++) sum += sample(a, d);
+    out[d] = sum / (a1 - a0 + 1);
+  }
+  return out;
+}
+
+/**
+ * Border width for one edge.
+ *   1. Straight-edge profile: per-depth MEDIAN across the middle 60% of the
+ *      edge. The printed border line is straight across the card, so it
+ *      survives; a logo or glare patch covering <50% of the span does not.
+ *   2. Trigger from the border's own noise (4σ of the first pixels, 8–40),
+ *      never from art deeper inside the card.
+ *   3. 15 lines vote; the outermost group of hits that agree (≤3px gaps,
+ *      ≥40% of lines) is the border. Lines outside it are listed as
+ *      outliers instead of failing the whole edge.
+ *   4. Nothing deeper than 12% of the card dimension counts as a border,
+ *      and nothing within 6px of the cut does either.
+ * Returns null width if no group qualifies — never a fake 50/50.
+ */
+/**
+ * Border width for one edge, reported in 643×900-equivalent pixels whatever
+ * raster it was measured on (so reliability thresholds, dumps, and
+ * oriented.jpg keep one unit). `scale` = measured raster height / 900.
+ */
+function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel, scale) {
+  const s = scale > 0 ? scale : 1;
+  const r = findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperPixel, s);
+  if (s === 1) return r;
+  const div = function (v) { return v == null ? v : v / s; };
+  r.width = div(r.width);
+  r.samples = (r.samples || []).map(div);
+  r.lines = (r.lines || []).map(function (l) {
+    return Object.assign({}, l, { at: Math.round(l.at / s), pos: l.pos == null ? null : round2(l.pos / s) });
+  });
+  r.profileWidth = r.profileWidth == null ? null : round2(r.profileWidth / s);
+  r.maxDepthPx = Math.round(r.maxDepthPx / s);
+  return r;
+}
+
+function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperPixel, scale) {
+  const pr = edgeParams(scale);
+  const horizontalScan = edge === 'left' || edge === 'right';
+  const alongMax = horizontalScan ? cardHeight : cardWidth;
+  const depthDim = horizontalScan ? cardWidth : cardHeight;
+  const maxDepth = Math.round(depthDim * EDGE_MAX_DEPTH_FRAC);
+  const length = Math.min(Math.floor(depthDim / 2), maxDepth + pr.sustainPx + 6);
+  const sample = edgeSampler(getPixel, edge, cardWidth, cardHeight);
+  const paperSample = typeof getPaperPixel === 'function'
+    ? edgeSampler(getPaperPixel, edge, cardWidth, cardHeight)
+    : null;
+  const a0 = Math.floor(alongMax * EDGE_SPAN_START);
+  const a1 = Math.floor(alongMax * EDGE_SPAN_END);
+
+  // Border noise → trigger.
+  const noise = [];
+  for (let a = a0; a < a1; a++) {
+    for (let d = pr.minInward; d < pr.minInward + pr.baselinePx; d++) noise.push(sample(a, d));
+  }
+  const sigma = stddev(noise) || 0;
+  const trigger = Math.max(EDGE_TRIGGER_MIN, Math.min(EDGE_TRIGGER_MAX, EDGE_TRIGGER_SIGMA * sigma));
+
+  // Straight-edge median profile.
+  const medianProfile = new Float32Array(length);
+  const column = new Float32Array(a1 - a0);
+  for (let d = 0; d < length; d++) {
+    for (let a = a0; a < a1; a++) column[a - a0] = sample(a, d);
+    const sorted = Array.from(column).sort(function (x, y) { return x - y; });
+    medianProfile[d] = sorted[Math.floor(sorted.length / 2)];
+  }
+  const profileHit = detectBorderStep(medianProfile, trigger, maxDepth, pr);
+  const profileWidth = profileHit ? profileHit.width : null;
+
+  // 15 voting lines.
+  const lines = [];
+  const hits = [];
+  for (let k = 0; k < EDGE_LINE_COUNT; k++) {
+    const along = a0 + Math.round(k * (a1 - 1 - a0) / (EDGE_LINE_COUNT - 1));
+    const lineProfile = linearProfile(sample, along, pr.lineHalfWidth, alongMax, length);
+    const hit = detectBorderStep(lineProfile, trigger, maxDepth, pr);
+    const line = { at: along, pos: hit ? round2(hit.width) : null, threshold: round2(trigger), inGroup: false };
+    lines.push(line);
+    if (hit) hits.push({ width: hit.width, baseline: hit.baseline, line: line, along: along, profile: lineProfile });
+  }
+
+  const flags = [];
+  const sortedHits = hits.slice().sort(function (x, y) { return x.width - y.width; });
+  const minGroup = Math.ceil(EDGE_LINE_COUNT * EDGE_GROUP_MIN_FRAC);
+  let group = null;
+  let start = 0;
+  for (let i = 1; i <= sortedHits.length; i++) {
+    if (i === sortedHits.length || sortedHits[i].width - sortedHits[i - 1].width > pr.groupGap) {
+      if (i - start >= minGroup) { group = sortedHits.slice(start, i); break; }
+      start = i;
     }
   }
 
-  if (!positions.length) {
-    return {
-      width: null, samples: [], bandStddev: null, baseline: null,
-      paperBandMean: null, paperBaseline: null, attempted: sampleCount
-    };
-  }
-  positions.sort(function (a, b) { return a - b; });
-  return {
-    width: median(positions),
-    samples: positions,
-    bandStddev: stddevs.length ? median(stddevs) : null,
-    baseline: baselines.length ? median(baselines) : null,
-    paperBandMean: paperMeans.length ? median(paperMeans) : null,
-    paperBaseline: paperBaselines.length ? median(paperBaselines) : null,
-    attempted: sampleCount
+  const base = {
+    lines: lines,
+    attempted: EDGE_LINE_COUNT,
+    trigger: round2(trigger),
+    profileWidth: profileWidth == null ? null : round2(profileWidth),
+    maxDepthPx: maxDepth,
+    flags: flags
   };
+  if (!group) {
+    flags.push(edge + ': no ' + minGroup + ' of ' + EDGE_LINE_COUNT + ' lines agree within ' +
+      EDGE_GROUP_GAP_PX + 'px (' + hits.length + ' hits)');
+    return Object.assign(base, {
+      width: null, samples: hits.map(function (h) { return h.width; }).sort(function (x, y) { return x - y; }),
+      bandStddev: null, baseline: null, paperBandMean: null, paperBandStddev: null, paperBaseline: null,
+      groupCount: 0, hitCount: hits.length, voteLowConfidence: false
+    });
+  }
+  group.forEach(function (h) { h.line.inGroup = true; });
+  const widths = group.map(function (h) { return h.width; });
+  const width = median(widths);
+  const outliers = hits.length - group.length;
+  if (outliers > 0) flags.push(edge + ': ' + outliers + ' line(s) outside the agreeing group');
+  const profileDisagrees = profileWidth != null && Math.abs(profileWidth - width) > pr.profileAgree;
+  if (profileDisagrees) {
+    flags.push(edge + ': straight-edge profile ' + round2(profileWidth / pr.scale) + 'px disagrees with voted ' +
+      round2(width / pr.scale) + 'px');
+  }
+  // The outermost agreeing group can be the smaller cluster (6 lines at the
+  // outer step, 9 at the real border). That is not a vote to score.
+  const minority = group.length * 2 <= hits.length;
+  if (minority) {
+    flags.push(edge + ': chosen group is a minority (' + group.length + ' of ' + hits.length + ' hits)');
+  }
+
+  const stddevs = [];
+  const paperMeans = [];
+  const paperStddevs = [];
+  const paperBaselines = [];
+  const baselines = [];
+  group.forEach(function (h) {
+    baselines.push(h.baseline);
+    const sd = bandStddev(h.profile, h.width);
+    if (sd != null) stddevs.push(sd);
+    if (paperSample) {
+      const paperProfile = linearProfile(paperSample, h.along, pr.lineHalfWidth, alongMax, length);
+      const pm = bandMean(paperProfile, h.width);
+      if (pm != null) paperMeans.push(pm);
+      const psd = bandStddev(paperProfile, h.width);
+      if (psd != null) paperStddevs.push(psd);
+      let pb = 0;
+      for (let d = pr.minInward; d < pr.minInward + pr.baselinePx; d++) pb += paperProfile[d];
+      paperBaselines.push(pb / pr.baselinePx);
+    }
+  });
+  const sortNum = function (arr) { return arr.slice().sort(function (x, y) { return x - y; }); };
+  return Object.assign(base, {
+    width: width,
+    samples: sortNum(widths),
+    bandStddev: stddevs.length ? median(sortNum(stddevs)) : null,
+    baseline: baselines.length ? median(sortNum(baselines)) : null,
+    paperBandMean: paperMeans.length ? median(sortNum(paperMeans)) : null,
+    paperBandStddev: paperStddevs.length ? median(sortNum(paperStddevs)) : null,
+    paperBaseline: paperBaselines.length ? median(sortNum(paperBaselines)) : null,
+    groupCount: group.length,
+    hitCount: hits.length,
+    voteLowConfidence: minority || profileDisagrees
+  });
 }
 
 /**
@@ -798,11 +987,12 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel) {
  *
  * @returns {{ leftRightRatio: {left:number, right:number}|null, topBottomRatio: {top:number, bottom:number}|null, detected: boolean, widths: object, samples: object }}
  */
-function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
-  const leftScan = findBorderWidth(getPixel, 'left', cardWidth, cardHeight, getPaperPixel);
-  const rightScan = findBorderWidth(getPixel, 'right', cardWidth, cardHeight, getPaperPixel);
-  const topScan = findBorderWidth(getPixel, 'top', cardWidth, cardHeight, getPaperPixel);
-  const bottomScan = findBorderWidth(getPixel, 'bottom', cardWidth, cardHeight, getPaperPixel);
+function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel, options) {
+  const scale = options && options.scale > 0 ? options.scale : 1;
+  const leftScan = findBorderWidth(getPixel, 'left', cardWidth, cardHeight, getPaperPixel, scale);
+  const rightScan = findBorderWidth(getPixel, 'right', cardWidth, cardHeight, getPaperPixel, scale);
+  const topScan = findBorderWidth(getPixel, 'top', cardWidth, cardHeight, getPaperPixel, scale);
+  const bottomScan = findBorderWidth(getPixel, 'bottom', cardWidth, cardHeight, getPaperPixel, scale);
 
   const leftW = leftScan.width;
   const rightW = rightScan.width;
@@ -813,6 +1003,12 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
     right: rightScan.samples,
     top: topScan.samples,
     bottom: bottomScan.samples
+  };
+  const sampleLines = {
+    left: leftScan.lines,
+    right: rightScan.lines,
+    top: topScan.lines,
+    bottom: bottomScan.lines
   };
   const bandStddev = {
     left: leftScan.bandStddev,
@@ -838,8 +1034,36 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
     top: topScan.paperBaseline,
     bottom: bottomScan.paperBaseline
   };
+  const paperBandStddev = {
+    left: leftScan.paperBandStddev,
+    right: rightScan.paperBandStddev,
+    top: topScan.paperBandStddev,
+    bottom: bottomScan.paperBandStddev
+  };
+  const voteLowConfidenceEdges = ['left', 'right', 'top', 'bottom'].filter(function (edge) {
+    return ({ left: leftScan, right: rightScan, top: topScan, bottom: bottomScan })[edge].voteLowConfidence;
+  });
 
   const detected = leftW != null && rightW != null && topW != null && bottomW != null;
+
+  // Opposite border is a sanity FLAG only: real miscuts go past 70/30.
+  const edgeFlags = [].concat(leftScan.flags || [], rightScan.flags || [], topScan.flags || [], bottomScan.flags || []);
+  function oppositeFlag(axis, aName, a, bName, b) {
+    if (a == null || b == null || a + b <= 0) return;
+    const share = 100 * Math.max(a, b) / (a + b);
+    if (share > EDGE_OPPOSITE_FLAG_SHARE) {
+      edgeFlags.push(axis + ' ' + round2(share) + '/' + round2(100 - share) + ' — check the ' +
+        (a > b ? aName : bName) + ' edge (flag only)');
+    }
+  }
+  oppositeFlag('L/R', 'left', leftW, 'right', rightW);
+  oppositeFlag('T/B', 'top', topW, 'bottom', bottomW);
+  const edgeProfiles = {
+    left: { trigger: leftScan.trigger, profileWidth: leftScan.profileWidth, maxDepthPx: leftScan.maxDepthPx },
+    right: { trigger: rightScan.trigger, profileWidth: rightScan.profileWidth, maxDepthPx: rightScan.maxDepthPx },
+    top: { trigger: topScan.trigger, profileWidth: topScan.profileWidth, maxDepthPx: topScan.maxDepthPx },
+    bottom: { trigger: bottomScan.trigger, profileWidth: bottomScan.profileWidth, maxDepthPx: bottomScan.maxDepthPx }
+  };
 
   if (!detected) {
     return {
@@ -848,10 +1072,15 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
       detected: false,
       widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
       samples: samples,
+      sampleLines: sampleLines,
+      edgeFlags: edgeFlags,
+      edgeProfiles: edgeProfiles,
       bandStddev: bandStddev,
       baselines: baselines,
       paperBandMean: paperBandMean,
-      paperBaselines: paperBaselines
+      paperBandStddev: paperBandStddev,
+      paperBaselines: paperBaselines,
+      voteLowConfidenceEdges: voteLowConfidenceEdges
     };
   }
 
@@ -868,10 +1097,15 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel) {
     detected: true,
     widths: { left: leftW, right: rightW, top: topW, bottom: bottomW },
     samples: samples,
+    sampleLines: sampleLines,
+    edgeFlags: edgeFlags,
+    edgeProfiles: edgeProfiles,
     bandStddev: bandStddev,
     baselines: baselines,
     paperBandMean: paperBandMean,
-    paperBaselines: paperBaselines
+    paperBandStddev: paperBandStddev,
+    paperBaselines: paperBaselines,
+    voteLowConfidenceEdges: voteLowConfidenceEdges
   };
 }
 
@@ -933,6 +1167,92 @@ function measureInteriorGrey(getPixel, cardWidth, cardHeight, widths) {
     sampleCount: samples.length,
     rect: { left: left, right: right, top: top, bottom: bottom }
   };
+}
+
+function rgbAt(data, w, h, ch, x, y) {
+  if (x < 0 || y < 0 || x >= w || y >= h || !data) return null;
+  const i = (y * w + x) * ch;
+  return { r: data[i], g: ch >= 3 ? data[i + 1] : data[i], b: ch >= 3 ? data[i + 2] : data[i] };
+}
+
+/**
+ * Mean RGB of the same window bandMean uses: skip 4px of cut-edge slop
+ * and the last 2px of the inner step. `widths` are 643×900-equivalent px;
+ * `scale` lifts them onto this raster.
+ */
+function sampleEdgeBandRgb(rgb, widths, scale) {
+  const out = { left: null, right: null, top: null, bottom: null };
+  if (!rgb || !rgb.data || !widths) return out;
+  const s = scale > 0 ? scale : 1;
+  const w = rgb.width;
+  const h = rgb.height;
+  const ch = rgb.channels || 3;
+  const data = rgb.data;
+  ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+    const width643 = widths[edge];
+    if (width643 == null || !isFinite(width643)) return;
+    const widthHi = width643 * s;
+    const start = 4;
+    const end = Math.max(start + 4, Math.floor(widthHi) - 2);
+    if (end - start < 4) return;
+    const horizontal = edge === 'left' || edge === 'right';
+    const alongMax = horizontal ? h : w;
+    const a0 = Math.floor(alongMax * EDGE_SPAN_START);
+    const a1 = Math.floor(alongMax * EDGE_SPAN_END);
+    const step = Math.max(1, Math.floor((a1 - a0) / 24));
+    let sr = 0;
+    let sg = 0;
+    let sb = 0;
+    let n = 0;
+    for (let a = a0; a < a1; a += step) {
+      for (let d = start; d < end; d++) {
+        let x;
+        let y;
+        if (edge === 'left') { x = d; y = a; }
+        else if (edge === 'right') { x = w - 1 - d; y = a; }
+        else if (edge === 'top') { x = a; y = d; }
+        else { x = a; y = h - 1 - d; }
+        const p = rgbAt(data, w, h, ch, x, y);
+        if (!p) continue;
+        sr += p.r;
+        sg += p.g;
+        sb += p.b;
+        n += 1;
+      }
+    }
+    if (n) out[edge] = { r: sr / n, g: sg / n, b: sb / n };
+  });
+  return out;
+}
+
+/** Interior RGB on the same inset rectangle measureInteriorGrey uses. */
+function sampleInteriorRgb(rgb, widths, scale) {
+  if (!rgb || !rgb.data) return null;
+  const s = scale > 0 ? scale : 1;
+  const scaled = {};
+  ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+    const v = widths && widths[edge];
+    scaled[edge] = (v != null && isFinite(v)) ? v * s : null;
+  });
+  const rect = measureInteriorGrey(function () { return 128; }, rgb.width, rgb.height, scaled).rect;
+  const ch = rgb.channels || 3;
+  let sr = 0;
+  let sg = 0;
+  let sb = 0;
+  let n = 0;
+  const step = 4;
+  for (let y = rect.top; y <= rect.bottom; y += step) {
+    for (let x = rect.left; x <= rect.right; x += step) {
+      const p = rgbAt(rgb.data, rgb.width, rgb.height, ch, x, y);
+      if (!p) continue;
+      sr += p.r;
+      sg += p.g;
+      sb += p.b;
+      n += 1;
+    }
+  }
+  if (!n) return null;
+  return { r: sr / n, g: sg / n, b: sb / n };
 }
 
 /**
@@ -1006,6 +1326,58 @@ function consensusRangePx(samples, windowSize) {
   return best;
 }
 
+function finiteOrNull(value) {
+  return typeof value === 'number' && isFinite(value) ? value : null;
+}
+
+function rgbOf(color) {
+  if (!color) return null;
+  const r = finiteOrNull(color.r);
+  const g = finiteOrNull(color.g);
+  const b = finiteOrNull(color.b);
+  if (r == null || g == null || b == null) return null;
+  return { r: r, g: g, b: b };
+}
+
+function rgbDistance(a, b) {
+  const left = rgbOf(a);
+  const right = rgbOf(b);
+  if (!left || !right) return null;
+  const dr = left.r - right.r;
+  const dg = left.g - right.g;
+  const db = left.b - right.b;
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+/**
+ * Distinct by luminance, or by color when the greys collide. A missing
+ * sample on both channels is not distinct.
+ */
+function bandIsDistinct(bandGrey, otherGrey, bandRgb, otherRgb) {
+  if (bandGrey != null && otherGrey != null &&
+      Math.abs(bandGrey - otherGrey) >= BORDER_BAND_DISTINCT_GREY) return true;
+  const dist = rgbDistance(bandRgb, otherRgb);
+  return dist != null && dist >= BORDER_BAND_DISTINCT_RGB;
+}
+
+/**
+ * A width under the 12px floor is still a printed border when most lines
+ * agree and the band is separated from both the table and the interior
+ * (by grey, or by color when the greys match). One edge of a frame whose
+ * other three edges are already full borders may be as thin as the inward
+ * guard. A card that is thin on every side stays rejected.
+ */
+function thinBorderAllowed(hits, medianWidth, consensus, bandGrey, interiorMean, backdropGrey, bandRgb, interiorRgb, backdropRgb, anchored) {
+  if (medianWidth == null || !isFinite(medianWidth)) return false;
+  const floor = anchored ? BORDER_THIN_ANCHORED_MIN_PX : BORDER_THIN_MIN_PX;
+  if (medianWidth < floor || medianWidth >= BORDER_MIN_MEDIAN_WIDTH_PX) return false;
+  if (hits < BORDER_THIN_MIN_HITS) return false;
+  if (consensus == null || consensus > BORDER_THIN_MAX_SPREAD_PX) return false;
+  if (!bandIsDistinct(bandGrey, interiorMean, bandRgb, interiorRgb)) return false;
+  if (!bandIsDistinct(bandGrey, backdropGrey, bandRgb, backdropRgb)) return false;
+  return true;
+}
+
 /**
  * Gate for "this is a real printed frame" vs "artwork / photo-edge guess".
  *
@@ -1013,16 +1385,18 @@ function consensusRangePx(samples, windowSize) {
  *   - any edge has fewer than BORDER_SAMPLE_MIN_HITS successful lines
  *   - the tightest BORDER_SAMPLE_MIN_HITS-hit window on any edge exceeds
  *     BORDER_SAMPLE_SPREAD_MAX_PX (outliers are ignored)
- *   - any edge's median width is below BORDER_MIN_MEDIAN_WIDTH_PX
- *   - any edge's un-normalized band mean is below WHITE_BAND_MIN_GREY
- *     (navy / foil surround, not paper-white ink)
+ *   - any edge's median width is below BORDER_MIN_MEDIAN_WIDTH_PX, unless
+ *     it is a thin real border (lines agree and the band is uniform and
+ *     distinct from the backdrop and the interior)
+ *   - the raw border band is not uniform (more than one edge), or is not
+ *     distinct from the backdrop or the interior, when those samples exist
  *   - measurePrintCentering already failed (detected === false)
  *
  * A box that touches the photo edge is a hard reject unless this still was
  * cropped to the neon alignment frame (`alignmentCrop`). After that crop the
- * image edges ARE the cut. Borderless 90s cards (Star Rookie, Faulk) still
- * find a rectangular photo inset that agrees geometrically and can look
- * flat after normalize. Paper-white on the raw scan is the discriminator.
+ * image edges ARE the cut. Color is not a gate: a blue or yellow frame is
+ * a frame. A borderless or chrome card stays undetectable because its band
+ * is not a uniform strip distinct from both the table and the printed interior.
  *
  * @returns {{ accepted: boolean, thresholdPx: number, minHits: number, minMedianWidthPx: number, sampleRangePx: object, consensusRangePx: object, edgeTouchesImage: object, reasons: string[] }}
  */
@@ -1066,8 +1440,25 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
   const bandStddev = measurement.bandStddev || {};
   const baselines = measurement.baselines || {};
   const paperBandMean = measurement.paperBandMean || {};
+  const paperBandStddev = measurement.paperBandStddev || {};
   const paperBaselines = measurement.paperBaselines || {};
+  const interiorMean = finiteOrNull(opts.interiorGrey && opts.interiorGrey.mean);
+  const interiorRgb = rgbOf(opts.interiorGrey && opts.interiorGrey.rgb);
+  const backdropGrey = finiteOrNull(opts.backdrop && opts.backdrop.grey);
+  const backdropRgb = rgbOf(opts.backdrop);
+  const paperBandRgb = measurement.paperBandRgb || {};
   const edges = ['left', 'right', 'top', 'bottom'];
+  const nonUniform = [];
+  function edgeAnchored(edge) {
+    let solid = 0;
+    for (let k = 0; k < edges.length; k++) {
+      if (edges[k] === edge) continue;
+      const sibling = widths[edges[k]];
+      if (sibling != null && typeof sibling === 'number' && isFinite(sibling) &&
+          sibling >= BORDER_MIN_MEDIAN_WIDTH_PX) solid += 1;
+    }
+    return solid >= 3;
+  }
   for (let i = 0; i < edges.length; i++) {
     const edge = edges[i];
     const hits = (samples[edge] && samples[edge].length) || 0;
@@ -1080,19 +1471,43 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
         'px exceeds ' + BORDER_SAMPLE_SPREAD_MAX_PX + 'px'
       );
     }
+    const bandGrey = finiteOrNull(paperBandMean[edge]) != null
+      ? paperBandMean[edge]
+      : finiteOrNull(paperBaselines[edge]);
+    const bandRgb = rgbOf(paperBandRgb[edge]);
+    const thinAgreed = thinBorderAllowed(
+      hits, medianWidth, consensusRange[edge], bandGrey, interiorMean, backdropGrey,
+      bandRgb, interiorRgb, backdropRgb, edgeAnchored(edge)
+    );
     if (medianWidth != null && typeof medianWidth === 'number' && isFinite(medianWidth) &&
-        medianWidth < BORDER_MIN_MEDIAN_WIDTH_PX) {
+        medianWidth < BORDER_MIN_MEDIAN_WIDTH_PX && !thinAgreed) {
       reasons.push(
         edge + ' median width ' + round2(medianWidth) +
         'px is below ' + BORDER_MIN_MEDIAN_WIDTH_PX + 'px'
       );
     }
-    if (paperBandMean[edge] != null && paperBandMean[edge] < WHITE_BAND_MIN_GREY) {
+    const rawSd = finiteOrNull(paperBandStddev[edge]);
+    if (rawSd != null && rawSd > BORDER_BAND_UNIFORM_MAX) nonUniform.push(edge);
+    if (bandGrey != null && interiorMean != null &&
+        !bandIsDistinct(bandGrey, interiorMean, bandRgb, interiorRgb)) {
       reasons.push(
-        edge + ' paper-band grey ' + round2(paperBandMean[edge]) +
-        ' is below ' + WHITE_BAND_MIN_GREY + ' (not a white printed frame)'
+        edge + ' border band grey ' + round2(bandGrey) +
+        ' is not distinct from the interior (' + round2(interiorMean) + ')'
       );
     }
+    if (bandGrey != null && backdropGrey != null &&
+        !bandIsDistinct(bandGrey, backdropGrey, bandRgb, backdropRgb)) {
+      reasons.push(
+        edge + ' border band grey ' + round2(bandGrey) +
+        ' is not distinct from the background (' + round2(backdropGrey) + ')'
+      );
+    }
+  }
+  if (nonUniform.length > BORDER_BAND_NONUNIFORM_MAX) {
+    reasons.push(
+      'border band is not uniform on ' + nonUniform.join(', ') +
+      ' (raw stddev above ' + BORDER_BAND_UNIFORM_MAX + ')'
+    );
   }
 
   const baselineVals = edges.map(function (edge) { return baselines[edge]; }).filter(function (v) {
@@ -1193,6 +1608,9 @@ function describeBorderSource(args) {
   const widths = args.widths || { left: null, right: null, top: null, bottom: null };
   const samples = args.samples || {};
   const detected = Boolean(args.detected);
+  // Graded on the perspective-warped card: the raster IS the card, so a
+  // "box fills the photo" signal says nothing about backdrop vs frame.
+  const warped = Boolean(args.warped);
 
   const imageArea = Math.max(1, imageWidth * imageHeight);
   const boxArea = Math.max(0, (Number(box.width) || 0) * (Number(box.height) || 0));
@@ -1219,8 +1637,13 @@ function describeBorderSource(args) {
     bandStddev: args.bandStddev,
     baselines: args.baselines,
     paperBandMean: args.paperBandMean,
+    paperBandStddev: args.paperBandStddev,
     paperBaselines: args.paperBaselines
-  }, { alignmentCrop: Boolean(args.alignmentCrop) });
+  }, {
+    alignmentCrop: Boolean(args.alignmentCrop),
+    interiorGrey: args.interiorGrey,
+    backdrop: args.backdrop
+  });
 
   const bandVsInterior = args.bandVsInterior ||
     describeBandVsInterior(args.paperBandMean, args.interiorGrey);
@@ -1232,12 +1655,15 @@ function describeBorderSource(args) {
     summary = reliability.reasons.length
       ? ('Print border not usable: ' + reliability.reasons.join('; ') + '. Treat as unknown, not 50/50.')
       : 'No sustained print border on at least one edge. Treat as unknown, not 50/50.';
-  } else if (thin && uniform && boxFillRatio >= 0.88) {
+  } else if (!warped && thin && uniform && boxFillRatio >= 0.88) {
     hint = 'likely-backdrop';
     summary = 'Border of only a few pixels, nearly uniform, and the card box fills the photo. Likely measuring backdrop/mat (or cut-edge anti-alias), not a printed frame.';
   } else if (thin && uniform) {
     hint = 'thin-ambiguous';
     summary = 'Border of only a few pixels on all sides. Could be cut-edge anti-alias or a very thin printed line — not a typical sports-card frame.';
+  } else if (substantial && warped) {
+    hint = 'likely-printed-frame';
+    summary = 'Tens of pixels of border on the warped card and the sample lines agree. This matches a printed white/colored frame measured inward from the located card edge.';
   } else if (substantial) {
     hint = 'likely-printed-frame';
     summary = boxFillRatio >= 0.90
@@ -1245,7 +1671,9 @@ function describeBorderSource(args) {
       : 'Tens of pixels of border with the card box inset from the photo edge. This pattern matches a real printed frame. Uneven left vs right strengthens that reading.';
   } else {
     hint = 'needs-review';
-    summary = 'Border widths sit between "thin mat-bleed" and "clear printed frame." Compare L/R vs T/B sample spreads and reshoot with the card filling the neon frame.';
+    summary = warped
+      ? 'Border widths sit between "thin cut-edge line" and "clear printed frame." Compare L/R vs T/B sample spreads and reshoot.'
+      : 'Border widths sit between "thin mat-bleed" and "clear printed frame." Compare L/R vs T/B sample spreads and reshoot with the card filling the neon frame.';
   }
 
   let axisSpreadNote = null;
@@ -1291,7 +1719,10 @@ function describeBorderSource(args) {
       right: (samples.right || []).map(round2),
       top: (samples.top || []).map(round2),
       bottom: (samples.bottom || []).map(round2)
-    }
+    },
+    sampleLines: args.sampleLines || null,
+    edgeFlags: args.edgeFlags || [],
+    edgeProfiles: args.edgeProfiles || null
   };
 }
 
@@ -1306,10 +1737,16 @@ function buildCenteringDiagnostics(width, height, box, centeringMeasurement, ext
     bandStddev: centeringMeasurement.bandStddev,
     baselines: centeringMeasurement.baselines,
     paperBandMean: centeringMeasurement.paperBandMean,
+    paperBandStddev: centeringMeasurement.paperBandStddev,
     paperBaselines: centeringMeasurement.paperBaselines,
     interiorGrey: extra.interiorGrey || centeringMeasurement.interiorGrey,
+    backdrop: extra.backdrop || null,
     bandVsInterior: extra.bandVsInterior || centeringMeasurement.bandVsInterior,
     alignmentCrop: Boolean(extra.alignmentCrop),
+    warped: Boolean(extra.warped),
+    sampleLines: centeringMeasurement.sampleLines || null,
+    edgeFlags: centeringMeasurement.edgeFlags || [],
+    edgeProfiles: centeringMeasurement.edgeProfiles || null,
     detected: centeringMeasurement.detected
   });
 }
@@ -1352,9 +1789,18 @@ function peakBrightnessInRect(pixels, imgWidth, x0, y0, x1, y1) {
   return peak;
 }
 
+function normalizeScanId(raw) {
+  if (raw == null) return null;
+  const text = String(raw).trim();
+  if (!/^[A-Za-z0-9._-]{8,80}$/.test(text)) return null;
+  return text;
+}
+
 /**
  * PHASE 4 metrology: independent 0–5 fray reading at each corner square.
  * Sample size is ~8% of the short card side (DefectAnalyzer.swift).
+ * Do not pass this into evaluateMultiPhaseCondition — Stage A holds CRN
+ * at 10 until a real fray detector exists.
  */
 function measureCornerFraying(pixels, imgWidth, box) {
   const cornerSize = Math.max(20, Math.round(Math.min(box.width, box.height) * 0.08));
@@ -1572,28 +2018,624 @@ function measureSurfaceDefects(pixels, blurred, imgWidth, box) {
 }
 
 /**
+ * Surface-only metrology for a sweep still. Does not score, does not set
+ * incomplete, and must not be used as a substitute for gradeBuffer.
+ *
+ * @returns {Promise<{ scratchCount: number|null, dimpleCount: number|null, creaseSeverity: number|null, glareFrac: number|null, error?: string }>}
+ */
+async function diagnoseSurfaceBuffer(buffer, options) {
+  options = Object.assign({ maxDim: 900 }, options || {});
+  if (!sharp || !buffer || !buffer.length) {
+    return {
+      scratchCount: null,
+      dimpleCount: null,
+      creaseSeverity: null,
+      glareFrac: null,
+      error: 'unreadable'
+    };
+  }
+  try {
+    const located = await locateCard(buffer, { cardQuad: options.cardQuad });
+    if (!located.found) {
+      return {
+        scratchCount: null,
+        dimpleCount: null,
+        creaseSeverity: null,
+        glareFrac: null,
+        error: 'card not found',
+        quadSource: 'none'
+      };
+    }
+    const warped = located.warped;
+    const pipeline = sharp(warped.data, {
+      raw: { width: warped.width, height: warped.height, channels: warped.channels }
+    });
+    const { data: paperData, info: paperInfo } = await pipeline
+      .clone()
+      .greyscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const { data, info } = await pipeline
+      .greyscale()
+      .normalize()
+      .blur(1)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const width = info.width;
+    const height = info.height;
+    const pixels = new Uint8Array(data);
+    const paperPixels = new Uint8Array(paperData);
+    if (paperInfo.width !== width || paperInfo.height !== height) {
+      throw new Error('paper greyscale size does not match normalized scan');
+    }
+    const { data: blurredData } = await sharp(Buffer.from(pixels), {
+      raw: { width, height, channels: 1 }
+    }).blur(4).raw().toBuffer({ resolveWithObject: true });
+    const blurred = new Uint8Array(blurredData);
+    const centeringBox = { left: 0, right: width - 1, top: 0, bottom: height - 1, width: width, height: height };
+    const getPaperPixel = function (cx, cy) {
+      const x = centeringBox.left + cx;
+      const y = centeringBox.top + cy;
+      if (x < 0 || y < 0 || x >= width || y >= height) return 0;
+      return paperPixels[y * width + x];
+    };
+    const interiorGrey = measureInteriorGrey(
+      getPaperPixel, centeringBox.width, centeringBox.height, null
+    );
+    const surface = measureSurfaceDefects(pixels, blurred, width, centeringBox);
+    return {
+      scratchCount: Number(surface.scratchCount) || 0,
+      dimpleCount: Number(surface.dimpleOrDentCount) || 0,
+      creaseSeverity: Number(surface.wrinkleOrCreaseSeverity) || 0,
+      glareFrac: interiorGrey.glareFrac == null ? null : round2(interiorGrey.glareFrac),
+      quadSource: located.detection.quadSource
+    };
+  } catch (err) {
+    return {
+      scratchCount: null,
+      dimpleCount: null,
+      creaseSeverity: null,
+      glareFrac: null,
+      error: err && err.message ? err.message : String(err)
+    };
+  }
+}
+
+function surfaceSweepEntryFromGrade(report, tilt, bin) {
+  const penalties = (report && report.surfacePenalties) || {};
+  const interior = report && report.centeringDiagnostics &&
+    report.centeringDiagnostics.bandVsInterior &&
+    report.centeringDiagnostics.bandVsInterior.interior;
+  return {
+    bin: bin || 'level',
+    pitch: tilt && tilt.pitchDeg != null ? tilt.pitchDeg : null,
+    roll: tilt && tilt.rollDeg != null ? tilt.rollDeg : null,
+    scratchCount: penalties.scratchCount != null ? penalties.scratchCount : null,
+    dimpleCount: penalties.dimpleOrDentCount != null ? penalties.dimpleOrDentCount : null,
+    creaseSeverity: penalties.wrinkleOrCreaseSeverity != null ? penalties.wrinkleOrCreaseSeverity : null,
+    glareFrac: interior && interior.glareFrac != null ? interior.glareFrac : null
+  };
+}
+
+/**
+ * Diagnostic sweep array. First row is always the graded level still.
+ * Extra frames are measured with diagnoseSurfaceBuffer only — they never
+ * replace subGrades.surface.
+ */
+async function buildSurfaceSweep(report, extraFrames, options) {
+  const opts = options || {};
+  const rows = [surfaceSweepEntryFromGrade(report, opts.levelTilt, 'level')];
+  const extras = Array.isArray(extraFrames) ? extraFrames : [];
+  for (let i = 0; i < extras.length; i++) {
+    const extra = extras[i] || {};
+    const measured = await diagnoseSurfaceBuffer(extra.buffer, {
+      alignmentCrop: Boolean(opts.alignmentCrop),
+      maxDim: opts.maxDim
+    });
+    rows.push({
+      bin: extra.bin || null,
+      pitch: extra.pitch != null ? extra.pitch : null,
+      roll: extra.roll != null ? extra.roll : null,
+      scratchCount: measured.scratchCount,
+      dimpleCount: measured.dimpleCount,
+      creaseSeverity: measured.creaseSeverity,
+      glareFrac: measured.glareFrac
+    });
+  }
+  return rows;
+}
+
+/**
+ * Attach surfaceSweep plus lock-set completeness fields. Missing bins are
+ * omitted from the array; surfaceSweepComplete is only true when all five
+ * expected ids are present. Does not change SUR.
+ */
+async function applySurfaceSweep(report, extraFrames, options) {
+  const rows = await buildSurfaceSweep(report, extraFrames, options);
+  const summary = scanLevel.summarizeSweepBins(rows);
+  report.surfaceSweep = rows;
+  report.surfaceSweepComplete = summary.surfaceSweepComplete;
+  report.capturedBins = summary.capturedBins;
+  return report;
+}
+
+/**
  * Assemble the defensive / fallback report used when `sharp` is missing or
  * when decoding throws. Sub-grades are 0 so the wallet engine will not
  * invent a Gem Mint from a failed scan.
  */
 function fallbackReport(reason) {
   return {
-    centering: 0,
-    corners: 0,
-    edges: 0,
-    surface: 0,
-    weighted: 0,
+    centering: null,
+    corners: null,
+    edges: null,
+    surface: null,
+    weighted: null,
     label: 'Unknown',
     notes: reason,
-    finalScore: 0,
+    finalScore: null,
     isGemMint: false,
+    incomplete: true,
     primaryFlawDescription: reason,
-    subGradesLabel: 'CEN: 0.0 | SUR: 0.0 | EDG: 0.0 | CRN: 0.0',
-    subGrades: { centering: 0, surface: 0, edges: 0, corners: 0 },
+    subGradesLabel: 'CEN: — | SUR: — | EDG: — | CRN: —',
+    subGrades: { centering: null, surface: null, edges: null, corners: null },
+    cornersMeasured: false,
     conditionCeilingApplied: false
   };
 }
 
+
+// =============================================================================
+// PART 2a — detector trust gates
+// =============================================================================
+
+// SUR and EDG metrology fire on printed design, not wear, on a correctly
+// boxed card: a clean white-border synthetic reads EDG 5.0 (the white
+// border counts as thousands of "whitening sites") and SUR 1.0 (the straight
+// border/art edge reads as a crease). Until each detector is validated on
+// real cards, its sub-grade is reported as not measured (null). Raw
+// readings stay in the report for debugging. Flip to true to re-enable.
+const SURFACE_DETECTOR_TRUSTED = false;
+const EDGE_DETECTOR_TRUSTED = false;
+
+const UNTRUSTED_DETECTOR_REASON =
+  'surface/edge detectors not yet validated on printed borders — SUR/EDG not measured';
+
+/**
+ * Null out untrusted sub-grades on a report built from measured values.
+ * A card without CEN, SUR, and EDG is incomplete and gets no final grade.
+ */
+function applyDetectorTrust(report) {
+  const surfaceMeasured = SURFACE_DETECTOR_TRUSTED && report.subGrades.surface != null;
+  const edgesMeasured = EDGE_DETECTOR_TRUSTED && report.subGrades.edges != null;
+  report.surfaceMeasured = surfaceMeasured;
+  report.edgesMeasured = edgesMeasured;
+  if (!surfaceMeasured) {
+    report.subGrades.surface = null;
+    report.surface = null;
+  }
+  if (!edgesMeasured) {
+    report.subGrades.edges = null;
+    report.edges = null;
+  }
+  const sub = report.subGrades;
+  function fmt(v) { return v == null ? '—' : Number(v).toFixed(1); }
+  report.subGradesLabel =
+    'CEN: ' + fmt(sub.centering) + ' | SUR: ' + fmt(sub.surface) +
+    ' | EDG: ' + fmt(sub.edges) + ' | CRN: ' + fmt(sub.corners);
+  if (!surfaceMeasured || !edgesMeasured) {
+    report.finalScore = null;
+    report.weighted = null;
+    report.isGemMint = false;
+    report.label = 'Incomplete';
+    report.incomplete = true;
+    report.lowestIsolatedSubGrade = null;
+    report.overallMathematicalAverage = null;
+    report.absoluteConditionCeilingLimit = null;
+    report.conditionCeilingApplied = false;
+    const reasons = [];
+    if (report.incompleteReason) reasons.push(report.incompleteReason);
+    reasons.push(UNTRUSTED_DETECTOR_REASON);
+    report.incompleteReason = reasons.join('; ');
+    report.notes = report.incompleteReason;
+    report.primaryFlawDescription = report.incompleteReason;
+  }
+  return report;
+}
+
+// =============================================================================
+// PART 2b — card box: native quad, server fallback, homography warp
+// =============================================================================
+
+/** Longest side decoded before the warp. Keeps detail well above the 643×900
+ *  grading raster without holding a 12–48 MP RGB buffer in memory. */
+const MAX_DECODE_DIM = 2400;
+
+// Card size (ISO/IEC 7810 ID-1 trading card) for physical units.
+const CARD_WIDTH_MM = 63.5;
+const CARD_HEIGHT_MM = 88.9;
+// Centering is measured on a warp at the card's own decoded resolution
+// (≈20+ px/mm on a 12 MP neon crop) instead of the 643×900 grading raster
+// (≈10.1 px/mm). Other detectors keep 643×900: their thresholds are tuned there.
+const CENTERING_WARP_MIN_HEIGHT = 900;
+const CENTERING_WARP_MAX_HEIGHT = 2400;
+// A second cut-like step means the refined cut could be either one. Flag the
+// edge (the chosen cut and every measured value stay as they are) when:
+//   close — runner-up ≥ 60% of the chosen step and within 3 px, or
+//   strong — runner-up ≥ 80% anywhere in the refine search (the 2% expanded
+//   margin, at least 4 px). The 0.6 mm outer band is this second case:
+//   about 90% as strong, about 6 px away, so the 3 px window missed it.
+const CUT_RUNNER_UP_RATIO = 0.6;
+const CUT_RUNNER_UP_MAX_PX = 3;
+const CUT_RUNNER_UP_WIDE_RATIO = 0.8;
+const SERVER_DETECT_DIM = 900;
+
+/**
+ * Mean color just outside the refined quad. Image y grows downward and the
+ * quad is clockwise on screen, so the outward normal is (dy, -dx).
+ * @returns {{ grey: number, count: number }|null}
+ */
+function sampleBackdrop(decoded, quad) {
+  if (!decoded || !quad || !decoded.data) return null;
+  const ch = decoded.channels || 3;
+  const w = decoded.width;
+  const h = decoded.height;
+  const data = decoded.data;
+  const sides = [[quad.tl, quad.tr], [quad.tr, quad.br], [quad.br, quad.bl], [quad.bl, quad.tl]];
+  let sum = 0;
+  let sr = 0;
+  let sg = 0;
+  let sb = 0;
+  let n = 0;
+  for (let s = 0; s < sides.length; s++) {
+    const a = sides[s][0];
+    const b = sides[s][1];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const ox = dy / len;
+    const oy = -dx / len;
+    for (let step = 1; step <= 8; step++) {
+      const t = step / 9;
+      const x = Math.round(a[0] + dx * t + ox * 10);
+      const y = Math.round(a[1] + dy * t + oy * 10);
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      const i = (y * w + x) * ch;
+      const r = data[i];
+      const g = ch >= 3 ? data[i + 1] : r;
+      const bch = ch >= 3 ? data[i + 2] : r;
+      const grey = ch >= 3 ? 0.299 * r + 0.587 * g + 0.114 * bch : r;
+      sum += grey;
+      sr += r;
+      sg += g;
+      sb += bch;
+      n += 1;
+    }
+  }
+  if (!n) return null;
+  return { grey: sum / n, r: sr / n, g: sg / n, b: sb / n, count: n };
+}
+
+function cutConfidence(cutSteps, scale) {
+  const out = {};
+  ['left', 'right', 'top', 'bottom'].forEach(function (e) {
+    const s = (cutSteps && cutSteps[e]) || {};
+    const offset = s.runnerUpOffsetPx == null ? null : round2(s.runnerUpOffsetPx / scale);
+    out[e] = {
+      stepSize: s.stepSize == null ? null : s.stepSize,
+      runnerUpRatio: s.runnerUpRatio == null ? null : s.runnerUpRatio,
+      runnerUpOffsetPx: offset,
+      lowConfidence: offset != null && (
+        (s.runnerUpRatio >= CUT_RUNNER_UP_RATIO && Math.abs(offset) <= CUT_RUNNER_UP_MAX_PX) ||
+        s.runnerUpRatio >= CUT_RUNNER_UP_WIDE_RATIO
+      )
+    };
+  });
+  return out;
+}
+
+/**
+ * A minority line group, or a straight-edge profile that disagrees with the
+ * vote, is not a centering score. Widths and ratios stay. The edge is marked
+ * low-confidence. This does not touch a cut-edge runner-up flag by itself.
+ */
+function withholdUntrustedBorderVote(report, measurement) {
+  const vote = (measurement && measurement.voteLowConfidenceEdges) || [];
+  if (!vote.length || !report || !report.subGrades) return report;
+  report.subGrades.centering = null;
+  report.centering = null;
+  report.finalScore = null;
+  report.weighted = null;
+  report.isGemMint = false;
+  report.incomplete = true;
+  const note = 'centering withheld — ' + vote.join(', ') +
+    ' border vote is a minority or the straight-edge profile disagrees';
+  report.incompleteReason = report.incompleteReason ? (report.incompleteReason + '; ' + note) : note;
+  report.notes = report.incompleteReason;
+  report.primaryFlawDescription = report.incompleteReason;
+  if (!report.centeringMetrics) report.centeringMetrics = {};
+  report.centeringMetrics.borderVoteLowConfidenceEdges = vote.slice();
+  return report;
+}
+
+/** Low-confidence cut edges → edge flags and centeringMetrics. Values untouched. */
+function applyCutConfidence(centeringMeasurement, detection) {
+  const low = (detection && detection.lowConfidenceEdges) || [];
+  centeringMeasurement.edgeFlags = centeringMeasurement.edgeFlags || [];
+  low.forEach(function (e) {
+    const c = detection.edgeCutConfidence[e];
+    centeringMeasurement.edgeFlags.push(e + ': cut edge low confidence — second step ' + Math.round(c.runnerUpRatio * 100) +
+      '% of the chosen one, ' + Math.abs(c.runnerUpOffsetPx) + 'px ' + (c.runnerUpOffsetPx < 0 ? 'outside' : 'inside') + ' it');
+  });
+  return low;
+}
+
+async function decodeUprightRgb(buffer) {
+  const meta = await sharp(buffer, { failOnError: false }).metadata();
+  const swapped = meta.orientation != null && meta.orientation >= 5;
+  const photoWidth = (swapped ? meta.height : meta.width) || 1;
+  const photoHeight = (swapped ? meta.width : meta.height) || 1;
+  let pipeline = sharp(buffer, { failOnError: false }).rotate();
+  const scale = Math.min(1, MAX_DECODE_DIM / Math.max(photoWidth, photoHeight));
+  if (scale < 1) {
+    pipeline = pipeline.resize({
+      width: Math.round(photoWidth * scale),
+      height: Math.round(photoHeight * scale),
+      fit: 'fill'
+    });
+  }
+  const { data, info } = await pipeline
+    .removeAlpha()
+    .toColourspace('srgb')
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return {
+    data: data,
+    width: info.width,
+    height: info.height,
+    channels: info.channels,
+    photoWidth: photoWidth,
+    photoHeight: photoHeight
+  };
+}
+
+async function serverDetectQuad(decoded) {
+  const ratio = Math.max(decoded.width, decoded.height) / SERVER_DETECT_DIM;
+  let pipeline = sharp(decoded.data, {
+    raw: { width: decoded.width, height: decoded.height, channels: decoded.channels }
+  });
+  if (ratio > 1) {
+    pipeline = pipeline.resize({
+      width: Math.round(decoded.width / ratio),
+      height: Math.round(decoded.height / ratio),
+      fit: 'fill'
+    });
+  }
+  const { data, info } = await pipeline
+    .greyscale()
+    .normalize()
+    .blur(1)
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const box = findCardBoundingBox(new Uint8Array(data), info.width, info.height);
+  const sx = decoded.width / info.width;
+  const sy = decoded.height / info.height;
+  const left = box.left * sx;
+  const right = (box.right + 1) * sx - 1;
+  const top = box.top * sy;
+  const bottom = (box.bottom + 1) * sy - 1;
+  return [[left, top], [right, top], [right, bottom], [left, bottom]];
+}
+
+/**
+ * Find the card in an uploaded still and warp it to WARP_WIDTH × WARP_HEIGHT.
+ * Order: native quad (options.cardQuad in upload-pixel coordinates) →
+ * server detector → none. Never falls back to the whole photo.
+ *
+ * @returns {Promise<{ found: boolean, detection: object, warped?: object }>}
+ */
+async function locateCard(buffer, options) {
+  const opts = options || {};
+  const decoded = await decodeUprightRgb(buffer);
+  const detection = {
+    quadSource: 'none',
+    photoWidth: decoded.photoWidth,
+    photoHeight: decoded.photoHeight,
+    decodeWidth: decoded.width,
+    decodeHeight: decoded.height,
+    warpWidth: cardQuad.WARP_WIDTH,
+    warpHeight: cardQuad.WARP_HEIGHT,
+    quad: null,
+    cardBoxPctOfPhoto: null,
+    aspect: null,
+    rotatedToPortrait: false,
+    nativeQuadSent: opts.cardQuad != null && opts.cardQuad !== '',
+    nativeQuadConfidence: opts.quadConfidence != null && isFinite(Number(opts.quadConfidence))
+      ? Number(opts.quadConfidence)
+      : null,
+    nativeQuadRejected: null,
+    serverQuadRejected: null,
+    reasons: []
+  };
+  const toPhotoX = decoded.photoWidth / decoded.width;
+  const toPhotoY = decoded.photoHeight / decoded.height;
+  function toPhoto(q) {
+    return cardQuad.quadToJSON({
+      tl: [q.tl[0] * toPhotoX, q.tl[1] * toPhotoY],
+      tr: [q.tr[0] * toPhotoX, q.tr[1] * toPhotoY],
+      br: [q.br[0] * toPhotoX, q.br[1] * toPhotoY],
+      bl: [q.bl[0] * toPhotoX, q.bl[1] * toPhotoY]
+    });
+  }
+  function sidesPx(q) {
+    const d = function (a, b) { return Math.hypot((a[0] - b[0]) * toPhotoX, (a[1] - b[1]) * toPhotoY); };
+    return {
+      widthPx: Math.round((d(q.tl, q.tr) + d(q.bl, q.br)) / 2),
+      heightPx: Math.round((d(q.tl, q.bl) + d(q.tr, q.br)) / 2)
+    };
+  }
+  detection.nativeQuadRaw = null;
+  detection.serverQuadRaw = null;
+
+  let accepted = null;
+  if (detection.nativeQuadSent) {
+    const points = cardQuad.parseCardQuad(opts.cardQuad);
+    if (!points) {
+      detection.nativeQuadRejected = ['cardQuad is not four [x,y] points'];
+    } else {
+      const quadW = Number(opts.quadImageWidth) || decoded.photoWidth;
+      const quadH = Number(opts.quadImageHeight) || decoded.photoHeight;
+      const ordered = cardQuad.orderQuad(
+        cardQuad.scaleQuad(points, decoded.width / quadW, decoded.height / quadH)
+      );
+      detection.nativeQuadRaw = toPhoto(ordered);
+      const check = cardQuad.validateQuad(ordered, decoded.width, decoded.height);
+      if (check.ok) accepted = { source: 'native', quad: ordered, check: check };
+      else detection.nativeQuadRejected = check.reasons;
+    }
+  }
+  if (!accepted) {
+    const ordered = cardQuad.orderQuad(await serverDetectQuad(decoded));
+    detection.serverQuadRaw = toPhoto(ordered);
+    const check = cardQuad.validateQuad(ordered, decoded.width, decoded.height);
+    if (check.ok) accepted = { source: 'server', quad: ordered, check: check };
+    else detection.serverQuadRejected = check.reasons;
+  }
+
+  if (!accepted) {
+    if (!detection.nativeQuadSent) detection.reasons.push('no native quad sent');
+    if (detection.nativeQuadRejected) {
+      detection.reasons.push('native quad rejected: ' + detection.nativeQuadRejected.join(', '));
+    }
+    detection.reasons.push('server detector rejected: ' + detection.serverQuadRejected.join(', '));
+    return { found: false, detection: detection };
+  }
+
+  let q = accepted.quad;
+  const nativeRes = opts.centeringResolution !== 'standard';
+  const cardHeightDecodePx = sidesPx(q).heightPx / toPhotoY;
+  const centerH = nativeRes
+    ? Math.max(CENTERING_WARP_MIN_HEIGHT, Math.min(CENTERING_WARP_MAX_HEIGHT, Math.round(cardHeightDecodePx)))
+    : cardQuad.WARP_HEIGHT;
+  const centerW = Math.round(centerH * cardQuad.WARP_WIDTH / cardQuad.WARP_HEIGHT);
+  const centerScale = centerH / cardQuad.WARP_HEIGHT;
+  // Tighten at the centering resolution so the cut is located as finely as
+  // the borders are measured from it.
+  const refined = cardQuad.refineQuadToCut(decoded, q, centerW, centerH);
+  const refinedCheck = cardQuad.validateQuad(refined.quad, decoded.width, decoded.height);
+  if (refinedCheck.ok) {
+    q = refined.quad;
+    accepted.check = refinedCheck;
+    detection.edgeRefinementPx = {
+      left: round2(refined.shiftPx.left / centerScale),
+      right: round2(refined.shiftPx.right / centerScale),
+      top: round2(refined.shiftPx.top / centerScale),
+      bottom: round2(refined.shiftPx.bottom / centerScale)
+    };
+    detection.edgeCutConfidence = cutConfidence(refined.cutSteps, centerScale);
+  } else {
+    detection.edgeRefinementPx = null;
+    detection.edgeCutConfidence = null;
+  }
+  detection.lowConfidenceEdges = detection.edgeCutConfidence
+    ? ['left', 'right', 'top', 'bottom'].filter(function (e) { return detection.edgeCutConfidence[e].lowConfidence; })
+    : [];
+  detection.backdrop = sampleBackdrop(decoded, q);
+  detection.quadSource = accepted.source;
+  // quad = tightened corners actually warped; rawQuad = detector output.
+  detection.rawQuad = accepted.source === 'native' ? detection.nativeQuadRaw : detection.serverQuadRaw;
+  detection.quad = toPhoto(q);
+  detection.cardSizePx = sidesPx(q);
+  detection.cardBoxPctOfPhoto = accepted.check.areaPct;
+  detection.aspect = accepted.check.aspect;
+  detection.rotatedToPortrait = q.rotatedToPortrait;
+  const warped = cardQuad.warpPerspective(decoded, q, cardQuad.WARP_WIDTH, cardQuad.WARP_HEIGHT);
+  const centeringWarped = centerH === cardQuad.WARP_HEIGHT
+    ? warped
+    : cardQuad.warpPerspective(decoded, q, centerW, centerH);
+  detection.centeringWarp = {
+    mode: nativeRes ? 'native' : 'standard',
+    width: centerW,
+    height: centerH,
+    pxPerMm: round2(centerH / CARD_HEIGHT_MM),
+    scale: Math.round(centerScale * 10000) / 10000
+  };
+  return {
+    found: true,
+    detection: detection,
+    warped: warped,
+    centeringWarped: centeringWarped,
+    decoded: decoded,
+    quad: q
+  };
+}
+
+/**
+ * Print-border centering on the centering warp. Widths come back in
+ * 643×900-equivalent px (same unit as every other detector and threshold);
+ * ratios are unit-free; borderWidthsMm uses the known card size.
+ */
+async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, getPaper643, box643) {
+  let measurement;
+  if (!warpInfo || warpInfo.height === box643.height) {
+    measurement = measurePrintCentering(getPixel643, box643.width, box643.height, getPaper643);
+  } else {
+    const scale = warpInfo.height / box643.height;
+    const pipeline = sharp(centeringWarped.data, {
+      raw: { width: centeringWarped.width, height: centeringWarped.height, channels: centeringWarped.channels }
+    });
+    const paper = await pipeline.clone().greyscale().raw().toBuffer({ resolveWithObject: true });
+    const norm = await pipeline.greyscale().normalize().blur(Math.max(1, scale)).raw()
+      .toBuffer({ resolveWithObject: true });
+    const w = norm.info.width;
+    const h = norm.info.height;
+    const px = new Uint8Array(norm.data);
+    const pp = new Uint8Array(paper.data);
+    const getHi = function (x, y) { return (x < 0 || y < 0 || x >= w || y >= h) ? 0 : px[y * w + x]; };
+    const getPaperHi = function (x, y) { return (x < 0 || y < 0 || x >= w || y >= h) ? 0 : pp[y * w + x]; };
+    measurement = measurePrintCentering(getHi, w, h, getPaperHi, { scale: scale });
+  }
+  const pxPerMmX = box643.width / CARD_WIDTH_MM;
+  const pxPerMmY = box643.height / CARD_HEIGHT_MM;
+  const wd = measurement.widths || {};
+  const mm = function (v, k) { return v == null ? null : Math.round((v / k) * 1000) / 1000; };
+  measurement.widthsMm = {
+    left: mm(wd.left, pxPerMmX),
+    right: mm(wd.right, pxPerMmX),
+    top: mm(wd.top, pxPerMmY),
+    bottom: mm(wd.bottom, pxPerMmY)
+  };
+  measurement.centeringWarp = warpInfo || null;
+  return measurement;
+}
+
+/** 422 payload: no sub-grade is scored when the card box is invalid. */
+function cardNotFoundReport(detection) {
+  const reason = detection.reasons.join('; ') || 'card not found';
+  return {
+    cardNotFound: true,
+    cardNotFoundReason: reason,
+    centering: null,
+    corners: null,
+    edges: null,
+    surface: null,
+    weighted: null,
+    label: 'Card not found',
+    notes: 'card not found: ' + reason,
+    finalScore: null,
+    isGemMint: false,
+    incomplete: true,
+    centeringUndetected: true,
+    printCenteringDetected: false,
+    primaryFlawDescription: 'Card not found — ' + reason,
+    subGradesLabel: 'CEN: — | SUR: — | EDG: — | CRN: —',
+    subGrades: { centering: null, surface: null, edges: null, corners: null },
+    cornersMeasured: false,
+    conditionCeilingApplied: false,
+    centeringMetrics: { leftRightRatio: null, topBottomRatio: null, detected: false },
+    cardDetection: detection
+  };
+}
 
 // =============================================================================
 // PART 3 — gradeBuffer: still-image orchestration used by server.js
@@ -1629,12 +2671,54 @@ async function gradeBuffer(buffer, options) {
 
   // TEMP: dump every gradeBuffer payload to the server log (remove after LAN testing).
   function returnGrade(gradeResult) {
+    gradeResult.engineVersion = ENGINE_VERSION;
+    if (options.scanId) gradeResult.scanId = options.scanId;
     if (options.captureTilt) {
       gradeResult.captureTilt = options.captureTilt;
       if (gradeResult.debug) gradeResult.debug.captureTilt = options.captureTilt;
     }
+    console.log(JSON.stringify({
+      event: 'grade',
+      scanId: gradeResult.scanId || null,
+      finalScore: gradeResult.finalScore,
+      incomplete: Boolean(gradeResult.incomplete),
+      cornerWearDisabled: Boolean(gradeResult.cornerWearDisabled)
+    }));
     console.log(JSON.stringify(gradeResult, null, 2));
     return gradeResult;
+  }
+
+  // Stage B: scans/<scanId>/debug.json, oriented.jpg (warped card), and
+  // overlay.jpg (the decoded photo with the quad and sample lines).
+  async function attachScanDebug(gradeResult, ctx) {
+    if (!options.scansRoot || !options.scanId) return gradeResult;
+    const c = ctx || {};
+    try {
+      gradeResult.debugArtifacts = await scanDebug.persist({
+        scansRoot: options.scansRoot,
+        scanId: options.scanId,
+        report: Object.assign({ captureTilt: options.captureTilt || null }, gradeResult),
+        warped: c.warped || null,
+        centeringBox: c.centeringBox || null,
+        measurement: c.measurement || null,
+        borderReliability: c.borderReliability || null,
+        photo: c.photo || null,
+        quad: c.quad || null,
+        homography: c.homography || null,
+        lowConfidenceEdges: c.lowConfidenceEdges || null
+      });
+    } catch (err) {
+      console.error('[scan-debug] persist failed', options.scanId, err && err.message);
+      gradeResult.debugArtifacts = { error: err && err.message ? err.message : String(err) };
+    }
+    return gradeResult;
+  }
+
+  // Side is set only for a back. A front grade, including side=front, does
+  // not enter unscoreBack and the report stays byte-for-byte the same.
+  async function deliver(report, ctx) {
+    if (options.side === 'back') backScan.unscoreBack(report);
+    return returnGrade(await attachScanDebug(report, ctx));
   }
 
   if (!sharp) {
@@ -1645,27 +2729,23 @@ async function gradeBuffer(buffer, options) {
   }
 
   try {
-    // ----- Module A: anti-distortion pre-processing -----
-    // EXIF rotate, optional 90° portrait lock, downscale, greyscale, normalize,
-    // and a 1px blur to strip smartphone computational sharpening before any
-    // contrast scan (BusinessPlan.md §4 Module A).
-    let pipeline = sharp(buffer, { failOnError: false }).rotate();
-    const meta = await pipeline.metadata();
-    const srcW = meta.width || 1;
-    const srcH = meta.height || 1;
-    const shouldRotate = srcW > srcH * PORTRAIT_LOCK_WIDTH_RATIO;
-    if (shouldRotate) pipeline = pipeline.rotate(90);
-
-    const postRotate = shouldRotate
-      ? { width: srcH, height: srcW }
-      : { width: srcW, height: srcH };
-    const ratio = Math.max(postRotate.width, postRotate.height) / options.maxDim;
-    if (ratio > 1) {
-      pipeline = pipeline.resize({
-        width: Math.round(postRotate.width / ratio),
-        height: Math.round(postRotate.height / ratio)
-      });
+    // ----- Card box -----
+    // Grade only the card: native quad → server detector → fail. The photo
+    // is never used as the card box (that graded pink backdrop paper).
+    const located = await locateCard(buffer, options);
+    if (!located.found) {
+      return deliver(cardNotFoundReport(located.detection), null);
     }
+    const cardDetection = located.detection;
+    const shouldRotate = cardDetection.rotatedToPortrait;
+
+    // ----- Module A: anti-distortion pre-processing on the warped card -----
+    // Greyscale, normalize, and a 1px blur to strip smartphone computational
+    // sharpening before any contrast scan (BusinessPlan.md §4 Module A).
+    const warped = located.warped;
+    const pipeline = sharp(warped.data, {
+      raw: { width: warped.width, height: warped.height, channels: warped.channels }
+    });
 
     const { data: paperData, info: paperInfo } = await pipeline
       .clone()
@@ -1695,24 +2775,9 @@ async function gradeBuffer(buffer, options) {
     }).blur(4).raw().toBuffer({ resolveWithObject: true });
     const blurred = new Uint8Array(blurredData);
 
-    const box = findCardBoundingBox(pixels, width, height);
-    // Live capture is cropped to the neon 2.5×3.5 frame. Those JPEG edges
-    // are the cut the operator lined up. findCardBoundingBox treats a
-    // white printed border as "background" and walks inward to the art
-    // (live 643×900 scan: fill 0.81, top width collapsed to 3px). Always
-    // use the crop rectangle when alignmentCrop is set.
-    let centeringBox = box;
-    if (options.alignmentCrop) {
-      centeringBox = {
-        left: 0,
-        right: width - 1,
-        top: 0,
-        bottom: height - 1,
-        width: width,
-        height: height,
-        bgApprox: box.bgApprox
-      };
-    }
+    // The warped raster IS the card: its edges are the cut.
+    const box = { left: 0, right: width - 1, top: 0, bottom: height - 1, width: width, height: height };
+    const centeringBox = box;
 
     // Pixel accessor in CARD-LOCAL coordinates so inward scans start at the
     // cut edge rather than at the photo's frame edge.
@@ -1729,12 +2794,24 @@ async function gradeBuffer(buffer, options) {
       return paperPixels[y * width + x];
     };
 
-    const centeringMeasurement = measurePrintCentering(
-      getPixel, centeringBox.width, centeringBox.height, getPaperPixel
+    const centeringMeasurement = await measureCenteringOnWarp(
+      located.centeringWarped, cardDetection.centeringWarp, getPixel, getPaperPixel, centeringBox
     );
+    const lowConfidenceEdges = applyCutConfidence(centeringMeasurement, cardDetection);
     const interiorGrey = measureInteriorGrey(
       getPaperPixel, centeringBox.width, centeringBox.height, centeringMeasurement.widths
     );
+    const warpScale = (cardDetection.centeringWarp && cardDetection.centeringWarp.scale) || 1;
+    const rgbSource = located.centeringWarped && located.centeringWarped.data &&
+      (located.centeringWarped.channels || 3) >= 3
+      ? located.centeringWarped
+      : null;
+    if (rgbSource) {
+      centeringMeasurement.paperBandRgb = sampleEdgeBandRgb(
+        rgbSource, centeringMeasurement.widths, warpScale
+      );
+      interiorGrey.rgb = sampleInteriorRgb(rgbSource, centeringMeasurement.widths, warpScale);
+    }
     const bandVsInterior = describeBandVsInterior(
       centeringMeasurement.paperBandMean, interiorGrey
     );
@@ -1742,10 +2819,12 @@ async function gradeBuffer(buffer, options) {
     centeringMeasurement.bandVsInterior = bandVsInterior;
     const surface = measureSurfaceDefects(pixels, blurred, width, centeringBox);
     const edgesWhiteningCount = measureEdgeWhitening(pixels, width, centeringBox);
-    const corners = measureCornerFraying(pixels, width, centeringBox);
+    const measuredCorners = measureCornerFraying(pixels, width, centeringBox);
+    // Not measured — CRN is null, never a 10. Brightness mapping is debug-only.
+    const corners = null;
     const borderReliability = assessPrintBorderReliability(
       centeringBox, width, height, centeringMeasurement,
-      { alignmentCrop: Boolean(options.alignmentCrop) }
+      { alignmentCrop: true, interiorGrey: interiorGrey, backdrop: cardDetection.backdrop }
     );
     // eslint-disable-next-line no-console
     console.log(
@@ -1764,6 +2843,17 @@ async function gradeBuffer(buffer, options) {
         : '')
     );
 
+    const debugCtx = {
+      warped: warped,
+      centeringBox: centeringBox,
+      measurement: centeringMeasurement,
+      borderReliability: borderReliability,
+      photo: located.decoded,
+      quad: located.quad,
+      homography: warped.homography,
+      lowConfidenceEdges: cardDetection.lowConfidenceEdges
+    };
+
     // Failed print-border detection is UNKNOWN, not 50/50. Do not feed
     // fabricated ratios into evaluateMultiPhaseCondition — that scorer has
     // no "undetected" state and would emit a fake Gem centering sub-grade.
@@ -1772,13 +2862,12 @@ async function gradeBuffer(buffer, options) {
     if (!centeringMeasurement.detected || !borderReliability.accepted) {
       const surfacePhase = scoreSurfacePhase(surface);
       const edgeScore = scoreEdgesPhase(edgesWhiteningCount);
-      const cornerPhase = scoreCornersPhase(corners);
       const incompleteReason = !centeringMeasurement.detected
         ? 'centering undetectable — no printed border found'
         : 'centering undetectable — print-border samples do not agree on a printed frame';
       const report = {
         centering: null,
-        corners: clamp01to100(Math.round(cornerPhase.score * 10)),
+        corners: null,
         edges: clamp01to100(Math.round(edgeScore * 10)),
         surface: clamp01to100(Math.round(surfacePhase.score * 10)),
         weighted: null,
@@ -1790,13 +2879,14 @@ async function gradeBuffer(buffer, options) {
         subGradesLabel:
           'CEN: — | SUR: ' + surfacePhase.score.toFixed(1) +
           ' | EDG: ' + edgeScore.toFixed(1) +
-          ' | CRN: ' + cornerPhase.score.toFixed(1),
+          ' | CRN: —',
         subGrades: {
           centering: null,
           surface: surfacePhase.score,
           edges: edgeScore,
-          corners: cornerPhase.score
+          corners: null
         },
+        cornersMeasured: false,
         centeringUndetected: true,
         incomplete: true,
         incompleteReason: incompleteReason,
@@ -1804,7 +2894,10 @@ async function gradeBuffer(buffer, options) {
         centeringMetrics: {
           leftRightRatio: null,
           topBottomRatio: null,
-          detected: false
+          detected: false,
+          borderWidthsMm: centeringMeasurement.widthsMm,
+          centeringWarp: centeringMeasurement.centeringWarp,
+          lowConfidenceEdges: lowConfidenceEdges
         },
         surfacePenalties: {
           scratchCount: Number(surface.scratchCount) || 0,
@@ -1815,16 +2908,21 @@ async function gradeBuffer(buffer, options) {
           creasePenalty: surfacePhase.creasePenalty
         },
         edgesWhiteningCount: Number(edgesWhiteningCount) || 0,
-        absoluteMaxCornerFray: cornerPhase.absoluteMaxCornerFray,
+        absoluteMaxCornerFray: null,
+        cornerWearDisabled: true,
+        measuredCornerBrightnessSeverity: measuredCorners,
+        cardDetection: cardDetection,
         centeringDiagnostics: buildCenteringDiagnostics(width, height, centeringBox, centeringMeasurement, {
-          alignmentCrop: Boolean(options.alignmentCrop),
+          alignmentCrop: true,
+          warped: true,
           interiorGrey: interiorGrey,
-          bandVsInterior: bandVsInterior
+          bandVsInterior: bandVsInterior,
+          backdrop: cardDetection.backdrop
         })
       };
       if (options.debug) {
         report.debug = {
-          width, height, box: centeringBox, shouldRotate, alignmentCrop: Boolean(options.alignmentCrop),
+          width, height, box: centeringBox, shouldRotate, alignmentCrop: true, cardDetection: cardDetection,
           printBorderWidths: centeringMeasurement.widths,
           printBorderSamples: centeringMeasurement.samples,
           printBorderBandStddev: centeringMeasurement.bandStddev,
@@ -1834,10 +2932,13 @@ async function gradeBuffer(buffer, options) {
           interiorGrey: interiorGrey,
           bandVsInterior: bandVsInterior,
           borderReliability: borderReliability,
-          corners, surface, edgesWhiteningCount
+          corners: measuredCorners,
+          cornersUsedForGrade: corners,
+          surface,
+          edgesWhiteningCount
         };
       }
-      return returnGrade(report);
+      return deliver(applyDetectorTrust(report), debugCtx);
     }
 
     const judged = evaluateMultiPhaseCondition(
@@ -1852,7 +2953,9 @@ async function gradeBuffer(buffer, options) {
     const centering100 = clamp01to100(Math.round(judged.subGrades.centering * 10));
     const surface100 = clamp01to100(Math.round(judged.subGrades.surface * 10));
     const edges100 = clamp01to100(Math.round(judged.subGrades.edges * 10));
-    const corners100 = clamp01to100(Math.round(judged.subGrades.corners * 10));
+    const corners100 = judged.subGrades.corners == null
+      ? null
+      : clamp01to100(Math.round(judged.subGrades.corners * 10));
     const weighted100 = clamp01to100(Math.round(judged.finalScore * 10));
 
     const report = {
@@ -1875,23 +2978,35 @@ async function gradeBuffer(buffer, options) {
       overallMathematicalAverage: judged.overallMathematicalAverage,
       absoluteConditionCeilingLimit: judged.absoluteConditionCeilingLimit,
       conditionCeilingApplied: judged.conditionCeilingApplied,
-      centeringMetrics: judged.centeringMetrics,
+      centeringMetrics: Object.assign({}, judged.centeringMetrics, {
+        borderWidthsMm: centeringMeasurement.widthsMm,
+        centeringWarp: centeringMeasurement.centeringWarp,
+        lowConfidenceEdges: lowConfidenceEdges
+      }),
       surfacePenalties: judged.surfacePenalties,
       edgesWhiteningCount: judged.edgesWhiteningCount,
       absoluteMaxCornerFray: judged.absoluteMaxCornerFray,
+      cornerWearDisabled: true,
+      cornersMeasured: judged.cornersMeasured === true,
+      measuredCornerBrightnessSeverity: measuredCorners,
+      cardDetection: cardDetection,
       printCenteringDetected: centeringMeasurement.detected,
       centeringUndetected: false,
       incomplete: false,
       centeringDiagnostics: buildCenteringDiagnostics(width, height, centeringBox, centeringMeasurement, {
-        alignmentCrop: Boolean(options.alignmentCrop),
+        alignmentCrop: true,
+        warped: true,
         interiorGrey: interiorGrey,
-        bandVsInterior: bandVsInterior
+        bandVsInterior: bandVsInterior,
+        backdrop: cardDetection.backdrop
       })
     };
 
+    withholdUntrustedBorderVote(report, centeringMeasurement);
+
     if (options.debug) {
       report.debug = {
-        width, height, box: centeringBox, shouldRotate, alignmentCrop: Boolean(options.alignmentCrop),
+        width, height, box: centeringBox, shouldRotate, alignmentCrop: true, cardDetection: cardDetection,
         printBorderWidths: centeringMeasurement.widths,
         printBorderSamples: centeringMeasurement.samples,
         printBorderBandStddev: centeringMeasurement.bandStddev,
@@ -1901,21 +3016,25 @@ async function gradeBuffer(buffer, options) {
         interiorGrey: interiorGrey,
         bandVsInterior: bandVsInterior,
         borderReliability: borderReliability,
-        corners, surface, edgesWhiteningCount
+        corners: measuredCorners,
+        cornersUsedForGrade: corners,
+        surface, edgesWhiteningCount
       };
     }
 
-    return returnGrade(report);
+    return deliver(applyDetectorTrust(report), debugCtx);
   } catch (err) {
     return returnGrade(fallbackReport('grading engine error: ' + (err && err.message ? err.message : String(err))));
   }
 }
 
 module.exports = {
+  ENGINE_VERSION,
   gradeBuffer,
   evaluateMultiPhaseCondition,
   GRADE_SCALE,
   scoreCenteringPhase,
+  PSA_FRONT_CENTERING_TABLE,
   scoreSurfacePhase,
   scoreEdgesPhase,
   scoreCornersPhase,
@@ -1928,8 +3047,25 @@ module.exports = {
   consensusRangePx,
   measureInteriorGrey,
   describeBandVsInterior,
+  diagnoseSurfaceBuffer,
+  buildSurfaceSweep,
+  applySurfaceSweep,
+  surfaceSweepEntryFromGrade,
+  normalizeScanId,
+  locateCard,
+  cardNotFoundReport,
+  applyDetectorTrust,
+  SURFACE_DETECTOR_TRUSTED,
+  EDGE_DETECTOR_TRUSTED,
+  MAX_DECODE_DIM,
   BORDER_SAMPLE_SPREAD_MAX_PX,
   BORDER_SAMPLE_MIN_HITS,
   BORDER_MIN_MEDIAN_WIDTH_PX,
-  WHITE_BAND_MIN_GREY
+  BORDER_THIN_MIN_PX,
+  BORDER_THIN_ANCHORED_MIN_PX,
+  BORDER_THIN_MIN_HITS,
+  BORDER_THIN_MAX_SPREAD_PX,
+  BORDER_BAND_UNIFORM_MAX,
+  BORDER_BAND_DISTINCT_GREY,
+  BORDER_BAND_DISTINCT_RGB
 };

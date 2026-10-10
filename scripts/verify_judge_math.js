@@ -74,6 +74,44 @@ const oneEdge = g.evaluateMultiPhaseCondition(pristineCentering, cleanSurface, 1
 assertEq('1-edge finalScore (ceiling 9.5)', oneEdge.finalScore, 9.5);
 assertEq('1-edge edges sub', oneEdge.subGrades.edges, 9.0);
 
+assertEq('normalizeScanId uuid', g.normalizeScanId('550e8400-e29b-41d4-a716-446655440000'), '550e8400-e29b-41d4-a716-446655440000');
+assertEq('normalizeScanId reject short', g.normalizeScanId('abc'), null);
+
+const unmeasured = g.evaluateMultiPhaseCondition(pristineCentering, cleanSurface, 0, null);
+assertEq('unmeasured CRN is null', unmeasured.subGrades.corners, null);
+assertEq('unmeasured cornersMeasured false', unmeasured.cornersMeasured, false);
+assertEq('unmeasured still 10 from CEN/SUR/EDG', unmeasured.finalScore, 10);
+assert('unmeasured label shows CRN —', unmeasured.subGradesLabel.indexOf('CRN: —') !== -1);
+
+// CEN 8 (63/37), SUR 8 (4 scratches), EDG 8 (2 sites). A fake CRN 10 would
+// lift the 4-way mean to 8.5; excluded, the 3-way mean is 8.0.
+const threeWay = g.evaluateMultiPhaseCondition(
+  { leftRightRatio: { left: 63, right: 37 }, topBottomRatio: { top: 50, bottom: 50 } },
+  Object.assign({}, cleanSurface, { scratchCount: 4 }),
+  2,
+  null
+);
+assertEq('3-sub mean is 8.0 (not 8.5 with a fake CRN 10)', threeWay.finalScore, 8.0);
+assertEq('3-sub mean value', threeWay.overallMathematicalAverage, 8.0);
+assertEq('3-sub lowest excludes CRN', threeWay.lowestIsolatedSubGrade, 8.0);
+
+// PSA front table (strict end): worst axis share → CEN.
+function cen(l, t) {
+  return g.scoreCenteringPhase({ left: l, right: 100 - l }, { top: t, bottom: 100 - t }).score;
+}
+assertEq('CEN 50/50 → 10', cen(50, 50), 10);
+assertEq('CEN 55/45 → 10', cen(55, 50), 10);
+assertEq('CEN 55.1/44.9 → 9', cen(55.1, 50), 9);
+assertEq('CEN 60/40 → 9', cen(60, 50), 9);
+assertEq('CEN 65/35 → 8', cen(35, 50), 8);
+assertEq('CEN 70/30 → 7', cen(50, 70), 7);
+assertEq('CEN 80/20 → 6', cen(80, 50), 6);
+assertEq('CEN 85/15 → 5', cen(85, 50), 5);
+assertEq('CEN 90/10 → 3', cen(90, 50), 3);
+assertEq('CEN 91/9 → 1', cen(91, 50), 1);
+assertEq('Karros scan L/R 57.5 T/B 55 → 9 (was 7.0)', cen(57.5, 55), 9);
+assertEq('Karros ruler 4mm/3mm, 3mm/3.5mm → 9', cen(400 / 7, 300 / 6.5), 9);
+
 function assert(label, cond) {
   if (!cond) {
     console.error('FAIL', label);
@@ -106,6 +144,11 @@ async function makeTinyUniformPng() {
 }
 
 async function runGradeBufferUndetectedCheck() {
+  const fallback = await g.gradeBuffer(Buffer.from('not-an-image'), {
+    scanId: '550e8400-e29b-41d4-a716-446655440000'
+  });
+  assertEq('gradeBuffer echoes scanId', fallback.scanId, '550e8400-e29b-41d4-a716-446655440000');
+
   const buf = await makeTinyUniformPng();
   if (!buf) {
     console.log('SKIP gradeBuffer undetected check (sharp not installed)');
@@ -121,16 +164,45 @@ async function runGradeBufferUndetectedCheck() {
     process.exitCode = 1;
     return;
   }
-  assert('gradeBuffer centeringUndetected', report.centeringUndetected === true);
-  assert('gradeBuffer incomplete', report.incomplete === true);
-  assert('gradeBuffer centering is null', report.centering === null);
-  assert('gradeBuffer subGrades.centering is null', report.subGrades && report.subGrades.centering === null);
-  assert('gradeBuffer finalScore is not 10', report.finalScore !== 10 && report.finalScore !== 10.0);
-  assert('gradeBuffer finalScore is not a number', typeof report.finalScore !== 'number');
-  assert('gradeBuffer weighted is not a number', typeof report.weighted !== 'number');
-  assert('gradeBuffer still reports surface', typeof report.subGrades.surface === 'number');
-  assert('gradeBuffer still reports edges', typeof report.subGrades.edges === 'number');
-  assert('gradeBuffer still reports corners', typeof report.subGrades.corners === 'number');
+  assert('no-card photo is card not found', report.cardNotFound === true);
+  assert('no-card incomplete', report.incomplete === true);
+  assert('no-card centering is null', report.centering === null);
+  assert('no-card finalScore is not a number', typeof report.finalScore !== 'number');
+  assert('no-card weighted is not a number', typeof report.weighted !== 'number');
+  assert('no-card CEN/SUR/EDG/CRN all null',
+    report.subGrades.centering === null && report.subGrades.surface === null &&
+    report.subGrades.edges === null && report.subGrades.corners === null);
+  assertEq('no-card quadSource', report.cardDetection.quadSource, 'none');
+  assert('no-card names the server rejection',
+    report.cardNotFoundReason.indexOf('server detector rejected') !== -1);
+}
+
+/** Pad a full-frame synthetic card onto a pink mat and return the exact card
+ *  corners, the way the native Vision quad arrives with a Capture still. */
+async function padWithNativeQuad(png, pad) {
+  const sharpLib = require('sharp');
+  const margin = pad || 60;
+  const meta = await sharpLib(png).metadata();
+  const buf = await sharpLib(png).extend({
+    top: margin, bottom: margin, left: margin, right: margin,
+    background: { r: 236, g: 72, b: 153 }
+  }).png().toBuffer();
+  const quad = {
+    tl: [margin, margin],
+    tr: [margin + meta.width - 1, margin],
+    br: [margin + meta.width - 1, margin + meta.height - 1],
+    bl: [margin, margin + meta.height - 1]
+  };
+  return { buf: buf, cardQuad: JSON.stringify(quad) };
+}
+
+function assertCenteringOnlyReport(label, report) {
+  assert(label + ' centering detected', report.printCenteringDetected === true);
+  assert(label + ' has CEN', typeof report.subGrades.centering === 'number');
+  assert(label + ' SUR not measured', report.subGrades.surface === null);
+  assert(label + ' EDG not measured', report.subGrades.edges === null);
+  assert(label + ' CRN not measured', report.subGrades.corners === null);
+  assert(label + ' no final grade without SUR/EDG', report.finalScore === null && report.incomplete === true);
 }
 
 function assertHint(label, actual, expected) {
@@ -195,7 +267,130 @@ assertHint('undetected hint', undetectedHint.hint, 'undetected');
 assertEq('spread threshold is 12px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 12);
 assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
 assertEq('min median width is 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
-assertEq('paper-white band floor is 165', g.WHITE_BAND_MIN_GREY, 165);
+assertEq('thin border floor is 8px', g.BORDER_THIN_MIN_PX, 8);
+assertEq('anchored thin floor is the 6px inward guard', g.BORDER_THIN_ANCHORED_MIN_PX, 6);
+assertEq('thin border needs 12 agreeing lines', g.BORDER_THIN_MIN_HITS, 12);
+assertEq('grey-versus-pink color gap is 40', g.BORDER_BAND_DISTINCT_RGB, 40);
+assert('color is not a grey floor', g.WHITE_BAND_MIN_GREY === undefined);
+
+const bandBox = { left: 0, right: 642, top: 0, bottom: 899, width: 643, height: 900 };
+const tightSamples = {
+  left: [29.2, 29.5, 29.8, 30, 30.1, 30.2, 30.4, 30.5, 30.6, 30.7, 30.8, 31],
+  right: [29.1, 29.4, 29.7, 30, 30, 30.2, 30.3, 30.4, 30.5, 30.6, 30.8, 31],
+  top: [29.3, 29.6, 29.9, 30, 30.1, 30.2, 30.3, 30.4, 30.5, 30.6, 30.7, 30.9],
+  bottom: [29, 29.4, 29.6, 29.8, 30, 30.1, 30.2, 30.3, 30.4, 30.5, 30.7, 31]
+};
+const coloredBand = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 30, right: 30, top: 30, bottom: 30 },
+  samples: tightSamples,
+  paperBandMean: { left: 48, right: 52, top: 46, bottom: 50 },
+  paperBandStddev: { left: 4, right: 3, top: 5, bottom: 4 }
+}, { alignmentCrop: true, interiorGrey: { mean: 140 }, backdrop: { grey: 170 } });
+assert('colored band distinct from interior and background is accepted', coloredBand.accepted === true, coloredBand.reasons);
+
+const sameAsInterior = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 30, right: 30, top: 30, bottom: 30 },
+  samples: tightSamples,
+  paperBandMean: { left: 138, right: 142, top: 136, bottom: 140 }
+}, { alignmentCrop: true, interiorGrey: { mean: 140 }, backdrop: { grey: 180 } });
+assert('band matching the interior is rejected', sameAsInterior.accepted === false);
+assert('band matching the interior names that', sameAsInterior.reasons.join(' ').indexOf('not distinct from the interior') !== -1);
+
+const thinReal = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 40, right: 36, top: 32, bottom: 11.1 },
+  samples: {
+    left: tightSamples.left,
+    right: tightSamples.right,
+    top: tightSamples.top,
+    bottom: [9.4, 9.7, 10.0, 10.2, 10.5, 10.8, 11.0, 11.2, 11.4, 11.6, 11.9, 12.2, 12.4, 12.6, 12.8]
+  },
+  paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
+}, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
+assert('agreeing 11px bottom is accepted', thinReal.accepted === true, thinReal.reasons);
+
+const greyInk = { r: 152, g: 150, b: 148 };
+const pinkMat = { r: 214, g: 118, b: 162 };
+const silverInk = { r: 186, g: 188, b: 192 };
+const thinEdge = [6.1, 6.2, 6.2, 6.3, 6.3, 6.4, 6.4, 6.5, 6.5, 6.6, 6.6, 6.7];
+const greyOnPink = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 28, right: 30, top: 27, bottom: 29 },
+  samples: tightSamples,
+  paperBandMean: { left: 150, right: 151, top: 149, bottom: 150 },
+  paperBandStddev: { left: 4, right: 4, top: 5, bottom: 4 },
+  paperBandRgb: { left: greyInk, right: greyInk, top: greyInk, bottom: greyInk }
+}, {
+  alignmentCrop: true,
+  interiorGrey: { mean: 48, rgb: { r: 36, g: 42, b: 58 } },
+  backdrop: { grey: 150, r: pinkMat.r, g: pinkMat.g, b: pinkMat.b }
+});
+assert('grey border on a pink mat is accepted by color', greyOnPink.accepted === true, greyOnPink.reasons);
+
+const silverOnPink = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 26, right: 28, top: 24, bottom: 27 },
+  samples: tightSamples,
+  paperBandMean: { left: 186, right: 188, top: 184, bottom: 187 },
+  paperBandStddev: { left: 6, right: 5, top: 7, bottom: 6 },
+  paperBandRgb: { left: silverInk, right: silverInk, top: silverInk, bottom: silverInk }
+}, {
+  alignmentCrop: true,
+  interiorGrey: { mean: 184, rgb: { r: 70, g: 120, b: 200 } },
+  backdrop: { grey: 186, r: pinkMat.r, g: pinkMat.g, b: pinkMat.b }
+});
+assert('silver border whose grey matches the pink mat is accepted by color', silverOnPink.accepted === true, silverOnPink.reasons);
+
+const sameColor = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 30, right: 30, top: 30, bottom: 30 },
+  samples: tightSamples,
+  paperBandMean: { left: 140, right: 142, top: 138, bottom: 141 },
+  paperBandRgb: {
+    left: { r: 140, g: 138, b: 136 },
+    right: { r: 142, g: 140, b: 138 },
+    top: { r: 138, g: 136, b: 134 },
+    bottom: { r: 141, g: 139, b: 137 }
+  }
+}, {
+  alignmentCrop: true,
+  interiorGrey: { mean: 140, rgb: { r: 141, g: 139, b: 137 } },
+  backdrop: { grey: 180, r: 200, g: 170, b: 160 }
+});
+assert('band matching the interior in grey and color is still rejected', sameColor.accepted === false, sameColor.reasons);
+
+const anchoredThin = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 32, right: 30, top: 28, bottom: 6.4 },
+  samples: {
+    left: tightSamples.left,
+    right: tightSamples.right,
+    top: tightSamples.top,
+    bottom: thinEdge
+  },
+  paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
+}, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
+assert('one 6px edge on an otherwise full frame is accepted', anchoredThin.accepted === true, anchoredThin.reasons);
+
+const allThin = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 6.4, right: 6.5, top: 6.3, bottom: 6.4 },
+  samples: { left: thinEdge, right: thinEdge, top: thinEdge, bottom: thinEdge },
+  paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
+}, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
+assert('a sliver on every side stays rejected', allThin.accepted === false, allThin.reasons);
+
+const chromeBand = g.assessPrintBorderReliability(bandBox, 643, 900, {
+  detected: true,
+  widths: { left: 40, right: 38, top: 36, bottom: 42 },
+  samples: tightSamples,
+  paperBandStddev: { left: 40, right: 36, top: 44, bottom: 38 },
+  paperBandMean: { left: 120, right: 130, top: 110, bottom: 125 }
+}, { alignmentCrop: true, interiorGrey: { mean: 70 }, backdrop: { grey: 180 } });
+assert('non-uniform chrome band is rejected', chromeBand.accepted === false);
+assert('chrome names the band', chromeBand.reasons.join(' ').indexOf('not uniform') !== -1);
 
 const brightBandVsDarkArt = g.describeBandVsInterior(
   { left: 200, right: 198, top: 204, bottom: 196 },
@@ -601,9 +796,9 @@ const starRookieNavyHint = g.describeBorderSource({
   detected: true,
   alignmentCrop: true
 });
-assert('Star Rookie navy surround rejected', starRookieNavy.accepted === false);
-assert('Star Rookie names not a white printed frame', starRookieNavy.reasons.join(' ').indexOf('not a white printed frame') !== -1);
-assertHint('Star Rookie navy hint is undetected', starRookieNavyHint.hint, 'undetected');
+assert('dark band is not rejected for color alone', starRookieNavy.accepted === true);
+assert('dark band does not cite a white-frame rule', starRookieNavy.reasons.join(' ').indexOf('not a white printed frame') === -1);
+assertHint('Star Rookie navy hint is a printed frame without an interior sample', starRookieNavyHint.hint, 'likely-printed-frame');
 
 const flatInkNameplate = g.assessPrintBorderReliability(
   starRookieBox,
@@ -656,9 +851,8 @@ const faulkNavyHint = g.describeBorderSource({
   detected: true,
   alignmentCrop: true
 });
-assert('Faulk navy surround rejected', faulkNavy.accepted === false);
-assertHint('Faulk navy hint is undetected', faulkNavyHint.hint, 'undetected');
-assert('Faulk hint is not printed-frame', faulkNavyHint.hint !== 'likely-printed-frame');
+assert('Faulk navy surround is not rejected for color alone', faulkNavy.accepted === true);
+assertHint('Faulk navy hint is a printed frame without an interior sample', faulkNavyHint.hint, 'likely-printed-frame');
 
 // iMac confirmation trio (Faulk, then Star Rookie, then the real white-border).
 // The live Node log still printed threshold=8px and omitted bandStddev — that
@@ -765,7 +959,7 @@ const live12FaulkPaper = g.assessPrintBorderReliability(
   }),
   { alignmentCrop: true }
 );
-assert('live 12px Faulk paper-white rejected', live12FaulkPaper.accepted === false);
+assert('live 12px Faulk dark band is not rejected for color alone', live12FaulkPaper.accepted === true);
 
 const live12StarRookie = g.assessPrintBorderReliability(
   liveConfirmBox,
@@ -932,6 +1126,40 @@ assert('auto-capture rejects 100ms pass-through', scanLevel.shouldAutoCapture(tr
 assert('auto-capture fires at 400ms hold', scanLevel.shouldAutoCapture(true, 400, false) === true);
 assert('auto-capture does not re-fire', scanLevel.shouldAutoCapture(true, 800, true) === false);
 
+assert('sweep: level matches near 0/0', scanLevel.matchSweepBin(0.2, -0.4) === 'level');
+assert('sweep: +12 pitch is pitchPlus', scanLevel.matchSweepBin(12, 0.5) === 'pitchPlus');
+assert('sweep: -12 pitch is pitchMinus', scanLevel.matchSweepBin(-12, 0) === 'pitchMinus');
+assert('sweep: +12 roll is rollPlus', scanLevel.matchSweepBin(0.3, 12) === 'rollPlus');
+assert('sweep: -12 roll is rollMinus', scanLevel.matchSweepBin(1, -12) === 'rollMinus');
+assert('sweep: diagonal is not a bin', scanLevel.matchSweepBin(12, 12) === null);
+assert('sweep: 6° is between bins', scanLevel.matchSweepBin(6, 0) === null);
+assert('sweep hold 100ms is not enough', scanLevel.shouldGrabSweepBin(true, 100, false) === false);
+assert('sweep hold 250ms grabs', scanLevel.shouldGrabSweepBin(true, 250, false) === true);
+assert('sweep does not re-grab', scanLevel.shouldGrabSweepBin(true, 400, true) === false);
+assert('next after level is pitchPlus', scanLevel.nextSweepBin(['level']).id === 'pitchPlus');
+assert('next after four angled is null', scanLevel.nextSweepBin(['level', 'pitchPlus', 'pitchMinus', 'rollPlus', 'rollMinus']) === null);
+assert('parseSweepMeta json', scanLevel.parseSweepMeta({
+  sweepMeta: JSON.stringify([{ bin: 'pitchPlus', pitch: 11.8, roll: 0.2 }])
+})[0].bin === 'pitchPlus');
+
+const partialSummary = scanLevel.summarizeSweepBins([
+  { bin: 'level' },
+  { bin: 'pitchPlus' },
+  { bin: 'unknown' }
+]);
+assert('summarize partial is not complete', partialSummary.surfaceSweepComplete === false);
+assert('summarize partial capturedBins', partialSummary.capturedBins.join(',') === 'level,pitchPlus');
+const fullSummary = scanLevel.summarizeSweepBins([
+  { bin: 'rollMinus' },
+  { bin: 'level' },
+  { bin: 'pitchPlus' },
+  { bin: 'rollPlus' },
+  { bin: 'pitchMinus' }
+]);
+assert('summarize full is complete', fullSummary.surfaceSweepComplete === true);
+assert('summarize full canonical order', fullSummary.capturedBins.join(',') === 'level,pitchPlus,pitchMinus,rollPlus,rollMinus');
+assert('summarize empty is not complete', scanLevel.summarizeSweepBins([]).surfaceSweepComplete === false);
+
 const parsedTilt = scanLevel.parseCaptureTilt({
   capturePitch: '0.42',
   captureRoll: '-1.08',
@@ -1086,7 +1314,9 @@ async function runBorderedCardDiagnosticsCheck() {
   if (report.printCenteringDetected) {
     assert('bordered-card hint is printed-frame', report.centeringDiagnostics.hint === 'likely-printed-frame');
     assert('bordered-card avgWidthPx is tens of pixels', report.centeringDiagnostics.avgWidthPx >= 12);
-    assert('bordered-card box is inset', report.centeringDiagnostics.boxFillRatio < 0.85);
+    assertEq('bordered-card quadSource', report.cardDetection.quadSource, 'server');
+    assert('bordered-card card box is inset in the photo', report.cardDetection.cardBoxPctOfPhoto < 85);
+    assertCenteringOnlyReport('bordered-card', report);
     assert('bordered-card reliability accepted',
       report.centeringDiagnostics.borderReliability &&
       report.centeringDiagnostics.borderReliability.accepted === true);
@@ -1112,11 +1342,9 @@ async function runEdgeTouchBleedCheck() {
     process.exitCode = 1;
     return;
   }
-  assertUndetectedNoFrameHint('full-bleed', report);
-  const box = report.debug && report.debug.box;
-  assert('full-bleed box touches a photo edge',
-    box && (box.left <= 0 || box.right >= (report.debug.width - 1) ||
-      box.top <= 0 || box.bottom >= (report.debug.height - 1)));
+  assert('full-bleed letterbox is card not found (never graded as the photo)', report.cardNotFound === true);
+  assert('full-bleed all sub-grades null',
+    report.subGrades.centering === null && report.subGrades.surface === null && report.subGrades.edges === null);
 }
 
 /** Full-frame white-border card (no mat). BBox often eats the white T/B
@@ -1188,7 +1416,9 @@ async function makeWhiteBorderNameplatePng() {
   const channels = 3;
   const buf = Buffer.alloc(width * height * channels);
   const border = 28;
-  const nameplateInner = 17;
+  // 7px bite at 400 wide ≈ 11px on the 643×900 grading warp (the 12px
+  // consensus threshold is tuned at that raster).
+  const nameplateInner = 21;
   const nameplateLeft = 140;
   const nameplateRight = 260;
   for (let y = 0; y < height; y++) {
@@ -1210,8 +1440,8 @@ async function makeWhiteBorderNameplatePng() {
   }).png().toBuffer();
 }
 
-/** Flat navy surround + rectangular photo — the live Faulk shape.
- *  Geometry agrees and the band is flat; paper-white must still reject. */
+/** Flat navy surround + rectangular photo. A uniform colored margin distinct
+ *  from the interior and the table is a border, not a white-only reject. */
 async function makeFlatNavyInsetPng() {
   let sharpLib = null;
   try { sharpLib = require('sharp'); } catch (e) { return null; }
@@ -1242,7 +1472,10 @@ async function runFlatNavyInsetCheck() {
     console.log('SKIP flat-navy inset check (sharp not installed)');
     return;
   }
-  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const report = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
   if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
     console.log('SKIP flat-navy inset check (sharp not installed)');
     return;
@@ -1252,17 +1485,13 @@ async function runFlatNavyInsetCheck() {
     process.exitCode = 1;
     return;
   }
-  assertUndetectedNoFrameHint('flat-navy inset', report);
+  assertCenteringOnlyReport('flat-navy colored border', report);
   const reliability = report.centeringDiagnostics && report.centeringDiagnostics.borderReliability;
   const reasons = reliability && reliability.reasons ? reliability.reasons.join(' ') : '';
-  assert('flat-navy names not a white printed frame',
-    reasons.indexOf('not a white printed frame') !== -1);
-  const paper = reliability && reliability.paperBandMean;
-  assert('flat-navy paper means are below the white floor',
-    paper && paper.left < g.WHITE_BAND_MIN_GREY && paper.right < g.WHITE_BAND_MIN_GREY);
+  assert('flat-navy is not rejected for being non-white',
+    reasons.indexOf('not a white printed frame') === -1 && reasons.indexOf('below 165') === -1, reasons);
   const navyBvi = report.centeringDiagnostics.bandVsInterior;
   assert('flat-navy diagnostic ratio exists', Boolean(navyBvi && navyBvi.min != null));
-  assert('flat-navy band is not brighter than interior', navyBvi.min < 1.05);
 }
 
 async function runBusyInsetBorderlessCheck() {
@@ -1271,7 +1500,10 @@ async function runBusyInsetBorderlessCheck() {
     console.log('SKIP busy-inset borderless check (sharp not installed)');
     return;
   }
-  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const report = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
   if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
     console.log('SKIP busy-inset borderless check (sharp not installed)');
     return;
@@ -1284,11 +1516,11 @@ async function runBusyInsetBorderlessCheck() {
   assertUndetectedNoFrameHint('busy-inset borderless', report);
   const reliability = report.centeringDiagnostics && report.centeringDiagnostics.borderReliability;
   const reasons = reliability && reliability.reasons ? reliability.reasons.join(' ') : '';
-  assert('busy-inset names texture, paper-white, or miss',
-    reasons.indexOf('textured art') !== -1 ||
-    reasons.indexOf('not a white printed frame') !== -1 ||
-    reasons.indexOf('cut-edge ink greys') !== -1 ||
-    reasons.indexOf('did not resolve') !== -1);
+  assert('busy-inset names a non-uniform band or a miss',
+    reasons.indexOf('not uniform') !== -1 ||
+    reasons.indexOf('not distinct') !== -1 ||
+    reasons.indexOf('did not resolve') !== -1 ||
+    reasons.indexOf('consensus range') !== -1, reasons);
 }
 
 async function runWhiteBorderNameplateCheck() {
@@ -1297,7 +1529,10 @@ async function runWhiteBorderNameplateCheck() {
     console.log('SKIP white-border nameplate check (sharp not installed)');
     return;
   }
-  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const report = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
   if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
     console.log('SKIP white-border nameplate check (sharp not installed)');
     return;
@@ -1307,9 +1542,18 @@ async function runWhiteBorderNameplateCheck() {
     process.exitCode = 1;
     return;
   }
-  assert('nameplate white-border detected', report.printCenteringDetected === true);
-  assert('nameplate white-border complete', report.incomplete === false);
-  assert('nameplate white-border has CEN', typeof report.subGrades.centering === 'number');
+  assert('nameplate white-border centering detected', report.printCenteringDetected === true);
+  assert('nameplate white-border SUR not measured', report.subGrades.surface === null);
+  assert('nameplate white-border EDG not measured', report.subGrades.edges === null);
+  assert('nameplate white-border CRN not measured', report.subGrades.corners === null);
+  assert('nameplate white-border no final grade without SUR/EDG', report.finalScore === null && report.incomplete === true);
+  const nameplateVote = (report.centeringMetrics && report.centeringMetrics.borderVoteLowConfidenceEdges) || [];
+  if (nameplateVote.length) {
+    assert('nameplate minority top vote withholds CEN',
+      report.subGrades.centering === null && nameplateVote.indexOf('top') !== -1, nameplateVote);
+  } else {
+    assert('nameplate white-border has CEN', typeof report.subGrades.centering === 'number', report.subGrades);
+  }
   assertHint('nameplate white-border hint is printed-frame', report.centeringDiagnostics.hint, 'likely-printed-frame');
   const npBvi = report.centeringDiagnostics.bandVsInterior;
   assert('nameplate diagnostic ratio exists', Boolean(npBvi && npBvi.min != null));
@@ -1380,7 +1624,10 @@ async function runCompoundWhiteOrangeCheck() {
     console.log('SKIP compound white/orange check (sharp not installed)');
     return;
   }
-  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const report = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
   if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
     console.log('SKIP compound white/orange check (sharp not installed)');
     return;
@@ -1402,7 +1649,10 @@ async function runFullBleedHoloCheck() {
     console.log('SKIP full-bleed holo check (sharp not installed)');
     return;
   }
-  const report = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const report = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
   if (report.notes && String(report.notes).indexOf('sharp') !== -1) {
     console.log('SKIP full-bleed holo check (sharp not installed)');
     return;
@@ -1428,7 +1678,11 @@ async function runFullFrameWhiteBorderCropCheck() {
     console.log('SKIP full-frame white-border crop check (sharp not installed)');
     return;
   }
-  const cropped = await g.gradeBuffer(buf, { maxDim: 560, debug: true, alignmentCrop: true });
+  const padded = await padWithNativeQuad(buf);
+  const cropped = await g.gradeBuffer(padded.buf, {
+    maxDim: 560, debug: true, alignmentCrop: true, cardQuad: padded.cardQuad
+  });
+  assertEq('white-border quadSource', cropped.cardDetection && cropped.cardDetection.quadSource, 'native');
   if (cropped.notes && String(cropped.notes).indexOf('sharp') !== -1) {
     console.log('SKIP full-frame white-border crop check (sharp not installed)');
     return;
@@ -1443,9 +1697,7 @@ async function runFullFrameWhiteBorderCropCheck() {
     box && box.left === 0 && box.top === 0 &&
     box.right === cropped.debug.width - 1 &&
     box.bottom === cropped.debug.height - 1);
-  assert('alignment-crop white-border detected', cropped.printCenteringDetected === true);
-  assert('alignment-crop white-border complete', cropped.incomplete === false);
-  assert('alignment-crop white-border has CEN', typeof cropped.subGrades.centering === 'number');
+  assertCenteringOnlyReport('white-border', cropped);
   const topW = cropped.centeringDiagnostics && cropped.centeringDiagnostics.printBorderWidths
     ? cropped.centeringDiagnostics.printBorderWidths.top
     : 0;
@@ -1454,7 +1706,8 @@ async function runFullFrameWhiteBorderCropCheck() {
   const whiteBvi = cropped.centeringDiagnostics.bandVsInterior;
   assert('white-border diagnostic ratio exists', Boolean(whiteBvi && whiteBvi.min != null));
   assert('white-border band is brighter than interior', whiteBvi.min > 1.2);
-  assert('white-border still accepted (diagnostic is not a gate)', cropped.incomplete === false);
+  assert('white-border centering accepted (diagnostic is not a gate)',
+    cropped.centeringDiagnostics.borderReliability.accepted === true);
 }
 
 async function runHighSpreadInsetCheck() {
@@ -1494,6 +1747,37 @@ runGradeBufferUndetectedCheck().then(function () {
   return runCompoundWhiteOrangeCheck();
 }).then(function () {
   return runFullBleedHoloCheck();
+}).then(async function () {
+  const buf = await makeBorderedCardPng();
+  if (!buf) {
+    console.log('SKIP surfaceSweep diagnostic (no sharp / no synthetic)');
+    return;
+  }
+  const graded = await g.gradeBuffer(buf, { debug: true, alignmentCrop: true });
+  const surfaceBefore = graded.subGrades && graded.subGrades.surface;
+  const sweep = await g.buildSurfaceSweep(graded, [
+    { buffer: buf, bin: 'pitchPlus', pitch: 12, roll: 0 }
+  ], { alignmentCrop: true, levelTilt: { pitchDeg: 0, rollDeg: 0 } });
+  await g.applySurfaceSweep(graded, [
+    { buffer: buf, bin: 'pitchPlus', pitch: 12, roll: 0 }
+  ], { alignmentCrop: true, levelTilt: { pitchDeg: 0, rollDeg: 0 } });
+  assert('surfaceSweep does not change SUR', graded.subGrades.surface === surfaceBefore);
+  assert('surfaceSweep has level + extra', sweep.length === 2);
+  assert('surfaceSweep[0] is level', sweep[0].bin === 'level');
+  assert('surfaceSweep extra keeps bin', sweep[1].bin === 'pitchPlus');
+  assert('surfaceSweep extra has scratchCount', typeof sweep[1].scratchCount === 'number');
+  assert('partial apply is not complete', graded.surfaceSweepComplete === false);
+  assert('partial capturedBins', graded.capturedBins.join(',') === 'level,pitchPlus');
+  await g.applySurfaceSweep(graded, [
+    { buffer: buf, bin: 'pitchPlus', pitch: 12, roll: 0 },
+    { buffer: buf, bin: 'pitchMinus', pitch: -12, roll: 0 },
+    { buffer: buf, bin: 'rollPlus', pitch: 0, roll: 12 },
+    { buffer: buf, bin: 'rollMinus', pitch: 0, roll: -12 }
+  ], { alignmentCrop: true, levelTilt: { pitchDeg: 0, rollDeg: 0 } });
+  assert('full apply is complete', graded.surfaceSweepComplete === true);
+  assert('full capturedBins has five', graded.capturedBins.join(',') === 'level,pitchPlus,pitchMinus,rollPlus,rollMinus');
+  assert('full apply still does not change SUR', graded.subGrades.surface === surfaceBefore);
+  console.log('PASS surfaceSweep is diagnostic-only (SUR unchanged)');
 }).then(function () {
   if (process.exitCode) {
     console.error('Judge math regression failed.');
