@@ -27,6 +27,10 @@
  * estimated from each of its two sides agrees. The bias is reported and
  * is never subtracted as a fixed correction.
  *
+ * Which files are measured is reference/flatbed_manifest.json: each filename
+ * maps to a deck id and an orientation (up or 180). A scan name that is not
+ * in the manifest is ignored, so a new card is a new manifest line.
+ *
  * Run: node scripts/measure_flatbed.js [--flatbed DIR] [--self-test]
  */
 'use strict';
@@ -1925,11 +1929,31 @@ async function measureFile(file, dpi) {
   return shiftResult(result, loaded.origin);
 }
 
-function parseScanName(file) {
+function flatbedManifestPath() {
+  return path.join(__dirname, '..', 'reference', 'flatbed_manifest.json');
+}
+
+function loadFlatbedManifest(file) {
+  const manifestFile = file || flatbedManifestPath();
+  const raw = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  const byName = {};
+  Object.keys(raw).forEach(function (name) {
+    const entry = raw[name];
+    if (!entry || typeof entry !== 'object') return;
+    const deck = String(entry.deck || '').trim().toUpperCase();
+    const orientation = String(entry.orientation || '').trim().toLowerCase();
+    if (!deck || (orientation !== 'up' && orientation !== '180')) return;
+    byName[name] = { card: deck, orientation: orientation };
+  });
+  return byName;
+}
+
+function parseScanName(file, manifest) {
   const base = path.basename(file);
-  const m = /^(TD-\d+)_(up|180)\.png$/i.exec(base);
-  if (!m) return null;
-  return { card: m[1].toUpperCase(), orientation: m[2].toLowerCase(), file: file };
+  const table = manifest || loadFlatbedManifest();
+  const hit = table[base];
+  if (!hit) return null;
+  return { card: hit.card, orientation: hit.orientation, file: file };
 }
 
 function readPngDpi(file) {
@@ -1989,12 +2013,19 @@ function defaultFlatbedDir() {
   return candidates[0] || candidates[candidates.length - 1];
 }
 
-function listScans(dir) {
+function listScans(dir, manifest) {
   if (!dir || !fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(function (name) { return /^TD-\d+_(up|180)\.png$/i.test(name); })
+  const table = manifest || loadFlatbedManifest();
+  return Object.keys(table)
+    .filter(function (name) { return fs.existsSync(path.join(dir, name)); })
     .map(function (name) { return path.join(dir, name); })
-    .sort();
+    .sort(function (a, b) {
+      const pa = table[path.basename(a)];
+      const pb = table[path.basename(b)];
+      const ka = pa.card + '\0' + (pa.orientation === 'up' ? '0' : '1');
+      const kb = pb.card + '\0' + (pb.orientation === 'up' ? '0' : '1');
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
 }
 
 function printReport(key) {
@@ -2393,6 +2424,19 @@ async function selfTest() {
   check('bottom mean cancels bias', near(bias.sides.bottom.mm, 3.1465, 0.001), bias.sides.bottom);
   check('across-scan needs both sides', bias.axes.acrossScan.agree === false && bias.sides.right.reason === 'needs-both-sides', bias.sides.right);
   check('no fixed correction', bias.sides.top.mm === roundMm((3.777 + 3.526) / 2), bias.sides.top.mm);
+
+  const manifest = loadFlatbedManifest();
+  const lavitar = parseScanName('flatbed/Lavitar_up.png', manifest);
+  const fouts = parseScanName('/scans/Fouts_180.png', manifest);
+  const td01 = parseScanName('TD-01_up.png', manifest);
+  const karros = parseScanName('KARROS_180.png', manifest);
+  const laporta = parseScanName('flatbed/Laporta_up.png', manifest);
+  check('manifest maps Lavitar_up to TD-03', lavitar && lavitar.card === 'TD-03' && lavitar.orientation === 'up', lavitar);
+  check('manifest maps Fouts_180 to TD-04', fouts && fouts.card === 'TD-04' && fouts.orientation === '180', fouts);
+  check('manifest keeps TD-01_up', td01 && td01.card === 'TD-01' && td01.orientation === 'up', td01);
+  check('manifest maps KARROS_180 to KARROS', karros && karros.card === 'KARROS' && karros.orientation === '180', karros);
+  check('manifest maps Laporta_up to LAPORTA', laporta && laporta.card === 'LAPORTA' && laporta.orientation === 'up', laporta);
+  check('manifest ignores a name it does not list', parseScanName('not-a-scan.png', manifest) == null);
 
   const tiltedPng = await sharp(mixed.data, {
     raw: { width: mixed.width, height: mixed.height, channels: 3 }
