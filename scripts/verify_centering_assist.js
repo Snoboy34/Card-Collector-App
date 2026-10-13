@@ -115,6 +115,81 @@ async function main() {
   assert('grade source is assisted', built.assist.gradeSource === 'assisted' && built.assist.source === 'assisted');
   assert('centering score is the Judge table, not 50/50', built.assist.centering === 7, built.assist);
   assert('centering label says assisted', built.assist.centeringLabel === '7.0 assisted', built.assist.centeringLabel);
+  assert('a report with no side uses the front table', built.assist.side === 'front');
+  assert('assisted label does not say PSA', String(built.assist.centeringLabel).indexOf('PSA') === -1);
+
+  function blankWidths(side) {
+    const report = reportWith({ side: side });
+    report.centeringMetrics = {
+      borderWidthsMm: { left: null, right: null, top: null, bottom: null },
+      borderVoteLowConfidenceEdges: [],
+      leftRightRatio: null,
+      topBottomRatio: null
+    };
+    report.subGrades = { centering: null, surface: null, edges: null, corners: null };
+    return report;
+  }
+  const tableCases = [
+    { name: '60/40', widths: { left: 6, right: 4, top: 5, bottom: 5 }, front: 9, frontLabel: '9.0 assisted', back: 10, backLabel: '10.0 assisted' },
+    { name: '75/25', widths: { left: 7.5, right: 2.5, top: 5, bottom: 5 }, front: 6, frontLabel: '6.0 assisted', back: 10, backLabel: '10.0 assisted' },
+    { name: '80/20', widths: { left: 8, right: 2, top: 5, bottom: 5 }, front: 6, frontLabel: '6.0 assisted', back: 9, backLabel: '9.0 assisted' },
+    { name: '90/10', widths: { left: 9, right: 1, top: 5, bottom: 5 }, front: 3, frontLabel: '3.0 assisted', back: 9, backLabel: '9.0 assisted' },
+    { name: 'past 90/10', widths: { left: 9.1, right: 0.9, top: 5, bottom: 5 }, front: 1, frontLabel: '1.0 assisted', back: null, backLabel: null }
+  ];
+  tableCases.forEach(function (row) {
+    ['front', 'back'].forEach(function (side) {
+      const before = blankWidths(side);
+      const engineBefore = JSON.stringify(before.subGrades);
+      const builtRow = assist.buildFromMillimetres(before, row.widths, { scanId: 'table-' + side, confirmImplausible: true });
+      const expectScore = side === 'back' ? row.back : row.front;
+      const expectLabel = side === 'back' ? row.backLabel : row.frontLabel;
+      assert(side + ' ' + row.name + ' assisted score',
+        builtRow.ok === true &&
+        builtRow.assist.side === side &&
+        builtRow.assist.centering === expectScore &&
+        builtRow.assist.centeringLabel === expectLabel &&
+        String(builtRow.assist.centeringLabel || '').indexOf('PSA') === -1 &&
+        JSON.stringify(before.subGrades) === engineBefore,
+        builtRow.assist && { side: builtRow.assist.side, centering: builtRow.assist.centering, label: builtRow.assist.centeringLabel });
+    });
+  });
+  const backByMeta = assist.buildFromMillimetres(blankWidths(undefined), tableCases[0].widths, {
+    scanId: 'table-meta-back', side: 'back', confirmImplausible: true
+  });
+  assert('item side back uses the back table when the report has no side',
+    backByMeta.ok === true && backByMeta.assist.centeringLabel === '10.0 assisted', backByMeta.assist && backByMeta.assist.centeringLabel);
+  const storedBack = {
+    inventory: [{
+      side: 'back',
+      gradingReport: {
+        side: 'back',
+        finalScore: null,
+        subGrades: { centering: null, surface: 8, edges: 8, corners: 8 },
+        centeringAssist: {
+          adjustedCount: 1,
+          side: 'front',
+          centering: 9,
+          centeringLabel: '9.0 assisted',
+          borderWidthsMm: { left: 6, right: 4, top: 5, bottom: 5 }
+        }
+      }
+    }]
+  };
+  const storedSubs = JSON.stringify(storedBack.inventory[0].gradingReport.subGrades);
+  assert('a stored back 60/40 is rewritten onto the back table',
+    assist.rescoreDatabase(storedBack) === 1 &&
+    storedBack.inventory[0].gradingReport.centeringAssist.centering === 10 &&
+    storedBack.inventory[0].gradingReport.centeringAssist.centeringLabel === '10.0 assisted' &&
+    storedBack.inventory[0].gradingReport.centeringAssist.side === 'back' &&
+    JSON.stringify(storedBack.inventory[0].gradingReport.subGrades) === storedSubs);
+  assert('a second pass leaves the corrected assist', assist.rescoreDatabase(storedBack) === 0);
+  storedBack.inventory[0].gradingReport.centeringAssist.borderWidthsMm = { left: 9.1, right: 0.9, top: 5, bottom: 5 };
+  storedBack.inventory[0].gradingReport.centeringAssist.centering = 1;
+  storedBack.inventory[0].gradingReport.centeringAssist.centeringLabel = '1.0 assisted';
+  assert('a stored back past 90/10 loses the fabricated label',
+    assist.rescoreDatabase(storedBack) === 1 &&
+    storedBack.inventory[0].gradingReport.centeringAssist.centering === null &&
+    storedBack.inventory[0].gradingReport.centeringAssist.centeringLabel === null);
   assert('user mm stored', built.assist.sides.left.userWidthMm === 4 && built.assist.sides.left.kind === 'assisted');
   assert('unmoved measured sides stay engine', built.assist.sides.right.source === 'engine' && built.assist.sides.right.userWidthMm === null);
   assert('engine centering on the report object is unchanged',

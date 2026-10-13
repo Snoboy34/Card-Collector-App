@@ -21,6 +21,7 @@ const path = require('path');
 const crypto = require('crypto');
 const geometry = require('../public/centering_assist');
 const grading = require('./grading_engine');
+const backScan = require('./back_scan');
 
 const EXAMPLES_FILE = 'centering_examples.jsonl';
 const SETTINGS_FILE = 'assist_settings.json';
@@ -180,6 +181,62 @@ function redactDatabaseForScanRepo(db) {
   return copy;
 }
 
+/** "back" only when the capture or the report says so. Anything else is the front table. */
+function assistedSide(report, meta) {
+  if (meta && meta.side === 'back') return 'back';
+  if (report && report.side === 'back') return 'back';
+  return 'front';
+}
+
+/**
+ * Rewrite a stored assisted label from the scan side and the placed widths.
+ * Engine fields on the report are not touched. Returns true when the label changed.
+ */
+function rescoreStoredAssist(item) {
+  const report = item && item.gradingReport;
+  const assist = report && report.centeringAssist;
+  if (!assist || !(assist.adjustedCount > 0)) return false;
+  const ratios = geometry.ratiosFromWidthsMm(assist.borderWidthsMm);
+  if (!ratios) return false;
+  const side = assistedSide(report, { side: item.side });
+  const scored = scoreAssistedCentering(side, ratios);
+  if (assist.side === side && assist.centering === scored.score && assist.centeringLabel === scored.label) {
+    return false;
+  }
+  assist.side = side;
+  assist.centering = scored.score;
+  assist.centeringLabel = scored.label;
+  return true;
+}
+
+function rescoreDatabase(db) {
+  let changed = 0;
+  ((db && db.inventory) || []).forEach(function (item) {
+    if (rescoreStoredAssist(item)) changed += 1;
+  });
+  return changed;
+}
+
+/**
+ * Assisted centering from the placed widths. Fronts use the engine's front
+ * table (scoreCenteringPhase). Backs use the published back table in
+ * back_scan.js: 10 = 75/25, 9 = 90/10. A back share past 90/10 matches no
+ * row, so the score and the label stay null. This never writes
+ * subGrades.centering.
+ */
+function scoreAssistedCentering(side, ratios) {
+  if (side === 'back') {
+    const lr = ratios.leftRightRatio;
+    const tb = ratios.topBottomRatio;
+    const worst = 50 + Math.max(Math.abs(lr.left - lr.right), Math.abs(tb.top - tb.bottom)) / 2;
+    const judged = backScan.bestPsaBackGrade(worst);
+    if (!judged.judged || judged.grade == null) return { score: null, label: null };
+    return { score: judged.grade, label: Number(judged.grade).toFixed(1) + ' assisted' };
+  }
+  const phase = grading.scoreCenteringPhase(ratios.leftRightRatio, ratios.topBottomRatio);
+  return { score: phase.score, label: phase.score.toFixed(1) + ' assisted' };
+}
+
 function sameMm(a, b) {
   return geometry.isFiniteNumber(a) && geometry.isFiniteNumber(b) && Math.abs(a - b) < 0.0005;
 }
@@ -337,13 +394,15 @@ function buildFromMillimetres(report, userMm, meta) {
     centeringLabel: null
   };
 
+  const side = assistedSide(report, meta);
+  assist.side = side;
   const ratios = geometry.ratiosFromWidthsMm(combined);
   if (ratios) {
-    const phase = grading.scoreCenteringPhase(ratios.leftRightRatio, ratios.topBottomRatio);
+    const scored = scoreAssistedCentering(side, ratios);
     assist.leftRightRatio = ratios.leftRightRatio;
     assist.topBottomRatio = ratios.topBottomRatio;
-    assist.centering = phase.score;
-    assist.centeringLabel = phase.score.toFixed(1) + ' assisted';
+    assist.centering = scored.score;
+    assist.centeringLabel = scored.label;
   }
 
   return { ok: true, assist: assist, examples: examples };
@@ -366,5 +425,8 @@ module.exports = {
   redactDatabaseForScanRepo: redactDatabaseForScanRepo,
   buildFromLines: buildFromLines,
   buildFromMillimetres: buildFromMillimetres,
-  attachAssist: attachAssist
+  attachAssist: attachAssist,
+  scoreAssistedCentering: scoreAssistedCentering,
+  rescoreStoredAssist: rescoreStoredAssist,
+  rescoreDatabase: rescoreDatabase
 };

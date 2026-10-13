@@ -714,7 +714,8 @@ app.post('/api/scans/:scanId/centering-assist', (req, res) => {
     engineVersion: engineStamp.version || item.gradingReport.engineVersion || grading.ENGINE_VERSION,
     engineCommit: engineStamp.commit || ENGINE.commit || null,
     consent: consent,
-    confirmImplausible: req.body && req.body.confirmImplausible === true
+    confirmImplausible: req.body && req.body.confirmImplausible === true,
+    side: item.side || item.gradingReport.side || null
   });
   if (!built.ok) {
     return res.status(400).json({
@@ -1090,8 +1091,17 @@ function ensureDatabaseFile() {
   console.log('Created empty ' + DB_PATH);
 }
 
+function refreshStoredAssists() {
+  const db = loadDatabase();
+  const changed = centeringAssist.rescoreDatabase(db);
+  if (!changed) return;
+  saveDatabase(db);
+  console.log('[centering-assist] rescored ' + changed + ' stored assist' + (changed === 1 ? '' : 's'));
+}
+
 function startServer() {
   ensureDatabaseFile();
+  refreshStoredAssists();
   if (LAN_HTTPS) {
     let tls;
     try {
