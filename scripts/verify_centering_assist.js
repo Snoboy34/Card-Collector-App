@@ -96,6 +96,7 @@ async function main() {
     demoRange && 11.43 > demoRange.maxMm && demoRange.minMm >= 0, demoRange);
   const inRange = geo.plausibleRangeMm('left', geo.measuredWidthsMm(withheld));
   assert('2.2 mm is inside the fixture range', inRange && 2.2 >= inRange.minMm && 2.2 <= inRange.maxMm, inRange);
+  withheld.side = 'front';
   const quiet = assist.buildFromLines(withheld, { left: lineForMm('left', 2.2) }, { scanId: 'assist-test-scan-0001' });
   assert('a plausible line saves without a warning',
     quiet.ok === true && quiet.examples[0].warningShown === false, quiet);
@@ -115,7 +116,18 @@ async function main() {
   assert('grade source is assisted', built.assist.gradeSource === 'assisted' && built.assist.source === 'assisted');
   assert('centering score is the Judge table, not 50/50', built.assist.centering === 7, built.assist);
   assert('centering label says assisted', built.assist.centeringLabel === '7.0 assisted', built.assist.centeringLabel);
-  assert('a report with no side uses the front table', built.assist.side === 'front');
+  assert('a stored front uses the front table', built.assist.side === 'front');
+  const noSideReport = reportWith();
+  const noSide = assist.buildFromLines(noSideReport, { left: lineForMm('left', 4) }, {
+    scanId: 'assist-test-scan-0001',
+    confirmImplausible: true
+  });
+  assert('a report with no side does not default to the front table',
+    noSide.ok === true &&
+    noSide.assist.side == null &&
+    noSide.assist.centering == null &&
+    noSide.assist.centeringLabel == null,
+    noSide.assist && { side: noSide.assist.side, centering: noSide.assist.centering, label: noSide.assist.centeringLabel });
   assert('assisted label does not say PSA', String(built.assist.centeringLabel).indexOf('PSA') === -1);
 
   function blankWidths(side) {
@@ -244,6 +256,121 @@ async function main() {
   } finally {
     console.log = previousLog;
   }
+
+  const repairLog = [];
+  const corrupt = {
+    inventory: [{
+      scanId: '366A0E19-0000-4000-8000-000000000001',
+      deckId: 'TD-13',
+      side: 'front',
+      createdAt: '2026-10-13T13:54:36.000Z',
+      gradingReport: { side: 'front' }
+    }]
+  };
+  assert('366A0E19 is repaired to TD-06, back, and the original capture time',
+    assist.repairRecord366A0E19(corrupt, function (line) { repairLog.push(line); }) === 1 &&
+    corrupt.inventory[0].deckId === 'TD-06' &&
+    corrupt.inventory[0].side === 'back' &&
+    corrupt.inventory[0].gradingReport.side === 'back' &&
+    corrupt.inventory[0].createdAt === '2026-10-12T20:57:08.000Z');
+  assert('the repair log names the scan and the old and new deck, side, and time',
+    repairLog.length === 1 &&
+    repairLog[0].indexOf('scanId=366A0E19-0000-4000-8000-000000000001') !== -1 &&
+    repairLog[0].indexOf('deckId TD-13 -> TD-06') !== -1 &&
+    repairLog[0].indexOf('side front -> back') !== -1 &&
+    repairLog[0].indexOf('2026-10-13T13:54:36.000Z') !== -1 &&
+    repairLog[0].indexOf('2026-10-12T20:57:08.000Z') !== -1,
+    repairLog);
+  assert('a second repair of 366A0E19 logs nothing',
+    assist.repairRecord366A0E19(corrupt, function (line) { repairLog.push(line); }) === 0 &&
+    repairLog.length === 1, repairLog);
+  const earlierClock = {
+    inventory: [{
+      scanId: '366A0E19-earlier-clock',
+      deckId: 'TD-13',
+      side: 'front',
+      createdAt: '2026-10-13T13:54:36.000Z',
+      serverMetadata: { receivedAt: '2026-10-12T18:00:00.000Z' },
+      gradingReport: { side: 'front' }
+    }]
+  };
+  assist.repairRecord366A0E19(earlierClock, function () {});
+  assert('an earlier receivedAt stays the capture time',
+    earlierClock.inventory[0].createdAt === '2026-10-12T18:00:00.000Z' &&
+    earlierClock.inventory[0].deckId === 'TD-06' &&
+    earlierClock.inventory[0].side === 'back');
+
+  const identityReport = blankWidths('back');
+  const identityBuilt = assist.buildFromMillimetres(identityReport, { left: 5.6, right: 4.4, top: 5, bottom: 5 }, {
+    scanId: 'identity-back-0001',
+    confirmImplausible: true,
+    side: 'back'
+  });
+  const identitySaved = assist.applyStoredAssist({
+    scanId: 'identity-back-0001',
+    deckId: 'TD-06',
+    side: 'back',
+    createdAt: '2026-10-12T20:57:08.000Z',
+    gradingReport: identityReport
+  }, identityBuilt.assist, '2026-10-13T13:54:36.000Z', { setSide: 'front' });
+  assert('saving an adjustment keeps deck id, side, and scan time',
+    identityBuilt.ok === true &&
+    identitySaved.deckId === 'TD-06' &&
+    identitySaved.side === 'back' &&
+    identitySaved.gradingReport.side === 'back' &&
+    identitySaved.createdAt === '2026-10-12T20:57:08.000Z' &&
+    identitySaved.gradingReport.centeringAssist.adjustedAt === '2026-10-13T13:54:36.000Z' &&
+    identitySaved.gradingReport.centeringAssist.side === 'back' &&
+    identitySaved.gradingReport.centeringAssist.centering === 10 &&
+    identitySaved.gradingReport.centeringAssist.centeringLabel === '10.0 assisted',
+    identitySaved.gradingReport.centeringAssist);
+  const missingReport = blankWidths(undefined);
+  const missingBuilt = assist.buildFromMillimetres(missingReport, { left: 5.6, right: 4.4, top: 5, bottom: 5 }, {
+    scanId: 'identity-missing-01',
+    confirmImplausible: true
+  });
+  const missingSaved = assist.applyStoredAssist({
+    scanId: 'identity-missing-01',
+    deckId: 'TD-04',
+    createdAt: '2026-10-11T00:00:00.000Z',
+    gradingReport: missingReport
+  }, missingBuilt.assist, '2026-10-13T13:54:36.000Z', {});
+  assert('a missing side does not default to front',
+    missingBuilt.ok === true &&
+    missingSaved.side == null &&
+    (missingSaved.gradingReport.side == null) &&
+    missingSaved.gradingReport.centeringAssist.side == null &&
+    missingSaved.gradingReport.centeringAssist.centering == null &&
+    missingSaved.gradingReport.centeringAssist.centeringLabel == null &&
+    missingSaved.deckId === 'TD-04' &&
+    missingSaved.createdAt === '2026-10-11T00:00:00.000Z',
+    missingSaved);
+  const missingBack = assist.applyStoredAssist(
+    missingSaved,
+    missingSaved.gradingReport.centeringAssist,
+    '2026-10-13T13:55:00.000Z',
+    { setSide: 'back' }
+  );
+  assert('an explicit back on a side-less record uses the back table',
+    missingBack.side === 'back' &&
+    missingBack.deckId === 'TD-04' &&
+    missingBack.createdAt === '2026-10-11T00:00:00.000Z' &&
+    missingBack.gradingReport.centeringAssist.centering === 10 &&
+    missingBack.gradingReport.centeringAssist.centeringLabel === '10.0 assisted' &&
+    missingBack.gradingReport.centeringAssist.adjustedAt === '2026-10-13T13:55:00.000Z');
+  const stillBack = assist.applyStoredAssist(
+    missingBack,
+    missingBack.gradingReport.centeringAssist,
+    '2026-10-13T13:56:00.000Z',
+    { setSide: 'front' }
+  );
+  assert('a later setSide does not replace a stored side',
+    stillBack.side === 'back' &&
+    stillBack.gradingReport.side === 'back' &&
+    stillBack.gradingReport.centeringAssist.centeringLabel === '10.0 assisted' &&
+    stillBack.createdAt === '2026-10-11T00:00:00.000Z' &&
+    stillBack.deckId === 'TD-04');
+
   assert('user mm stored', built.assist.sides.left.userWidthMm === 4 && built.assist.sides.left.kind === 'assisted');
   assert('unmoved measured sides stay engine', built.assist.sides.right.source === 'engine' && built.assist.sides.right.userWidthMm === null);
   assert('engine centering on the report object is unchanged',
@@ -377,12 +504,36 @@ async function main() {
     category: 'UNKNOWN',
     imagePath: '/uploads/none.jpg',
     engine: { version: '2026.10.01-border-band', commit: 'abc1234' },
-    gradingReport: reportWith(),
+    gradingReport: reportWith({ side: 'front' }),
+    side: 'front',
     createdAt: '2026-10-09T00:00:00.000Z'
   };
+  const backScanId = 'td06-back-0001';
+  const backStored = {
+    id: backScanId,
+    scanId: backScanId,
+    name: 'TD-06 back',
+    category: 'UNKNOWN',
+    deckId: 'TD-06',
+    side: 'back',
+    imagePath: '/uploads/none.jpg',
+    gradingReport: reportWith({ scanId: backScanId, side: 'back' }),
+    createdAt: '2026-10-12T20:57:08.000Z'
+  };
+  const unknownScanId = 'noside-scan-0001';
+  const unknownStored = {
+    id: unknownScanId,
+    scanId: unknownScanId,
+    name: 'Side missing',
+    category: 'UNKNOWN',
+    deckId: 'TD-04',
+    imagePath: '/uploads/none.jpg',
+    gradingReport: reportWith({ scanId: unknownScanId }),
+    createdAt: '2026-10-11T00:00:00.000Z'
+  };
   fs.writeFileSync(path.join(process.env.JUDGE_DATA_DIR, 'database.json'), JSON.stringify({
-    inventory: [stored],
-    categoryCounts: { SPORTS: 0, TCG: 0, UNKNOWN: 1 }
+    inventory: [stored, backStored, unknownStored],
+    categoryCounts: { SPORTS: 0, TCG: 0, UNKNOWN: 3 }
   }));
   const { app } = require('../server');
   const server = await new Promise(function (resolve) {
@@ -406,7 +557,13 @@ async function main() {
   const posted = await fetch(base + '/api/scans/' + scanId + '/centering-assist', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lines: { left: lineForMm('left', 4) }, confirmImplausible: true })
+    body: JSON.stringify({
+      lines: { left: lineForMm('left', 4) },
+      confirmImplausible: true,
+      deckId: 'TD-13',
+      side: 'back',
+      createdAt: '2026-10-13T13:54:36.000Z'
+    })
   }).then(function (r) { return r.json(); });
   assert('POST stores an assisted grade',
     posted.ok === true &&
@@ -415,6 +572,14 @@ async function main() {
     posted.item.gradingReport.subGrades.centering === null &&
     posted.item.gradingReport.centeringMetrics.borderWidthsMm.left === null &&
     posted.item.gradingReport.centeringAssist.sides.left.userWidthMm === 4, posted);
+  assert('POST ignores a deck id, side, and clock sent with the lines',
+    posted.item.deckId == null &&
+    posted.item.side === 'front' &&
+    posted.item.gradingReport.side === 'front' &&
+    posted.item.createdAt === '2026-10-09T00:00:00.000Z' &&
+    posted.assist.adjustedAt &&
+    posted.assist.adjustedAt !== posted.item.createdAt,
+    { deckId: posted.item.deckId, side: posted.item.side, createdAt: posted.item.createdAt, adjustedAt: posted.assist.adjustedAt });
 
   const onDisk = JSON.parse(fs.readFileSync(path.join(process.env.JUDGE_DATA_DIR, 'database.json'), 'utf8'));
   const diskReport = onDisk.inventory[0].gradingReport;
@@ -521,6 +686,85 @@ async function main() {
     copiedText.indexOf('9.876') === -1);
   assert('a report with no user line is unchanged',
     JSON.stringify(assist.redactReportForEgress(reportWith())) === JSON.stringify(reportWith()));
+
+  const backPosted = await fetch(base + '/api/scans/' + backScanId + '/centering-assist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lines: {
+        left: lineForMm('left', 5.6),
+        right: lineForMm('right', 4.4),
+        top: lineForMm('top', 5),
+        bottom: lineForMm('bottom', 5)
+      },
+      confirmImplausible: true,
+      deckId: 'TD-13',
+      side: 'front',
+      createdAt: '2026-10-13T13:54:36.000Z'
+    })
+  }).then(function (r) { return r.json(); });
+  assert('re-saving a back keeps TD-06, back, the capture time, and the back table',
+    backPosted.ok === true &&
+    backPosted.item.deckId === 'TD-06' &&
+    backPosted.item.side === 'back' &&
+    backPosted.item.gradingReport.side === 'back' &&
+    backPosted.item.createdAt === '2026-10-12T20:57:08.000Z' &&
+    backPosted.assist.side === 'back' &&
+    backPosted.assist.centeringLabel === '10.0 assisted' &&
+    backPosted.assist.centering === 10 &&
+    backPosted.assist.adjustedAt &&
+    backPosted.assist.adjustedAt !== '2026-10-12T20:57:08.000Z',
+    backPosted.assist && {
+      deckId: backPosted.item.deckId,
+      side: backPosted.item.side,
+      createdAt: backPosted.item.createdAt,
+      label: backPosted.assist.centeringLabel,
+      adjustedAt: backPosted.assist.adjustedAt
+    });
+  const backFlip = await fetch(base + '/api/scans/' + backScanId + '/centering-assist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ setSide: 'front' })
+  });
+  const backFlipBody = await backFlip.json();
+  assert('setSide is refused once a scan already has a side',
+    backFlip.status === 400 && backFlipBody.ok === false, backFlipBody);
+
+  const unknownPosted = await fetch(base + '/api/scans/' + unknownScanId + '/centering-assist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lines: { left: lineForMm('left', 4) },
+      confirmImplausible: true,
+      deckId: 'TD-13',
+      side: 'front',
+      createdAt: '2026-10-13T13:54:36.000Z'
+    })
+  }).then(function (r) { return r.json(); });
+  assert('POST on a side-less scan does not invent front',
+    unknownPosted.ok === true &&
+    unknownPosted.item.side == null &&
+    unknownPosted.item.gradingReport.side == null &&
+    unknownPosted.assist.side == null &&
+    unknownPosted.assist.centeringLabel == null &&
+    unknownPosted.assist.centering == null &&
+    unknownPosted.item.deckId === 'TD-04' &&
+    unknownPosted.item.createdAt === '2026-10-11T00:00:00.000Z',
+    unknownPosted.item && { side: unknownPosted.item.side, deckId: unknownPosted.item.deckId, label: unknownPosted.assist.centeringLabel });
+  const setBack = await fetch(base + '/api/scans/' + unknownScanId + '/centering-assist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ setSide: 'back', deckId: 'TD-13', createdAt: '2026-10-13T13:54:36.000Z' })
+  }).then(function (r) { return r.json(); });
+  assert('setSide back on a side-less scan scores the back table and keeps the deck and time',
+    setBack.ok === true &&
+    setBack.item.side === 'back' &&
+    setBack.item.gradingReport.side === 'back' &&
+    setBack.assist.side === 'back' &&
+    setBack.assist.centeringLabel === '10.0 assisted' &&
+    setBack.item.deckId === 'TD-04' &&
+    setBack.item.createdAt === '2026-10-11T00:00:00.000Z',
+    setBack.assist && { side: setBack.item.side, label: setBack.assist.centeringLabel, deckId: setBack.item.deckId });
 
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });

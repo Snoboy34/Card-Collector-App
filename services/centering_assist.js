@@ -181,11 +181,20 @@ function redactDatabaseForScanRepo(db) {
   return copy;
 }
 
-/** "back" only when the capture or the report says so. Anything else is the front table. */
+/** "front" or "back" only. Anything else, including a missing side, is unknown. */
+function knownFace(value) {
+  if (value === 'front' || value === 'back') return value;
+  return null;
+}
+
+/**
+ * The capture's side, then the report's side. A missing side is null.
+ * It is not treated as the front.
+ */
 function assistedSide(report, meta) {
-  if (meta && meta.side === 'back') return 'back';
-  if (report && report.side === 'back') return 'back';
-  return 'front';
+  const fromMeta = knownFace(meta && meta.side);
+  if (fromMeta) return fromMeta;
+  return knownFace(report && report.side);
 }
 
 function assistScanId(item) {
@@ -246,6 +255,7 @@ function rescoreDatabase(db, emit) {
  * subGrades.centering.
  */
 function scoreAssistedCentering(side, ratios) {
+  if (side !== 'front' && side !== 'back') return { score: null, label: null };
   if (side === 'back') {
     const lr = ratios.leftRightRatio;
     const tb = ratios.topBottomRatio;
@@ -435,6 +445,113 @@ function attachAssist(item, assist) {
   return Object.assign({}, item, { gradingReport: report });
 }
 
+/**
+ * The instant recorded for scan 366A0E19 before a re-save replaced it:
+ * 10/12/26 16:57:08 in US Eastern, the zone that showed 10/13/26 09:54:36
+ * for 13:54:36Z. Used only when that scan has no earlier metadata timestamp.
+ */
+const SCAN_366A0E19_CAPTURED_AT = '2026-10-12T20:57:08.000Z';
+
+function sameInstant(a, b) {
+  if (a == null && b == null) return true;
+  const left = Date.parse(a);
+  const right = Date.parse(b);
+  if (!isNaN(left) && !isNaN(right)) return left === right;
+  return a === b;
+}
+
+function metadataInstants(item) {
+  const out = [];
+  const capture = item && item.captureMetadata && item.captureMetadata.capture;
+  const server = item && item.serverMetadata;
+  [capture && capture.capturedAt, server && server.receivedAt].forEach(function (value) {
+    const time = Date.parse(value);
+    if (!isNaN(time)) out.push(time);
+  });
+  return out;
+}
+
+/** Earliest stored capture clock, else the recorded 366A0E19 instant when the saved clock is later. */
+function originalCaptureTime(item) {
+  const found = metadataInstants(item);
+  if (found.length) return new Date(Math.min.apply(null, found)).toISOString();
+  const created = Date.parse(item && item.createdAt);
+  const recorded = Date.parse(SCAN_366A0E19_CAPTURED_AT);
+  if (!isNaN(created) && created > recorded) return SCAN_366A0E19_CAPTURED_AT;
+  return item && item.createdAt ? item.createdAt : null;
+}
+
+/**
+ * Put TD-06 / back / the original capture time back on scan 366A0E19.
+ * A second pass finds nothing to change and logs nothing.
+ */
+function repairRecord366A0E19(db, emit) {
+  const log = typeof emit === 'function' ? emit : console.log;
+  let changed = 0;
+  ((db && db.inventory) || []).forEach(function (item) {
+    if (!item) return;
+    const id = String(item.scanId || item.id || '');
+    if (id.toUpperCase().indexOf('366A0E19') !== 0) return;
+    const report = item.gradingReport || {};
+    const nextTime = originalCaptureTime(item);
+    const beforeDeck = item.deckId ? String(item.deckId) : 'null';
+    const beforeSide = knownFace(item.side) || knownFace(report.side) || 'null';
+    const beforeTime = item.createdAt ? String(item.createdAt) : 'null';
+    const afterTime = nextTime ? String(nextTime) : beforeTime;
+    if (beforeDeck === 'TD-06' && beforeSide === 'back' && knownFace(report.side) === 'back' && sameInstant(beforeTime, afterTime)) {
+      return;
+    }
+    item.deckId = 'TD-06';
+    item.side = 'back';
+    if (!item.gradingReport) item.gradingReport = {};
+    item.gradingReport.side = 'back';
+    if (nextTime) item.createdAt = nextTime;
+    changed += 1;
+    log('[centering-assist] repair scanId=' + id +
+      ' deckId ' + beforeDeck + ' -> TD-06' +
+      ' side ' + beforeSide + ' -> back' +
+      ' createdAt ' + beforeTime + ' -> ' + (item.createdAt || 'null'));
+  });
+  return changed;
+}
+
+/**
+ * Save an assist onto an existing record. Deck id, side, and createdAt stay
+ * the capture's values. A missing side is not filled with front. setSide is
+ * applied only while the record has no side. adjustedAt is the save, not the capture.
+ */
+function applyStoredAssist(item, assist, now, options) {
+  options = options || {};
+  const createdAt = item && item.createdAt;
+  const deckId = item && item.deckId;
+  const stored = knownFace(item && item.side) || knownFace(item && item.gradingReport && item.gradingReport.side);
+  const side = stored || (!stored && knownFace(options.setSide)) || null;
+  const block = Object.assign({}, assist || {}, { adjustedAt: now || new Date().toISOString(), side: side });
+  const ratios = geometry.ratiosFromWidthsMm(block.borderWidthsMm);
+  if (side && ratios) {
+    const scored = scoreAssistedCentering(side, ratios);
+    block.centering = scored.score;
+    block.centeringLabel = scored.label;
+    block.leftRightRatio = ratios.leftRightRatio;
+    block.topBottomRatio = ratios.topBottomRatio;
+  } else if (!side) {
+    block.centering = null;
+    block.centeringLabel = null;
+  }
+  const next = attachAssist(item, block);
+  next.createdAt = createdAt;
+  if (deckId == null || deckId === '') delete next.deckId;
+  else next.deckId = deckId;
+  if (side) {
+    next.side = side;
+    if (next.gradingReport) next.gradingReport.side = side;
+  } else if (next.gradingReport) {
+    delete next.side;
+    delete next.gradingReport.side;
+  }
+  return next;
+}
+
 module.exports = {
   EXAMPLES_FILE: EXAMPLES_FILE,
   SETTINGS_FILE: SETTINGS_FILE,
@@ -448,6 +565,10 @@ module.exports = {
   buildFromMillimetres: buildFromMillimetres,
   attachAssist: attachAssist,
   scoreAssistedCentering: scoreAssistedCentering,
+  knownFace: knownFace,
+  assistedSide: assistedSide,
+  applyStoredAssist: applyStoredAssist,
+  repairRecord366A0E19: repairRecord366A0E19,
   rescoreStoredAssist: rescoreStoredAssist,
   rescoreDatabase: rescoreDatabase
 };
