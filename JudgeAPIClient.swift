@@ -671,8 +671,14 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
     }
 
     #if DEBUG
-    static func runContractChecks() {
-        precondition(JudgeTestDeck.graders == ["PSA", "BGS", "SGC", "CGC", "TAG", "Other"])
+    /// Form fields only. No camera session is opened.
+    /// The body contains the raw JPEG, so a strict UTF-8 decode is nil and used to
+    /// fail the first field check with a signal trap. Lossy UTF-8 keeps the ASCII fields.
+    static func runContractChecks(_ check: ContractCheck) {
+        func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String, file: StaticString = #filePath, line: UInt = #line) {
+            check(condition(), message(), file, line)
+        }
+        expect(JudgeTestDeck.graders == ["PSA", "BGS", "SGC", "CGC", "TAG", "Other"], "grader list is PSA, BGS, SGC, CGC, TAG, Other")
         let jpeg = Data([0xFF, 0xD8, 0xFF])
         func text(grader: String?, side: String? = nil, pairId: String? = nil) -> String {
             let data = multipartBody(
@@ -681,23 +687,23 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 preSubmission: true, intendedGrader: grader, side: side, pairId: pairId,
                 captureMetadata: nil, scanId: "scan"
             )
-            return String(data: data, encoding: .utf8) ?? ""
+            return String(decoding: data, as: UTF8.self)
         }
         let sent = text(grader: "BGS")
-        precondition(sent.contains("name=\"deckId\""))
-        precondition(sent.contains("name=\"preSubmission\""))
-        precondition(sent.contains("name=\"intendedGrader\""))
-        precondition(sent.contains("\r\n\r\nBGS\r\n"))
-        precondition(!text(grader: nil).contains("intendedGrader"))
-        precondition(!text(grader: "").contains("intendedGrader"))
-        precondition(!text(grader: "Beckett").contains("intendedGrader"))
+        expect(sent.contains("name=\"deckId\""), "multipart form keeps deckId beside the JPEG bytes")
+        expect(sent.contains("name=\"preSubmission\""), "pre-submission flag is a form field")
+        expect(sent.contains("name=\"intendedGrader\""), "a known grader is a form field")
+        expect(sent.contains("\r\n\r\nBGS\r\n"), "intended grader value is BGS")
+        expect(!text(grader: nil).contains("intendedGrader"), "a missing grader is omitted")
+        expect(!text(grader: "").contains("intendedGrader"), "an empty grader is omitted")
+        expect(!text(grader: "Beckett").contains("intendedGrader"), "an unknown grader is omitted")
         let back = text(grader: nil, side: "back", pairId: "front-scan-1")
-        precondition(back.contains("name=\"side\""))
-        precondition(back.contains("\r\n\r\nback\r\n"))
-        precondition(back.contains("name=\"pairId\""))
-        precondition(back.contains("\r\n\r\nfront-scan-1\r\n"))
-        precondition(!text(grader: nil, side: "top", pairId: "").contains("name=\"side\""))
-        precondition(!text(grader: nil).contains("name=\"pairId\""))
+        expect(back.contains("name=\"side\""), "back capture sends side")
+        expect(back.contains("\r\n\r\nback\r\n"), "side value is back")
+        expect(back.contains("name=\"pairId\""), "back capture sends pairId")
+        expect(back.contains("\r\n\r\nfront-scan-1\r\n"), "pairId is the front scan id")
+        expect(!text(grader: nil, side: "top", pairId: "").contains("name=\"side\""), "side other than front or back is omitted")
+        expect(!text(grader: nil).contains("name=\"pairId\""), "a missing pairId is omitted")
     }
     #endif
 }

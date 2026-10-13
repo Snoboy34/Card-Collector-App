@@ -21,15 +21,19 @@ struct CompactScanLayout {
     }
 
     #if DEBUG
-    static func runContractChecks() {
+    /// Layout arithmetic only. No camera view is created.
+    static func runContractChecks(_ check: ContractCheck) {
+        func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String, file: StaticString = #filePath, line: UInt = #line) {
+            check(condition(), message(), file, line)
+        }
         let se = CompactScanLayout(availableHeight: 455, sweepActive: false)
-        precondition(se.cameraHeight >= 168 && se.cameraHeight <= 340)
-        precondition(50 + 34 + 44 + 28 + se.cameraHeight + se.metricsHeight <= 456)
+        expect(se.cameraHeight >= 168 && se.cameraHeight <= 340, "SE camera height stays inside 168...340")
+        expect(50 + 34 + 44 + 28 + se.cameraHeight + se.metricsHeight <= 456, "SE still layout fits in 456pt")
         let seSweep = CompactScanLayout(availableHeight: 400, sweepActive: true)
-        precondition(50 + 48 + 44 + 28 + seSweep.cameraHeight + seSweep.metricsHeight <= 401)
+        expect(50 + 48 + 44 + 28 + seSweep.cameraHeight + seSweep.metricsHeight <= 401, "SE sweep layout fits in 401pt")
         let pro = CompactScanLayout(availableHeight: 680, sweepActive: false)
-        precondition(pro.cameraHeight == 340)
-        precondition(pro.metricsHeight >= 72)
+        expect(pro.cameraHeight == 340, "a tall phone caps the camera at 340")
+        expect(pro.metricsHeight >= 72, "a tall phone keeps a 72pt metrics floor")
     }
     #endif
 }

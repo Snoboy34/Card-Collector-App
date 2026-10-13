@@ -216,10 +216,14 @@ enum CaptureMetadata {
     }
 
     #if DEBUG
-    static func runContractChecks() {
-        precondition(CameraFacts.codecName(Data([0xFF, 0xD8, 0xFF, 0xE0])) == "jpeg")
-        precondition(CameraFacts.codecName(Data([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63])) == "heif")
-        precondition(CameraFacts.codecName(Data([0x89, 0x50])) == "unknown")
+    /// Payload shape only. `CameraFacts.read` is the hardware path and is not called here.
+    static func runContractChecks(_ check: ContractCheck) {
+        func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String, file: StaticString = #filePath, line: UInt = #line) {
+            check(condition(), message(), file, line)
+        }
+        expect(CameraFacts.codecName(Data([0xFF, 0xD8, 0xFF, 0xE0])) == "jpeg", "JPEG magic is jpeg")
+        expect(CameraFacts.codecName(Data([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63])) == "heif", "ftyp marks heif")
+        expect(CameraFacts.codecName(Data([0x89, 0x50])) == "unknown", "a short header is unknown")
 
         let facts = CameraFacts(
             deviceType: "AVCaptureDeviceTypeBuiltInWideAngleCamera", position: "back",
@@ -232,37 +236,37 @@ enum CaptureMetadata {
             capturedAt: Date(timeIntervalSince1970: 0), sweepFrames: 4, quad: nil,
             extraCamera: ["photoSizeSetting": "12mp"]
         )
-        precondition(body["schema"] as? Int == 1)
+        expect(body["schema"] as? Int == 1, "schema is 1")
         let cam = body["camera"] as? [String: Any]
-        precondition(cam?["photoWidth"] as? Int == 4032)
-        precondition(cam?["iso"] as? Double == 64.0)
-        precondition(cam?["exposureDurationS"] as? Double == 0.016667)
-        precondition(cam?["photoSizeSetting"] as? String == "12mp")
+        expect(cam?["photoWidth"] as? Int == 4032, "camera photoWidth is 4032")
+        expect(cam?["iso"] as? Double == 64.0, "camera iso is 64")
+        expect(cam?["exposureDurationS"] as? Double == 0.016667, "exposure rounds to 0.016667 s")
+        expect(cam?["photoSizeSetting"] as? String == "12mp", "extra camera fields stay on the camera group")
         let capture = body["capture"] as? [String: Any]
-        precondition(capture?["mode"] as? String == "native-sweep")
-        precondition(capture?["capturedAt"] as? String == "1970-01-01T00:00:00Z")
-        precondition(capture?["quadDetected"] as? Bool == false)
-        precondition(capture?["quadConfidence"] == nil)
-        precondition(capture?["uploadWidth"] == nil)
+        expect(capture?["mode"] as? String == "native-sweep", "capture mode is native-sweep")
+        expect(capture?["capturedAt"] as? String == "1970-01-01T00:00:00Z", "capturedAt is UTC ISO-8601")
+        expect(capture?["quadDetected"] as? Bool == false, "a missing quad is quadDetected false")
+        expect(capture?["quadConfidence"] == nil, "a missing quad writes no confidence")
+        expect(capture?["uploadWidth"] == nil, "a header-only JPEG writes no pixel size")
         for (_, group) in body {
             guard let group = group as? [String: Any] else { continue }
-            for (_, value) in group {
-                precondition(!(value is [String: Any]), "captureMetadata groups must stay flat")
+            for (key, value) in group {
+                expect(!(value is [String: Any]), "captureMetadata group value \(key) stays flat")
             }
         }
         let noCamera = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
                                capturedAt: Date(), sweepFrames: 0, quad: nil)
-        precondition(noCamera["camera"] == nil)
-        precondition(json(camera: facts, uploadJPEG: Data([0xFF, 0xD8, 0xFF]), mode: "native-still",
-                          capturedAt: Date(), sweepFrames: 0, quad: nil) != nil)
+        expect(noCamera["camera"] == nil, "a still with no camera omits the camera group")
+        expect(json(camera: facts, uploadJPEG: Data([0xFF, 0xD8, 0xFF]), mode: "native-still",
+                    capturedAt: Date(), sweepFrames: 0, quad: nil) != nil, "the still payload encodes as JSON")
         let pink = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
                            capturedAt: Date(), sweepFrames: 0, quad: nil, background: "pink")
-        precondition((pink["capture"] as? [String: Any])?["background"] as? String == "pink")
+        expect((pink["capture"] as? [String: Any])?["background"] as? String == "pink", "pink is a stored background")
         let unknown = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
                               capturedAt: Date(), sweepFrames: 0, quad: nil, background: "magenta")
-        precondition((unknown["capture"] as? [String: Any])?["background"] == nil)
-        precondition(surfaceGuidance.count == 4)
-        precondition(!surfaceGuidance.joined(separator: " ").localizedCaseInsensitiveContains("pink"))
+        expect((unknown["capture"] as? [String: Any])?["background"] == nil, "magenta is not a background token")
+        expect(surfaceGuidance.count == 4, "surface guidance has four lines")
+        expect(!surfaceGuidance.joined(separator: " ").localizedCaseInsensitiveContains("pink"), "surface guidance does not name pink")
     }
     #endif
 }

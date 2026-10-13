@@ -271,7 +271,7 @@ public enum CenteringAssist {
         }
         let spread = hi - lo
         let unit = spread > 0 ? spread : lo
-        var minMM = roundMM(max(0, lo - unit) * edge)
+        let minMM = roundMM(max(0, lo - unit) * edge)
         var maxMM = roundMM((hi + unit) * edge)
         if maxMM > cardCap { maxMM = cardCap }
         if maxMM < minMM { maxMM = minMM }
@@ -521,21 +521,24 @@ public enum CenteringAssist {
     }
 
     #if DEBUG
-    static func runContractChecks() {
+    static func runContractChecks(_ check: ContractCheck) {
+        func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String = "", file: StaticString = #filePath, line: UInt = #line) {
+            check(condition(), message(), file, line)
+        }
         let warpW = 643.0
         let warpH = 900.0
         let leftPx = 4.0 * warpW / cardWidthMM
         let leftMM = widthMM(side: "left", positionPx: leftPx, warpWidth: warpW, warpHeight: warpH)
-        precondition(leftMM == 4, "left mm \(String(describing: leftMM))")
+        expect(leftMM == 4, "left mm \(String(describing: leftMM))")
         let back = linePx(side: "left", widthMM: leftMM ?? -1, warpWidth: warpW, warpHeight: warpH)
         let roundTrip = widthMM(side: "left", positionPx: back ?? -1, warpWidth: warpW, warpHeight: warpH)
-        precondition(roundTrip == leftMM, "round trip")
-        precondition(widthMM(side: "left", positionPx: -1, warpWidth: warpW, warpHeight: warpH) == nil)
-        precondition(widthMM(side: "left", positionPx: 0, warpWidth: warpW, warpHeight: warpH) == 0)
-        precondition(headline(adjustedCount: 1) == "Centering (you adjusted 1 side)")
-        precondition(headline(adjustedCount: 2) == "Centering (you adjusted 2 sides)")
-        precondition(sameMM(4, 4.0004))
-        precondition(!sameMM(4, 4.01))
+        expect(roundTrip == leftMM, "round trip")
+        expect(widthMM(side: "left", positionPx: -1, warpWidth: warpW, warpHeight: warpH) == nil)
+        expect(widthMM(side: "left", positionPx: 0, warpWidth: warpW, warpHeight: warpH) == 0)
+        expect(headline(adjustedCount: 1) == "Centering (you adjusted 1 side)")
+        expect(headline(adjustedCount: 2) == "Centering (you adjusted 2 sides)")
+        expect(sameMM(4, 4.0004))
+        expect(!sameMM(4, 4.01))
 
         let report: [String: Any] = [
             "engineVersion": "2026.10.01-border-band",
@@ -551,81 +554,84 @@ public enum CenteringAssist {
             ]
         ]
         let item: [String: Any] = ["engine": ["version": "2026.10.01-border-band", "commit": "abc1234"]]
-        let snap = parse(report: report, item: item)
-        precondition(snap?.sides["left"]?.withheld == true)
-        precondition(snap?.sides["right"]?.withheld == false)
-        precondition(snap?.sides["right"]?.engineWidthMM == 4.737)
-        precondition(snap?.centeringWithheld == true)
-        precondition(snap?.engineCommit == "abc1234")
-        precondition(snap?.needsAssist == true)
-        precondition(snap?.displayLine == nil)
+        guard let snap = parse(report: report, item: item) else {
+            expect(false, "front report parses to a snapshot")
+            return
+        }
+        expect(snap.sides["left"]?.withheld == true, "a null left width stays withheld")
+        expect(snap.sides["right"]?.withheld == false, "a measured right width is not withheld")
+        expect(snap.sides["right"]?.engineWidthMM == 4.737, "right engine width is 4.737 mm")
+        expect(snap.centeringWithheld == true, "a null centering sub-grade is withheld")
+        expect(snap.engineCommit == "abc1234", "engine commit is copied from the item")
+        expect(snap.needsAssist == true, "a withheld centering needs assist")
+        expect(snap.displayLine == nil, "an unadjusted snapshot has no assisted line")
 
-        var updated = snap!
+        var updated = snap
         updated.sides["left"]?.userWidthMM = 4
         updated.sides["left"]?.kind = "assisted"
         updated.headline = headline(adjustedCount: 1)
         updated.centeringLabel = "7.0 assisted"
         updated.adjustedCount = 1
-        let rows = examples(scanId: "scan-1", previous: snap!, updated: updated, consent: false, createdAt: "2026-10-09T00:00:00Z")
-        precondition(rows.count == 1)
-        precondition(rows[0].kind == "assisted")
-        precondition(rows[0].consent == false)
-        precondition(rows[0].userWidthMM == 4)
-        precondition(rows[0].engineWidthMM == nil)
-        precondition(rows[0].engineCandidateLines?.contains("22.5") == true)
-        precondition(rows[0].engineVersion == "2026.10.01-border-band")
+        let rows = examples(scanId: "scan-1", previous: snap, updated: updated, consent: false, createdAt: "2026-10-09T00:00:00Z")
+        expect(rows.count == 1, "one assisted example is recorded")
+        expect(rows.first?.kind == "assisted", "the example kind is assisted")
+        expect(rows.first?.consent == false, "the example is stored with consent off")
+        expect(rows.first?.userWidthMM == 4, "the example keeps the user millimetres")
+        expect(rows.first?.engineWidthMM == nil, "a withheld side stores no engine millimetres")
+        expect(rows.first?.engineCandidateLines?.contains("22.5") == true, "the example keeps the engine candidate line")
+        expect(rows.first?.engineVersion == "2026.10.01-border-band", "the example stamps the engine version")
         let again = examples(scanId: "scan-1", previous: updated, updated: updated, consent: false, createdAt: "2026-10-09T00:00:00Z")
-        precondition(again.isEmpty, "the same line must not become a second example")
-        precondition(updated.displayLine == "7.0 assisted — Centering (you adjusted 1 side)")
-        precondition(updated.displayLine?.contains("PSA") == false)
+        expect(again.isEmpty, "the same line must not become a second example")
+        expect(updated.displayLine == "7.0 assisted — Centering (you adjusted 1 side)")
+        expect(updated.displayLine?.contains("PSA") == false)
 
-        var disagreed = snap!
+        var disagreed = snap
         disagreed.sides["right"]?.userWidthMM = 5
         disagreed.sides["right"]?.kind = "disagreement"
         disagreed.headline = headline(adjustedCount: 1)
-        let disagreement = examples(scanId: "scan-1", previous: snap!, updated: disagreed, consent: false, createdAt: "2026-10-09T00:00:00Z")
-        precondition(disagreement.count == 1 && disagreement[0].kind == "disagreement")
-        precondition(disagreement[0].engineWidthMM == 4.737)
-        precondition(rows[0].warningShown == false)
-        precondition(CenteringAssistStore.examplesClearedToLeave().isEmpty)
-        precondition(CenteringAssistStore.consentIsOn(nil) == false)
-        precondition(CenteringAssistStore.consentIsOn(false) == false)
-        precondition(CenteringAssistStore.consentIsOn(true) == true)
+        let disagreement = examples(scanId: "scan-1", previous: snap, updated: disagreed, consent: false, createdAt: "2026-10-09T00:00:00Z")
+        expect(disagreement.count == 1 && disagreement.first?.kind == "disagreement", "a moved measured side is a disagreement")
+        expect(disagreement.first?.engineWidthMM == 4.737, "the disagreement keeps the engine millimetres")
+        expect(rows.first?.warningShown == false, "a plausible line does not set warningShown")
+        expect(CenteringAssistStore.examplesClearedToLeave().isEmpty)
+        expect(CenteringAssistStore.consentIsOn(nil) == false)
+        expect(CenteringAssistStore.consentIsOn(false) == false)
+        expect(CenteringAssistStore.consentIsOn(true) == true)
 
         let measured: [String: Double] = ["right": 4.737, "top": 4.148, "bottom": 4.936]
         let range = plausibleRangeMM(side: "left", measured: measured)
-        precondition(range?.minMM == 1.189, "min \(String(describing: range?.minMM))")
-        precondition(range?.maxMM == 6.511, "max \(String(describing: range?.maxMM))")
-        let far = implausibleSides(snapshot: snap!, userWidths: ["left": 11.43])
-        precondition(far.count == 1 && far[0].userWidthMM == 11.43)
-        precondition(far[0].minMM == 1.189 && far[0].maxMM == 6.511)
-        precondition(implausibleSides(snapshot: snap!, userWidths: ["left": 4]).isEmpty)
+        expect(range?.minMM == 1.189, "min \(String(describing: range?.minMM))")
+        expect(range?.maxMM == 6.511, "max \(String(describing: range?.maxMM))")
+        let far = implausibleSides(snapshot: snap, userWidths: ["left": 11.43])
+        expect(far.count == 1 && far.first?.userWidthMM == 11.43, "11.43 mm is outside the plausible range")
+        expect(far.first?.minMM == 1.189 && far.first?.maxMM == 6.511, "the plausible range is 1.189...6.511 mm")
+        expect(implausibleSides(snapshot: snap, userWidths: ["left": 4]).isEmpty, "4 mm on this card is plausible")
         let warning = plausibilityWarning(far)
-        precondition(warning.contains("11.4"))
-        precondition(!warning.contains("11.43"), "a dragged width is shown to 0.1 mm")
-        precondition(warning.contains("1.2") && warning.contains("6.5"))
-        precondition(warning.contains("Save again"))
-        precondition(displayMM(3.14) == "3.1 mm")
-        precondition(displayMM(11.43) == "11.4 mm")
+        expect(warning.contains("11.4"))
+        expect(!warning.contains("11.43"), "a dragged width is shown to 0.1 mm")
+        expect(warning.contains("1.2") && warning.contains("6.5"))
+        expect(warning.contains("Save again"))
+        expect(displayMM(3.14) == "3.1 mm")
+        expect(displayMM(11.43) == "11.4 mm")
         let sixtyForty = ["left": 6.0, "right": 4.0, "top": 5.0, "bottom": 5.0]
-        precondition(assistedScore(side: "front", widths: sixtyForty) == 9, "front 60/40")
-        precondition(assistedScore(side: "back", widths: sixtyForty) == 10, "back 60/40 is 10, not the front 9")
+        expect(assistedScore(side: "front", widths: sixtyForty) == 9, "front 60/40")
+        expect(assistedScore(side: "back", widths: sixtyForty) == 10, "back 60/40 is 10, not the front 9")
         let eightyTwenty = ["left": 8.0, "right": 2.0, "top": 5.0, "bottom": 5.0]
-        precondition(assistedScore(side: "front", widths: eightyTwenty) == 6, "front 80/20")
-        precondition(assistedScore(side: "back", widths: eightyTwenty) == 9, "back 80/20 is 9")
+        expect(assistedScore(side: "front", widths: eightyTwenty) == 6, "front 80/20")
+        expect(assistedScore(side: "back", widths: eightyTwenty) == 9, "back 80/20 is 9")
         let pastBack = ["left": 9.1, "right": 0.9, "top": 5.0, "bottom": 5.0]
-        precondition(assistedScore(side: "back", widths: pastBack) == nil, "back past 90/10 has no row")
-        precondition(assistedScore(side: "front", widths: pastBack) == 1, "front past 90/10 is 1")
+        expect(assistedScore(side: "back", widths: pastBack) == nil, "back past 90/10 has no row")
+        expect(assistedScore(side: "front", widths: pastBack) == 1, "front past 90/10 is 1")
         let share75 = ["left": 7.5, "right": 2.5, "top": 5.0, "bottom": 5.0]
-        precondition(assistedScore(side: "back", widths: share75) == 10, "back 75/25 is 10")
-        precondition(assistedScore(side: "front", widths: share75) == 6, "front 75/25 is 6")
+        expect(assistedScore(side: "back", widths: share75) == 10, "back 75/25 is 10")
+        expect(assistedScore(side: "front", widths: share75) == 6, "front 75/25 is 6")
         let share90 = ["left": 9.0, "right": 1.0, "top": 5.0, "bottom": 5.0]
-        precondition(assistedScore(side: "back", widths: share90) == 9, "back 90/10 is 9")
-        precondition(assistedScore(side: "front", widths: share90) == 3, "front 90/10 is 3")
+        expect(assistedScore(side: "back", widths: share90) == 9, "back 90/10 is 9")
+        expect(assistedScore(side: "front", widths: share90) == 3, "front 90/10 is 3")
         let ratios = assistedRatioText(widths: sixtyForty)
-        precondition(ratios?.lr == "60.0%/40.0% assisted" && ratios?.tb == "50.0%/50.0% assisted")
-        precondition(ScanLedger.deckLine(deckId: "TD-06", side: "back") == "TD-06 · back")
-        precondition(ScanLedger.deckLine(deckId: "  ", side: "front") == nil)
+        expect(ratios?.lr == "60.0%/40.0% assisted" && ratios?.tb == "50.0%/50.0% assisted")
+        expect(ScanLedger.deckLine(deckId: "TD-06", side: "back") == "TD-06 · back")
+        expect(ScanLedger.deckLine(deckId: "  ", side: "front") == nil)
         let backReport: [String: Any] = [
             "side": "back",
             "centeringUndetected": true,
@@ -647,54 +653,63 @@ public enum CenteringAssist {
                 ]
             ]
         ]
-        let backSnap = parse(report: backReport, item: ["side": "back", "deckId": "TD-06"])
-        precondition(backSnap?.side == "back")
-        precondition(backSnap?.centeringLabel == "9.0 assisted", "the phone shows the server label")
-        precondition(lastTableCheck?.matches == false, "a front-table 9 on a back is a mismatch")
-        precondition(lastTableCheck?.localLabel == "10.0 assisted")
-        precondition(lastTableCheck?.serverLabel == "9.0 assisted")
-        precondition(lastTableCheck?.side == "back")
-        precondition(backSnap?.assistedLRText == "60.0%/40.0% assisted")
-        precondition(backSnap?.assistedTBText == "50.0%/50.0% assisted")
-        precondition(backSnap?.displayLine == "9.0 assisted — Centering (you adjusted 1 side)")
-        var agreeAssist = backReport["centeringAssist"] as! [String: Any]
+        guard let backSnap = parse(report: backReport, item: ["side": "back", "deckId": "TD-06"]) else {
+            expect(false, "back report parses to a snapshot")
+            return
+        }
+        expect(backSnap.side == "back", "the snapshot side is back")
+        expect(backSnap.centeringLabel == "9.0 assisted", "the phone shows the server label")
+        expect(lastTableCheck?.matches == false, "a front-table 9 on a back is a mismatch")
+        expect(lastTableCheck?.localLabel == "10.0 assisted", "local back 60/40 is 10.0 assisted")
+        expect(lastTableCheck?.serverLabel == "9.0 assisted", "the mismatch records the server label")
+        expect(lastTableCheck?.side == "back", "the mismatch records the back side")
+        expect(backSnap.assistedLRText == "60.0%/40.0% assisted", "assisted L/R is labelled assisted")
+        expect(backSnap.assistedTBText == "50.0%/50.0% assisted", "assisted T/B is labelled assisted")
+        expect(backSnap.displayLine == "9.0 assisted — Centering (you adjusted 1 side)", "the display line keeps the server label")
+        guard var agreeAssist = backReport["centeringAssist"] as? [String: Any] else {
+            expect(false, "back assist block is a dictionary")
+            return
+        }
         agreeAssist["centeringLabel"] = "10.0 assisted"
         var agreeReport = backReport
         agreeReport["centeringAssist"] = agreeAssist
         let agreeSnap = parse(report: agreeReport, item: ["side": "back", "deckId": "TD-06"])
-        precondition(agreeSnap?.centeringLabel == "10.0 assisted", "an agreeing server label is shown as stored")
-        precondition(lastTableCheck?.matches == true)
-        precondition(agreeSnap?.displayLine?.contains("PSA") == false)
+        expect(agreeSnap?.centeringLabel == "10.0 assisted", "an agreeing server label is shown as stored")
+        expect(lastTableCheck?.matches == true)
+        expect(agreeSnap?.displayLine?.contains("PSA") == false)
         let frontReport = backReport.merging(["side": "front"]) { _, new in new }
         let frontSnap = parse(report: frontReport, item: ["side": "front"])
-        precondition(frontSnap?.centeringLabel == "9.0 assisted", "front 60/40 stays on the front table")
-        precondition(lastTableCheck?.matches == true)
-        precondition(lastTableCheck?.localLabel == "9.0 assisted")
-        precondition(frontSnap?.displayLine?.contains("PSA") == false)
+        expect(frontSnap?.centeringLabel == "9.0 assisted", "front 60/40 stays on the front table")
+        expect(lastTableCheck?.matches == true)
+        expect(lastTableCheck?.localLabel == "9.0 assisted")
+        expect(frontSnap?.displayLine?.contains("PSA") == false)
         var pastReport = agreeReport
-        var pastMetrics = pastReport["centeringMetrics"] as! [String: Any]
+        guard var pastMetrics = pastReport["centeringMetrics"] as? [String: Any],
+              var pastAssist = pastReport["centeringAssist"] as? [String: Any],
+              var pastSides = pastAssist["sides"] as? [String: Any] else {
+            expect(false, "past-90/10 report keeps metrics and assist dictionaries")
+            return
+        }
         pastMetrics["borderWidthsMm"] = ["left": 9.1, "right": 0.9, "top": 5.0, "bottom": 5.0]
         pastReport["centeringMetrics"] = pastMetrics
-        var pastAssist = pastReport["centeringAssist"] as! [String: Any]
-        var pastSides = pastAssist["sides"] as! [String: Any]
         pastSides["left"] = ["userWidthMm": 9.1, "engineWidthMm": 5.0, "kind": "disagreement"]
         pastSides["right"] = ["engineWidthMm": 0.9]
         pastAssist["sides"] = pastSides
         pastAssist["centeringLabel"] = NSNull()
         pastReport["centeringAssist"] = pastAssist
         let pastSnap = parse(report: pastReport, item: ["side": "back"])
-        precondition(pastSnap?.centeringLabel == nil, "a back past 90/10 keeps a withheld server label")
-        precondition(lastTableCheck?.matches == true)
-        precondition(lastTableCheck?.localLabel == nil)
+        expect(pastSnap?.centeringLabel == nil, "a back past 90/10 keeps a withheld server label")
+        expect(lastTableCheck?.matches == true)
+        expect(lastTableCheck?.localLabel == nil)
         pastAssist["centeringLabel"] = "1.0 assisted"
         pastReport["centeringAssist"] = pastAssist
         let fabricated = parse(report: pastReport, item: ["side": "back"])
-        precondition(fabricated?.centeringLabel == "1.0 assisted", "the phone shows the server label when the tables disagree")
-        precondition(lastTableCheck?.matches == false)
-        precondition(lastTableCheck?.localLabel == nil)
-        var quiet = backSnap!
+        expect(fabricated?.centeringLabel == "1.0 assisted", "the phone shows the server label when the tables disagree")
+        expect(lastTableCheck?.matches == false)
+        expect(lastTableCheck?.localLabel == nil)
+        var quiet = backSnap
         quiet.adjustedCount = 0
-        precondition(quiet.assistedLRText == nil, "an unadjusted scan keeps the engine ratio")
+        expect(quiet.assistedLRText == nil, "an unadjusted scan keeps the engine ratio")
         let vaultLedger = ScanLedger(
             scanId: "366A0E19-0000-4000-8000-000000000001",
             committedAt: .distantPast,
@@ -715,29 +730,29 @@ public enum CenteringAssist {
             side: "back"
         )
         let vaultCard = SavedCard(ledger: vaultLedger)
-        precondition(vaultCard.name == "Unidentified")
-        precondition(vaultCard.vaultSubtitle == "TD-06 · back")
-        precondition(vaultCard.asLedger.displayLR == "60.0%/40.0% assisted")
-        precondition(vaultCard.asLedger.displayTB == "50.0%/50.0% assisted")
-        precondition(vaultCard.displayGrade == "10.0 assisted — Centering (you adjusted 1 side)")
-        precondition(vaultCard.displayGrade.contains("PSA") == false)
+        expect(vaultCard.name == "Unidentified")
+        expect(vaultCard.vaultSubtitle == "TD-06 · back")
+        expect(vaultCard.asLedger.displayLR == "60.0%/40.0% assisted")
+        expect(vaultCard.asLedger.displayTB == "50.0%/50.0% assisted")
+        expect(vaultCard.displayGrade == "10.0 assisted — Centering (you adjusted 1 side)")
+        expect(vaultCard.displayGrade.contains("PSA") == false)
         if let data = try? JSONEncoder().encode(vaultCard),
            let decoded = try? JSONDecoder().decode(SavedCard.self, from: data) {
-            precondition(decoded.deckId == "TD-06" && decoded.side == "back")
-            precondition(decoded.vaultSubtitle == "TD-06 · back")
+            expect(decoded.deckId == "TD-06" && decoded.side == "back")
+            expect(decoded.vaultSubtitle == "TD-06 · back")
         } else {
-            preconditionFailure("vault record keeps the deck id")
+            expect(false, "vault record keeps the deck id")
         }
         let empty = plausibleRangeMM(side: "left", measured: [:])
-        precondition(empty?.minMM == 0 && empty?.maxMM == roundMM(cardWidthMM / 4))
+        expect(empty?.minMM == 0 && empty?.maxMM == roundMM(cardWidthMM / 4))
         var flagged = updated
         flagged.sides["left"]?.userWidthMM = 11.43
-        let warned = examples(scanId: "scan-1", previous: snap!, updated: flagged, consent: false, createdAt: "2026-10-09T00:00:00Z", warnings: far)
-        precondition(warned.count == 1 && warned[0].warningShown == true)
-        precondition(warned[0].plausibleMinMM == 1.189 && warned[0].plausibleMaxMM == 6.511)
-        precondition(ScanLedger.predictedGradeText(9) == "Predicted PSA 9")
-        precondition(ScanLedger.predictedGradeText(9.5) == "Predicted PSA 9.5")
-        precondition(ScanLedger.predictedGradeText(8) == "Predicted PSA 8")
+        let warned = examples(scanId: "scan-1", previous: snap, updated: flagged, consent: false, createdAt: "2026-10-09T00:00:00Z", warnings: far)
+        expect(warned.count == 1 && warned.first?.warningShown == true, "a confirmed implausible line records warningShown")
+        expect(warned.first?.plausibleMinMM == 1.189 && warned.first?.plausibleMaxMM == 6.511, "the example stores the plausible range")
+        expect(ScanLedger.predictedGradeText(9) == "Predicted PSA 9")
+        expect(ScanLedger.predictedGradeText(9.5) == "Predicted PSA 9.5")
+        expect(ScanLedger.predictedGradeText(8) == "Predicted PSA 8")
     }
     #endif
 }
