@@ -92,6 +92,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var cornersGrade: Double?
         var debugPath: String?
         var centeringAssist: CenteringAssist.Snapshot?
+        var deckId: String?
+        var side: String?
         var rawJSON: String
         var summaryText: String
     }
@@ -469,9 +471,18 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let leftRightRatio = ratioPair(metrics?["leftRightRatio"], first: "left", second: "right")
         let topBottomRatio = ratioPair(metrics?["topBottomRatio"], first: "top", second: "bottom")
         let centeringAssist = CenteringAssist.parse(report: report, item: item)
+        let deckId = (item?["deckId"] as? String) ?? (report?["deckId"] as? String)
+        let side = (item?["side"] as? String) ?? (report?["side"] as? String)
 
         var lines: [String] = []
         if let scanId, !scanId.isEmpty { lines.append("scanId  \(scanId)") }
+        if let deckId {
+            let trimmed = deckId.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                let face = side == "back" ? "back" : (side == "front" ? "front" : "")
+                lines.append(face.isEmpty ? "deckId  \(trimmed)" : "deckId  \(trimmed)  \(face)")
+            }
+        }
         if let finalScore { lines.append(String(format: "finalScore  %.1f", finalScore)) }
         if incomplete { lines.append("incomplete  true") }
         if let sub { lines.append(sub) }
@@ -545,6 +556,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             cornersGrade: cornersGrade,
             debugPath: debugPath,
             centeringAssist: centeringAssist,
+            deckId: deckId,
+            side: side,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )
@@ -578,8 +591,16 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         } else {
             setName = ScanLedger.absent
         }
-        let lr = report.leftRightRatio.map { String(format: "%.1f%%/%.1f%%", $0.left, $0.right) } ?? ScanLedger.absent
-        let tb = report.topBottomRatio.map { String(format: "%.1f%%/%.1f%%", $0.top, $0.bottom) } ?? ScanLedger.absent
+        let assistedRatios = report.centeringAssist.flatMap { snap -> (lr: String, tb: String)? in
+            guard snap.adjustedCount > 0 else { return nil }
+            return CenteringAssist.assistedRatioText(widths: snap.placedWidthsMM())
+        }
+        let lr = assistedRatios?.lr
+            ?? report.leftRightRatio.map { String(format: "%.1f%%/%.1f%%", $0.left, $0.right) }
+            ?? ScanLedger.absent
+        let tb = assistedRatios?.tb
+            ?? report.topBottomRatio.map { String(format: "%.1f%%/%.1f%%", $0.top, $0.bottom) }
+            ?? ScanLedger.absent
         return ScanLedger(
             scanId: scanId,
             committedAt: timestamp,
@@ -595,7 +616,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             incomplete: report.incomplete ?? false,
             cornersGrade: report.cornersGrade,
             debugPath: report.debugPath,
-            centeringAssist: report.centeringAssist
+            centeringAssist: report.centeringAssist,
+            deckId: report.deckId,
+            side: report.side ?? report.centeringAssist?.side
         )
     }
 

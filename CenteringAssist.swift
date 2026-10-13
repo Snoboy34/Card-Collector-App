@@ -43,6 +43,8 @@ public enum CenteringAssist {
         public var headline: String?
         public var centeringLabel: String?
         public var adjustedCount: Int
+        /// "front" or "back". Picks the PSA table for the assisted score.
+        public var side: String?
 
         public init(
             warpWidth: Double,
@@ -54,7 +56,8 @@ public enum CenteringAssist {
             candidatesJSON: String?,
             headline: String?,
             centeringLabel: String?,
-            adjustedCount: Int
+            adjustedCount: Int,
+            side: String? = nil
         ) {
             self.warpWidth = warpWidth
             self.warpHeight = warpHeight
@@ -66,6 +69,49 @@ public enum CenteringAssist {
             self.headline = headline
             self.centeringLabel = centeringLabel
             self.adjustedCount = adjustedCount
+            self.side = side
+        }
+
+        /// User width where they dragged, otherwise the engine width.
+        public func placedWidthsMM() -> [String: Double]? {
+            var out: [String: Double] = [:]
+            for name in CenteringAssist.sides {
+                guard let row = sides[name] else { return nil }
+                if let user = row.userWidthMM, user.isFinite {
+                    out[name] = user
+                } else if !row.withheld, let engine = row.engineWidthMM, engine.isFinite {
+                    out[name] = engine
+                } else {
+                    return nil
+                }
+            }
+            return out
+        }
+
+        public var assistedLRText: String? {
+            guard adjustedCount > 0 else { return nil }
+            return CenteringAssist.assistedRatioText(widths: placedWidthsMM())?.lr
+        }
+
+        public var assistedTBText: String? {
+            guard adjustedCount > 0 else { return nil }
+            return CenteringAssist.assistedRatioText(widths: placedWidthsMM())?.tb
+        }
+
+        /// Replace the server label with the front or back PSA table.
+        /// A back scan is never left on the front-table label.
+        public mutating func applyAssistedTable() {
+            guard adjustedCount > 0 else { return }
+            guard let widths = placedWidthsMM() else {
+                centeringLabel = nil
+                return
+            }
+            let which = side == "back" ? "back" : "front"
+            if let score = CenteringAssist.assistedScore(side: which, widths: widths) {
+                centeringLabel = String(format: "%.1f assisted", score)
+            } else {
+                centeringLabel = nil
+            }
         }
 
         public var displayLine: String? {
@@ -252,12 +298,72 @@ public enum CenteringAssist {
         return hits
     }
 
+    /// Shown millimetres. One decimal. The stored width keeps its full precision.
+    static func displayMM(_ value: Double) -> String {
+        let tenths = (value * 10).rounded() / 10
+        return String(format: "%.1f mm", tenths)
+    }
+
     static func mmText(_ value: Double) -> String {
-        let rounded = roundMM(value)
-        var text = String(format: "%.3f", rounded)
-        while text.hasSuffix("0") { text.removeLast() }
-        if text.hasSuffix(".") { text.removeLast() }
-        return text
+        let tenths = (value * 10).rounded() / 10
+        return String(format: "%.1f", tenths)
+    }
+
+    /// Larger border share, 0–100. Same worst-axis rule as the engine table.
+    static func worstSharePct(_ widths: [String: Double]) -> Double? {
+        guard let left = widths["left"], let right = widths["right"],
+              let top = widths["top"], let bottom = widths["bottom"],
+              left.isFinite, right.isFinite, top.isFinite, bottom.isFinite,
+              left >= 0, right >= 0, top >= 0, bottom >= 0 else {
+            return nil
+        }
+        let lr = left + right
+        let tb = top + bottom
+        guard lr > 0, tb > 0 else { return nil }
+        let leftPct = left / lr * 100
+        let topPct = top / tb * 100
+        return max(max(leftPct, 100 - leftPct), max(topPct, 100 - topPct))
+    }
+
+    /// Front PSA centering table. Worst share, strict end of each published row.
+    /// 10 = 55/45, 9 = 60/40, 8 = 65/35, 7 = 70/30, 6 = 80/20, 5 = 85/15, 3 = 90/10.
+    static func assistedFrontScore(_ worstShare: Double) -> Double {
+        let table: [(Double, Double)] = [
+            (55, 10), (60, 9), (65, 8), (70, 7), (80, 6), (85, 5), (90, 3)
+        ]
+        for row in table {
+            if worstShare <= row.0 + 1e-9 { return row.1 }
+        }
+        return 1
+    }
+
+    /// Back PSA centering table. 10 = 75/25, 9 = 90/10. Past 90/10 there is no row.
+    static func assistedBackScore(_ worstShare: Double) -> Double? {
+        if worstShare <= 75 + 1e-9 { return 10 }
+        if worstShare <= 90 + 1e-9 { return 9 }
+        return nil
+    }
+
+    static func assistedScore(side: String, widths: [String: Double]) -> Double? {
+        guard let worst = worstSharePct(widths) else { return nil }
+        if side == "back" { return assistedBackScore(worst) }
+        return assistedFrontScore(worst)
+    }
+
+    static func assistedRatioText(widths: [String: Double]?) -> (lr: String, tb: String)? {
+        guard let widths, let left = widths["left"], let right = widths["right"],
+              let top = widths["top"], let bottom = widths["bottom"] else {
+            return nil
+        }
+        let lr = left + right
+        let tb = top + bottom
+        guard lr > 0, tb > 0 else { return nil }
+        let leftPct = left / lr * 100
+        let topPct = top / tb * 100
+        return (
+            lr: String(format: "%.1f%%/%.1f%% assisted", leftPct, 100 - leftPct),
+            tb: String(format: "%.1f%%/%.1f%% assisted", topPct, 100 - topPct)
+        )
     }
 
     static func plausibilityWarning(_ hits: [ImplausibleSide]) -> String {
@@ -312,7 +418,8 @@ public enum CenteringAssist {
            let text = String(data: data, encoding: .utf8) {
             candidatesJSON = text
         }
-        return Snapshot(
+        let cardSide = (item?["side"] as? String) ?? (report["side"] as? String)
+        var snap = Snapshot(
             warpWidth: warpWidth,
             warpHeight: warpHeight,
             centeringWithheld: withheldScore,
@@ -322,8 +429,11 @@ public enum CenteringAssist {
             candidatesJSON: candidatesJSON,
             headline: assist?["headline"] as? String,
             centeringLabel: assist?["centeringLabel"] as? String,
-            adjustedCount: Int(doubleValue(assist?["adjustedCount"]) ?? 0)
+            adjustedCount: Int(doubleValue(assist?["adjustedCount"]) ?? 0),
+            side: cardSide
         )
+        snap.applyAssistedTable()
+        return snap
     }
 
     /// Examples for sides whose user millimetres changed. A repeat of the
@@ -464,9 +574,98 @@ public enum CenteringAssist {
         precondition(far[0].minMM == 1.189 && far[0].maxMM == 6.511)
         precondition(implausibleSides(snapshot: snap!, userWidths: ["left": 4]).isEmpty)
         let warning = plausibilityWarning(far)
-        precondition(warning.contains("11.43"))
-        precondition(warning.contains("1.189") && warning.contains("6.511"))
+        precondition(warning.contains("11.4"))
+        precondition(!warning.contains("11.43"), "a dragged width is shown to 0.1 mm")
+        precondition(warning.contains("1.2") && warning.contains("6.5"))
         precondition(warning.contains("Save again"))
+        precondition(displayMM(3.14) == "3.1 mm")
+        precondition(displayMM(11.43) == "11.4 mm")
+        let sixtyForty = ["left": 6.0, "right": 4.0, "top": 5.0, "bottom": 5.0]
+        precondition(assistedScore(side: "front", widths: sixtyForty) == 9, "front 60/40")
+        precondition(assistedScore(side: "back", widths: sixtyForty) == 10, "back 60/40 is 10, not the front 9")
+        let eightyTwenty = ["left": 8.0, "right": 2.0, "top": 5.0, "bottom": 5.0]
+        precondition(assistedScore(side: "front", widths: eightyTwenty) == 6, "front 80/20")
+        precondition(assistedScore(side: "back", widths: eightyTwenty) == 9, "back 80/20 is 9")
+        let pastBack = ["left": 9.1, "right": 0.9, "top": 5.0, "bottom": 5.0]
+        precondition(assistedScore(side: "back", widths: pastBack) == nil, "back past 90/10 has no row")
+        precondition(assistedScore(side: "front", widths: pastBack) == 1, "front past 90/10 is 1")
+        let share75 = ["left": 7.5, "right": 2.5, "top": 5.0, "bottom": 5.0]
+        precondition(assistedScore(side: "back", widths: share75) == 10, "back 75/25 is 10")
+        precondition(assistedScore(side: "front", widths: share75) == 6, "front 75/25 is 6")
+        let share90 = ["left": 9.0, "right": 1.0, "top": 5.0, "bottom": 5.0]
+        precondition(assistedScore(side: "back", widths: share90) == 9, "back 90/10 is 9")
+        precondition(assistedScore(side: "front", widths: share90) == 3, "front 90/10 is 3")
+        let ratios = assistedRatioText(widths: sixtyForty)
+        precondition(ratios?.lr == "60.0%/40.0% assisted" && ratios?.tb == "50.0%/50.0% assisted")
+        precondition(ScanLedger.deckLine(deckId: "TD-06", side: "back") == "TD-06 · back")
+        precondition(ScanLedger.deckLine(deckId: "  ", side: "front") == nil)
+        let backReport: [String: Any] = [
+            "side": "back",
+            "centeringUndetected": true,
+            "subGrades": ["centering": NSNull()],
+            "centeringMetrics": [
+                "borderWidthsMm": ["left": 6.0, "right": 4.0, "top": 5.0, "bottom": 5.0],
+                "borderVoteLowConfidenceEdges": []
+            ],
+            "centeringDiagnostics": ["box": ["width": warpW, "height": warpH]],
+            "centeringAssist": [
+                "headline": "Centering (you adjusted 1 side)",
+                "centeringLabel": "9.0 assisted",
+                "adjustedCount": 1,
+                "sides": [
+                    "left": ["userWidthMm": 6.0, "engineWidthMm": 5.0, "kind": "disagreement"],
+                    "right": ["engineWidthMm": 4.0],
+                    "top": ["engineWidthMm": 5.0],
+                    "bottom": ["engineWidthMm": 5.0]
+                ]
+            ]
+        ]
+        let backSnap = parse(report: backReport, item: ["side": "back", "deckId": "TD-06"])
+        precondition(backSnap?.side == "back")
+        precondition(backSnap?.centeringLabel == "10.0 assisted", "back 60/40 must not keep the front-table 9.0")
+        precondition(backSnap?.assistedLRText == "60.0%/40.0% assisted")
+        precondition(backSnap?.assistedTBText == "50.0%/50.0% assisted")
+        precondition(backSnap?.displayLine == "10.0 assisted — Centering (you adjusted 1 side)")
+        let frontReport = backReport.merging(["side": "front"]) { _, new in new }
+        let frontSnap = parse(report: frontReport, item: ["side": "front"])
+        precondition(frontSnap?.centeringLabel == "9.0 assisted", "front 60/40 stays on the front table")
+        precondition(frontSnap?.displayLine?.contains("PSA") == false)
+        var quiet = backSnap!
+        quiet.adjustedCount = 0
+        precondition(quiet.assistedLRText == nil, "an unadjusted scan keeps the engine ratio")
+        let vaultLedger = ScanLedger(
+            scanId: "366A0E19-0000-4000-8000-000000000001",
+            committedAt: .distantPast,
+            name: ScanLedger.unidentified,
+            setName: ScanLedger.absent,
+            grade: nil,
+            lrCentering: ScanLedger.absent,
+            tbCentering: ScanLedger.absent,
+            value: nil,
+            familyId: nil,
+            subGradesLabel: "",
+            primaryFlaw: "",
+            incomplete: true,
+            cornersGrade: nil,
+            debugPath: nil,
+            centeringAssist: backSnap,
+            deckId: "TD-06",
+            side: "back"
+        )
+        let vaultCard = SavedCard(ledger: vaultLedger)
+        precondition(vaultCard.name == "Unidentified")
+        precondition(vaultCard.vaultSubtitle == "TD-06 · back")
+        precondition(vaultCard.asLedger.displayLR == "60.0%/40.0% assisted")
+        precondition(vaultCard.asLedger.displayTB == "50.0%/50.0% assisted")
+        precondition(vaultCard.displayGrade == "10.0 assisted — Centering (you adjusted 1 side)")
+        precondition(vaultCard.displayGrade.contains("PSA") == false)
+        if let data = try? JSONEncoder().encode(vaultCard),
+           let decoded = try? JSONDecoder().decode(SavedCard.self, from: data) {
+            precondition(decoded.deckId == "TD-06" && decoded.side == "back")
+            precondition(decoded.vaultSubtitle == "TD-06 · back")
+        } else {
+            preconditionFailure("vault record keeps the deck id")
+        }
         let empty = plausibleRangeMM(side: "left", measured: [:])
         precondition(empty?.minMM == 0 && empty?.maxMM == roundMM(cardWidthMM / 4))
         var flagged = updated
@@ -714,7 +913,7 @@ struct CenteringAssistEditor: View {
 
     private func format(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "—" }
-        return "\(CenteringAssist.roundMM(value)) mm"
+        return CenteringAssist.displayMM(value)
     }
 
     private func liveMM(_ side: String) -> Double? {

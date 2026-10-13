@@ -561,7 +561,7 @@ struct CardScannerView: View {
                         ForEach(filteredVaultRecords) { card in
                             Button(action: { selectedVaultCard = card }) {
                                 HStack {
-                                    VStack(alignment: .leading) { Text(card.name).font(.subheadline).bold().foregroundColor(.primary); Text(card.setName).font(.caption).foregroundColor(.secondary) }
+                                    VStack(alignment: .leading) { Text(card.name).font(.subheadline).bold().foregroundColor(.primary); Text(card.vaultSubtitle).font(.caption).foregroundColor(.secondary) }
                                     Spacer()
                                     VStack(alignment: .trailing) { Text(card.displayValue).bold().foregroundColor(.green); Text(card.displayGrade).font(.caption2).padding(4).background(Color.blue.opacity(0.1)).cornerRadius(4) }
                                 }
@@ -1091,7 +1091,12 @@ struct ScanLedgerRows: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(ledger.name).font(.title3).bold()
-            Text(ledger.setName).font(.subheadline).foregroundColor(.secondary)
+            if let deck = ledger.deckLine {
+                Text(deck).font(.subheadline).foregroundColor(.secondary)
+            }
+            if ledger.setName != ScanLedger.absent {
+                Text(ledger.setName).font(.subheadline).foregroundColor(.secondary)
+            }
             Text("scan \(ledger.displayScanIdShort) · \(ledger.displayTimestamp)")
                 .font(.system(.caption2, design: .monospaced))
                 .foregroundColor(.secondary)
@@ -1124,7 +1129,7 @@ struct ScanLedgerRows: View {
             HStack {
                 Text("L/R")
                 Spacer()
-                Text(ledger.lrCentering)
+                Text(ledger.displayLR)
                     .font(.system(.footnote, design: .monospaced))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -1132,7 +1137,7 @@ struct ScanLedgerRows: View {
             HStack {
                 Text("T/B")
                 Spacer()
-                Text(ledger.tbCentering)
+                Text(ledger.displayTB)
                     .font(.system(.footnote, design: .monospaced))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
