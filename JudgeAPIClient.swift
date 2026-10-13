@@ -205,7 +205,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         scanId: String,
         lines: [String: [String: Double]],
         consent: Bool,
-        confirmImplausible: Bool = false
+        confirmImplausible: Bool = false,
+        setSide: String? = nil
     ) async throws -> RemoteReport {
         guard let root = Self.normalizedBaseURL(baseURL) else {
             throw APIError.invalidServerURL
@@ -218,11 +219,16 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = [
-            "lines": lines,
+        var body: [String: Any] = [
             "consent": consent,
             "confirmImplausible": confirmImplausible
         ]
+        if !lines.isEmpty {
+            body["lines"] = lines
+        }
+        if setSide == "front" || setSide == "back" {
+            body["setSide"] = setSide
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let data: Data
         let response: URLResponse
@@ -522,7 +528,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             }
         }
         if let headline = centeringAssist?.headline {
-            if let label = centeringAssist?.centeringLabel {
+            let knownSide = ScanLedger.knownFace(centeringAssist?.side) != nil
+            if knownSide, let label = centeringAssist?.centeringLabel, !label.isEmpty {
                 lines.append("\(label) — \(headline)")
             } else {
                 lines.append(headline)
@@ -618,7 +625,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             debugPath: report.debugPath,
             centeringAssist: report.centeringAssist,
             deckId: report.deckId,
-            side: report.side ?? report.centeringAssist?.side
+            side: ScanLedger.knownFace(report.side) ?? ScanLedger.knownFace(report.centeringAssist?.side)
         )
     }
 

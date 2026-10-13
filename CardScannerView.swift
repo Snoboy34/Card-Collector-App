@@ -1096,6 +1096,12 @@ struct ScanLedgerRows: View {
             Text("scan \(ledger.displayScanIdShort) · \(ledger.displayTimestamp)")
                 .font(.system(.caption2, design: .monospaced))
                 .foregroundColor(.secondary)
+            if ledger.showsSideUnknown && ledger.deckLine == nil {
+                Text("side unknown").font(.caption).foregroundColor(.secondary)
+            }
+            if let adjusted = ledger.centeringAssist?.adjustmentLine {
+                Text(adjusted).font(.caption).foregroundColor(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal)
@@ -1206,9 +1212,10 @@ struct VaultDetailSheet: View {
     @ViewBuilder
     private func centeringEditor(_ ledger: ScanLedger) -> some View {
         if let snapshot = ledger.centeringAssist {
-            CenteringAssistEditor(scanId: ledger.scanId, serverURL: serverURL, snapshot: snapshot) { updated in
-                self.ledger = updated
-                onSaved(updated)
+            CenteringAssistEditor(scanId: ledger.scanId, serverURL: serverURL, snapshot: snapshot) { updated, explicitSide in
+                let merged = ScanLedger.keepingCaptureIdentity(existing: self.ledger, updated: updated, explicitSide: explicitSide)
+                self.ledger = merged
+                onSaved(merged)
             }
         }
     }
@@ -1235,9 +1242,10 @@ struct ActiveScanReportSheet: View {
                 Text("SERVER GRADE REPORT").font(.headline).bold().foregroundColor(.blue)
                 ScanLedgerRows(ledger: ledger)
                 if let snapshot = ledger.centeringAssist {
-                    CenteringAssistEditor(scanId: ledger.scanId, serverURL: serverURL, snapshot: snapshot) { updated in
-                        ledger = updated
-                        onLedger(updated)
+                    CenteringAssistEditor(scanId: ledger.scanId, serverURL: serverURL, snapshot: snapshot) { updated, explicitSide in
+                        let merged = ScanLedger.keepingCaptureIdentity(existing: self.ledger, updated: updated, explicitSide: explicitSide)
+                        ledger = merged
+                        onLedger(merged)
                     }
                 }
                 Button(action: {

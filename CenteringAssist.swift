@@ -46,6 +46,8 @@ public enum CenteringAssist {
         public var adjustedCount: Int
         /// "front" or "back". Picks the PSA table for the assisted score.
         public var side: String?
+        /// When the lines were saved. The capture clock stays on the ledger.
+        public var adjustedAt: String?
 
         public init(
             warpWidth: Double,
@@ -58,7 +60,8 @@ public enum CenteringAssist {
             headline: String?,
             centeringLabel: String?,
             adjustedCount: Int,
-            side: String? = nil
+            side: String? = nil,
+            adjustedAt: String? = nil
         ) {
             self.warpWidth = warpWidth
             self.warpHeight = warpHeight
@@ -71,6 +74,44 @@ public enum CenteringAssist {
             self.centeringLabel = centeringLabel
             self.adjustedCount = adjustedCount
             self.side = side
+            self.adjustedAt = adjustedAt
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case warpWidth, warpHeight, centeringWithheld, engineVersion, engineCommit
+            case sides, candidatesJSON, headline, centeringLabel, adjustedCount, side, adjustedAt
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            warpWidth = try container.decode(Double.self, forKey: .warpWidth)
+            warpHeight = try container.decode(Double.self, forKey: .warpHeight)
+            centeringWithheld = try container.decode(Bool.self, forKey: .centeringWithheld)
+            engineVersion = try container.decodeIfPresent(String.self, forKey: .engineVersion)
+            engineCommit = try container.decodeIfPresent(String.self, forKey: .engineCommit)
+            sides = try container.decodeIfPresent([String: SideState].self, forKey: .sides) ?? [:]
+            candidatesJSON = try container.decodeIfPresent(String.self, forKey: .candidatesJSON)
+            headline = try container.decodeIfPresent(String.self, forKey: .headline)
+            centeringLabel = try container.decodeIfPresent(String.self, forKey: .centeringLabel)
+            adjustedCount = try container.decodeIfPresent(Int.self, forKey: .adjustedCount) ?? 0
+            side = try container.decodeIfPresent(String.self, forKey: .side)
+            adjustedAt = try container.decodeIfPresent(String.self, forKey: .adjustedAt)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(warpWidth, forKey: .warpWidth)
+            try container.encode(warpHeight, forKey: .warpHeight)
+            try container.encode(centeringWithheld, forKey: .centeringWithheld)
+            try container.encodeIfPresent(engineVersion, forKey: .engineVersion)
+            try container.encodeIfPresent(engineCommit, forKey: .engineCommit)
+            try container.encode(sides, forKey: .sides)
+            try container.encodeIfPresent(candidatesJSON, forKey: .candidatesJSON)
+            try container.encodeIfPresent(headline, forKey: .headline)
+            try container.encodeIfPresent(centeringLabel, forKey: .centeringLabel)
+            try container.encode(adjustedCount, forKey: .adjustedCount)
+            try container.encodeIfPresent(side, forKey: .side)
+            try container.encodeIfPresent(adjustedAt, forKey: .adjustedAt)
         }
 
         /// User width where they dragged, otherwise the engine width.
@@ -100,18 +141,20 @@ public enum CenteringAssist {
         }
 
         /// Check the server's assisted label against the front or back table.
+        /// A missing side is unknown: it is not scored on the front table.
         /// The label on screen stays the server's value.
         public mutating func checkAssistedTable() {
             guard adjustedCount > 0, let widths = placedWidthsMM() else { return }
-            let which = side == "back" ? "back" : "front"
+            let known = side == "front" || side == "back"
+            let which = known ? (side ?? "unknown") : "unknown"
             let local: String?
-            if let score = CenteringAssist.assistedScore(side: which, widths: widths) {
+            if known, let score = CenteringAssist.assistedScore(side: which, widths: widths) {
                 local = String(format: "%.1f assisted", score)
             } else {
                 local = nil
             }
             let server = centeringLabel.flatMap { $0.isEmpty ? nil : $0 }
-            let matches = server == local
+            let matches = known ? server == local : server == nil
             CenteringAssist.lastTableCheck = AssistedTableCheck(
                 serverLabel: server,
                 localLabel: local,
@@ -125,10 +168,19 @@ public enum CenteringAssist {
 
         public var displayLine: String? {
             guard let headline, !headline.isEmpty else { return nil }
+            if side != "front" && side != "back" {
+                return headline
+            }
             if let centeringLabel, !centeringLabel.isEmpty {
                 return "\(centeringLabel) — \(headline)"
             }
             return headline
+        }
+
+        /// "adjusted 10/13 09:54". Empty when this save has no adjustment clock.
+        public var adjustmentLine: String? {
+            guard let adjustedAt, !adjustedAt.isEmpty, let date = CenteringAssist.parseISO(adjustedAt) else { return nil }
+            return "adjusted " + CenteringAssist.adjustmentFormatter.string(from: date)
         }
 
         public var needsAssist: Bool {
@@ -457,7 +509,8 @@ public enum CenteringAssist {
             headline: assist?["headline"] as? String,
             centeringLabel: assist?["centeringLabel"] as? String,
             adjustedCount: Int(doubleValue(assist?["adjustedCount"]) ?? 0),
-            side: cardSide
+            side: cardSide,
+            adjustedAt: assist?["adjustedAt"] as? String
         )
         snap.checkAssistedTable()
         return snap
@@ -520,6 +573,22 @@ public enum CenteringAssist {
         return nil
     }
 
+    static func parseISO(_ text: String) -> Date? {
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: text) { return date }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: text)
+    }
+
+    private static let adjustmentFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "M/d HH:mm"
+        return formatter
+    }()
+
     #if DEBUG
     static func runContractChecks(_ check: ContractCheck) {
         func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String = "", file: StaticString = #filePath, line: UInt = #line) {
@@ -572,6 +641,7 @@ public enum CenteringAssist {
         updated.headline = headline(adjustedCount: 1)
         updated.centeringLabel = "7.0 assisted"
         updated.adjustedCount = 1
+        updated.side = "front"
         let rows = examples(scanId: "scan-1", previous: snap, updated: updated, consent: false, createdAt: "2026-10-09T00:00:00Z")
         expect(rows.count == 1, "one assisted example is recorded")
         expect(rows.first?.kind == "assisted", "the example kind is assisted")
@@ -753,6 +823,93 @@ public enum CenteringAssist {
         expect(ScanLedger.predictedGradeText(9) == "Predicted PSA 9")
         expect(ScanLedger.predictedGradeText(9.5) == "Predicted PSA 9.5")
         expect(ScanLedger.predictedGradeText(8) == "Predicted PSA 8")
+
+        var unknownSnap = backSnap
+        unknownSnap.side = nil
+        unknownSnap.centeringLabel = "9.0 assisted"
+        unknownSnap.checkAssistedTable()
+        expect(unknownSnap.displayLine == "Centering (you adjusted 1 side)", "a missing side withholds the assisted grade")
+        expect(unknownSnap.displayLine?.contains("9.0") == false, "a missing side does not show a front-table grade")
+        expect(lastTableCheck?.side == "unknown", "a missing side is not scored as the front")
+        expect(lastTableCheck?.localLabel == nil, "a missing side has no local assisted grade")
+        expect(ScanLedger.deckLine(deckId: "TD-06", side: nil) == "TD-06 · side unknown")
+        expect(ScanLedger.knownFace(nil) == nil)
+        expect(ScanLedger.knownFace("front") == "front")
+        expect(ScanLedger.knownFace("top") == nil)
+
+        let clock = ISO8601DateFormatter()
+        clock.formatOptions = [.withInternetDateTime]
+        guard let originalCapture = clock.date(from: "2026-10-12T20:57:08Z") else {
+            expect(false, "the 10/12 capture instant parses")
+            return
+        }
+        let resaveClock = originalCapture.addingTimeInterval(17 * 3600)
+        func sampleLedger(scanId: String, at: Date, deck: String?, side: String?, assist: Snapshot?) -> ScanLedger {
+            ScanLedger(
+                scanId: scanId,
+                committedAt: at,
+                name: ScanLedger.unidentified,
+                setName: ScanLedger.absent,
+                grade: nil,
+                lrCentering: ScanLedger.absent,
+                tbCentering: ScanLedger.absent,
+                value: nil,
+                familyId: nil,
+                subGradesLabel: "",
+                primaryFlaw: "",
+                incomplete: true,
+                cornersGrade: nil,
+                debugPath: nil,
+                centeringAssist: assist,
+                deckId: deck,
+                side: side
+            )
+        }
+        var stamped = backSnap
+        stamped.adjustedAt = "2026-10-13T13:54:36.000Z"
+        stamped.centeringLabel = "9.0 assisted"
+        stamped.side = "front"
+        let captured = sampleLedger(scanId: "td06-back-0001", at: originalCapture, deck: "TD-06", side: "back", assist: backSnap)
+        let resaved = sampleLedger(scanId: "td06-back-0001", at: resaveClock, deck: "TD-13", side: "front", assist: stamped)
+        let kept = ScanLedger.keepingCaptureIdentity(existing: captured, updated: resaved, explicitSide: nil)
+        expect(kept.deckId == "TD-06", "a re-save keeps the capture deck id")
+        expect(kept.side == "back", "a re-save keeps the capture side")
+        expect(kept.committedAt == originalCapture, "a re-save keeps the capture time")
+        expect(kept.centeringAssist?.side == "back", "the assist is scored on the capture side")
+        expect(kept.centeringAssist?.adjustmentLine?.hasPrefix("adjusted ") == true, "the adjustment clock is stored apart from the scan time")
+        expect(kept.centeringAssist?.adjustedAt == "2026-10-13T13:54:36.000Z", "the adjustment time is not the capture time")
+
+        let sideMissing = sampleLedger(scanId: "noside-scan-0001", at: originalCapture, deck: "TD-04", side: nil, assist: nil)
+        let defaultedFront = sampleLedger(scanId: "noside-scan-0001", at: resaveClock, deck: "TD-13", side: "front", assist: stamped)
+        let stillUnknown = ScanLedger.keepingCaptureIdentity(existing: sideMissing, updated: defaultedFront, explicitSide: nil)
+        expect(stillUnknown.side == nil, "a missing side does not become front")
+        expect(stillUnknown.deckId == "TD-04", "a missing side does not take the capture-screen deck")
+        expect(stillUnknown.committedAt == originalCapture, "a missing side does not take the re-save clock")
+        expect(stillUnknown.centeringAssist?.centeringLabel == nil, "a missing side withholds the assisted label")
+        expect(stillUnknown.centeringAssist?.displayLine?.contains("9.0") != true, "a missing side does not display 9.0 assisted")
+        expect(stillUnknown.deckLine == "TD-04 · side unknown")
+        let chosenBack = ScanLedger.keepingCaptureIdentity(existing: sideMissing, updated: defaultedFront, explicitSide: "back")
+        expect(chosenBack.side == "back", "an explicit back is stored on a side-less record")
+        expect(chosenBack.deckId == "TD-04", "setting the side keeps the deck id")
+        expect(chosenBack.committedAt == originalCapture, "setting the side keeps the scan time")
+        expect(chosenBack.centeringAssist?.side == "back")
+
+        var corruptAssist = backSnap
+        corruptAssist.centeringLabel = "9.0 assisted"
+        corruptAssist.side = "front"
+        let corrupt = sampleLedger(
+            scanId: "366A0E19-0000-4000-8000-000000000001",
+            at: resaveClock,
+            deck: "TD-13",
+            side: "front",
+            assist: corruptAssist
+        )
+        let repaired = corrupt.applyingKnownCaptureRepair()
+        expect(repaired.deckId == "TD-06", "366A0E19 keeps deck TD-06")
+        expect(repaired.side == "back", "366A0E19 keeps side back")
+        expect(repaired.committedAt == originalCapture, "366A0E19 keeps the original scan time")
+        expect(repaired.centeringAssist?.side == "back")
+        expect(repaired.centeringAssist?.centeringLabel == "10.0 assisted", "366A0E19 scores on the back table")
     }
     #endif
 }
@@ -804,7 +961,8 @@ struct CenteringAssistEditor: View {
     let scanId: String
     let serverURL: String
     let snapshot: CenteringAssist.Snapshot
-    let onSaved: (ScanLedger) -> Void
+    /// The second value is the front/back button. A line save passes nil and must not change side.
+    let onSaved: (ScanLedger, String?) -> Void
 
     @State private var image: UIImage?
     @State private var loadError: String?
@@ -825,9 +983,27 @@ struct CenteringAssistEditor: View {
         return "Drag a line to disagree with a side the engine measured. Your line is kept next to the engine's number. Neither replaces the other."
     }
 
+    private var sideUnknown: Bool {
+        snapshot.side != "front" && snapshot.side != "back"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Centering lines").font(.headline)
+            if sideUnknown {
+                Text("side unknown").font(.subheadline).bold()
+                Text("Set front or back on this scan before an assisted grade is shown.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                HStack {
+                    Button("This is the front") { Task { await setFace("front") } }
+                    Button("This is the back") { Task { await setFace("back") } }
+                }
+                .disabled(saving)
+                if !status.isEmpty {
+                    Text(status).font(.caption).foregroundColor(.secondary)
+                }
+            }
             Text(intro).font(.caption).foregroundColor(.secondary)
             if let image {
                 frame(image)
@@ -1083,7 +1259,47 @@ struct CenteringAssistEditor: View {
             warningText = ""
             confirming = false
             dirty = false
-            onSaved(JudgeAPIClient.ledger(from: report, clientScanId: scanId))
+            onSaved(JudgeAPIClient.ledger(from: report, clientScanId: scanId), nil)
+        } catch let error as JudgeAPIClient.APIError {
+            if case .implausible(let message) = error {
+                confirming = true
+                warningText = message
+                status = ""
+            } else {
+                status = error.localizedDescription
+            }
+        } catch {
+            status = error.localizedDescription
+        }
+        saving = false
+    }
+
+    private func setFace(_ face: String) async {
+        var lines: [String: [String: Double]] = [:]
+        for side in CenteringAssist.sides {
+            guard userPx[side] != nil, liveMM(side) != nil, let px = userPx[side] else { continue }
+            lines[side] = [
+                "positionPx": px,
+                "warpWidth": snapshot.warpWidth,
+                "warpHeight": snapshot.warpHeight
+            ]
+        }
+        saving = true
+        status = "Saving…"
+        do {
+            let report = try await JudgeAPIClient.shared.submitCenteringAssist(
+                baseURL: serverURL,
+                scanId: scanId,
+                lines: lines,
+                consent: CenteringAssistStore.helpImprove(),
+                confirmImplausible: confirming,
+                setSide: face
+            )
+            status = "Saved. This centering is assisted."
+            warningText = ""
+            confirming = false
+            dirty = false
+            onSaved(JudgeAPIClient.ledger(from: report, clientScanId: scanId), face)
         } catch let error as JudgeAPIClient.APIError {
             if case .implausible(let message) = error {
                 confirming = true

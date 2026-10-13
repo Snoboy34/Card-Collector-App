@@ -59,13 +59,102 @@ public struct ScanLedger: Equatable {
         return tbCentering
     }
 
+    public static func knownFace(_ side: String?) -> String? {
+        if side == "front" || side == "back" { return side }
+        return nil
+    }
+
     public static func deckLine(deckId: String?, side: String?) -> String? {
         guard let deckId else { return nil }
         let trimmed = deckId.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return nil }
         if side == "back" { return trimmed + " · back" }
         if side == "front" { return trimmed + " · front" }
-        return trimmed
+        return trimmed + " · side unknown"
+    }
+
+    /// Deck id and side come from the capture. A re-save must not replace them.
+    /// `explicitSide` is the front/back button on a record that has no side yet.
+    public static func keepingCaptureIdentity(existing: ScanLedger, updated: ScanLedger, explicitSide: String?) -> ScanLedger {
+        let keptSide = knownFace(existing.side) ?? knownFace(explicitSide)
+        var assist = updated.centeringAssist
+        if var snap = assist {
+            if let keptSide {
+                snap.side = keptSide
+            } else {
+                snap.side = nil
+                snap.centeringLabel = nil
+            }
+            assist = snap
+        }
+        let merged = ScanLedger(
+            scanId: existing.scanId,
+            committedAt: existing.committedAt,
+            name: existing.name,
+            setName: existing.setName,
+            grade: existing.grade ?? updated.grade,
+            lrCentering: updated.lrCentering,
+            tbCentering: updated.tbCentering,
+            value: existing.value,
+            familyId: existing.familyId,
+            subGradesLabel: updated.subGradesLabel,
+            primaryFlaw: existing.primaryFlaw,
+            incomplete: existing.incomplete,
+            cornersGrade: updated.cornersGrade,
+            debugPath: updated.debugPath,
+            centeringAssist: assist,
+            deckId: nonempty(existing.deckId) ?? nonempty(updated.deckId),
+            side: keptSide
+        )
+        return merged.applyingKnownCaptureRepair()
+    }
+
+    /// Scan 366A0E19 was re-saved as TD-13 · front with a new clock. Put the capture back.
+    public func applyingKnownCaptureRepair() -> ScanLedger {
+        guard scanId.uppercased().hasPrefix("366A0E19") else { return self }
+        let original = CenteringAssist.parseISO("2026-10-12T20:57:08.000Z") ?? committedAt
+        let time = (committedAt == .distantPast || committedAt > original) ? original : committedAt
+        var assist = centeringAssist
+        if var snap = assist {
+            snap.side = "back"
+            if snap.adjustedCount > 0, let widths = snap.placedWidthsMM() {
+                if let score = CenteringAssist.assistedScore(side: "back", widths: widths) {
+                    snap.centeringLabel = String(format: "%.1f assisted", score)
+                } else {
+                    snap.centeringLabel = nil
+                }
+            }
+            assist = snap
+        }
+        return ScanLedger(
+            scanId: scanId,
+            committedAt: time,
+            name: name,
+            setName: setName,
+            grade: grade,
+            lrCentering: lrCentering,
+            tbCentering: tbCentering,
+            value: value,
+            familyId: familyId,
+            subGradesLabel: subGradesLabel,
+            primaryFlaw: primaryFlaw,
+            incomplete: incomplete,
+            cornersGrade: cornersGrade,
+            debugPath: debugPath,
+            centeringAssist: assist,
+            deckId: "TD-06",
+            side: "back"
+        )
+    }
+
+    public var showsSideUnknown: Bool {
+        Self.knownFace(side) == nil
+    }
+
+    private static func nonempty(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     public var deckLine: String? {
@@ -439,27 +528,29 @@ public class PortfolioState: ObservableObject {
         saveDataToPersistentDisk()
     }
 
-    /// Keeps the engine grade. The assisted snapshot is stored beside it.
+    /// Keeps the capture's deck id, side, and scan time. The assisted snapshot is stored beside the engine grade.
     public func replaceSavedCard(id: UUID, ledger: ScanLedger) {
         guard let index = savedCards.firstIndex(where: { $0.id == id }) else { return }
         let existing = savedCards[index]
+        let explicit = ScanLedger.knownFace(existing.side) == nil ? ledger.side : nil
+        let merged = ScanLedger.keepingCaptureIdentity(existing: existing.asLedger, updated: ledger, explicitSide: explicit)
         savedCards[index] = SavedCard(
             id: existing.id,
-            scanId: ledger.scanId,
-            committedAt: existing.committedAt,
+            scanId: existing.scanId,
+            committedAt: merged.committedAt,
             name: existing.name,
             set: existing.setName,
-            lrCentering: ledger.lrCentering,
-            tbCentering: ledger.tbCentering,
-            predictedGrade: ledger.grade,
+            lrCentering: merged.lrCentering,
+            tbCentering: merged.tbCentering,
+            predictedGrade: merged.grade,
             marketValue: existing.calculatedValue,
             familyId: existing.familyId,
-            subGradesLabel: ledger.subGradesLabel,
-            cornersGrade: ledger.cornersGrade,
-            debugPath: ledger.debugPath,
-            centeringAssist: ledger.centeringAssist,
-            deckId: ledger.deckId ?? existing.deckId,
-            side: ledger.side ?? existing.side,
+            subGradesLabel: merged.subGradesLabel,
+            cornersGrade: merged.cornersGrade,
+            debugPath: merged.debugPath,
+            centeringAssist: merged.centeringAssist,
+            deckId: merged.deckId,
+            side: merged.side,
             batchId: existing.targetBatchId
         )
         saveDataToPersistentDisk()
@@ -530,7 +621,39 @@ public class PortfolioState: ObservableObject {
         let jsonDecoder = JSONDecoder()
         if let cardsData = UserDefaults.standard.data(forKey: storageKeyCards),
            let parsedCards = try? jsonDecoder.decode([SavedCard].self, from: cardsData) {
-            self.savedCards = parsedCards
+            var changed = false
+            self.savedCards = parsedCards.map { card in
+                guard card.scanId.uppercased().hasPrefix("366A0E19") else { return card }
+                let repaired = card.asLedger.applyingKnownCaptureRepair()
+                let sameDeck = repaired.deckId == card.deckId
+                let sameSide = repaired.side == card.side
+                let sameTime = repaired.committedAt == card.committedAt
+                let sameLabel = repaired.centeringAssist?.centeringLabel == card.centeringAssist?.centeringLabel
+                if sameDeck && sameSide && sameTime && sameLabel { return card }
+                changed = true
+                return SavedCard(
+                    id: card.id,
+                    scanId: card.scanId,
+                    committedAt: repaired.committedAt,
+                    name: card.name,
+                    set: card.setName,
+                    lrCentering: repaired.lrCentering,
+                    tbCentering: repaired.tbCentering,
+                    predictedGrade: repaired.grade,
+                    marketValue: card.calculatedValue,
+                    familyId: card.familyId,
+                    subGradesLabel: repaired.subGradesLabel,
+                    cornersGrade: repaired.cornersGrade,
+                    debugPath: repaired.debugPath,
+                    centeringAssist: repaired.centeringAssist,
+                    deckId: repaired.deckId,
+                    side: repaired.side,
+                    batchId: card.targetBatchId
+                )
+            }
+            if changed, let cardsData = try? JSONEncoder().encode(self.savedCards) {
+                UserDefaults.standard.set(cardsData, forKey: storageKeyCards)
+            }
         }
         if let trendData = UserDefaults.standard.data(forKey: storageKeyTrend),
            let parsedSnapshots = try? jsonDecoder.decode([ValueSnapshot].self, from: trendData) {
