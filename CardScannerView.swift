@@ -2,7 +2,7 @@ import SwiftUI
 import Combine
 
 /// Fits neon + status + 44pt actions on SE (~455pt content) through 16 Pro.
-private struct CompactScanLayout {
+struct CompactScanLayout {
     let cameraHeight: CGFloat
     let metricsHeight: CGFloat
 
@@ -190,14 +190,6 @@ struct CardScannerView: View {
                 }
             }
             .onAppear {
-                #if DEBUG
-                CardSweepBins.runContractChecks()
-                CameraCalibration.runContractChecks()
-                CompactScanLayout.runContractChecks()
-                CaptureMetadata.runContractChecks()
-                JudgeAPIClient.runContractChecks()
-                CenteringAssist.runContractChecks()
-                #endif
                 if !CaptureMetadata.backgrounds.contains(scanBackground) {
                     scanBackground = ""
                 }

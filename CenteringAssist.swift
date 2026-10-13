@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftUI
 import UIKit
 
@@ -98,19 +99,27 @@ public enum CenteringAssist {
             return CenteringAssist.assistedRatioText(widths: placedWidthsMM())?.tb
         }
 
-        /// Replace the server label with the front or back PSA table.
-        /// A back scan is never left on the front-table label.
-        public mutating func applyAssistedTable() {
-            guard adjustedCount > 0 else { return }
-            guard let widths = placedWidthsMM() else {
-                centeringLabel = nil
-                return
-            }
+        /// Check the server's assisted label against the front or back table.
+        /// The label on screen stays the server's value.
+        public mutating func checkAssistedTable() {
+            guard adjustedCount > 0, let widths = placedWidthsMM() else { return }
             let which = side == "back" ? "back" : "front"
+            let local: String?
             if let score = CenteringAssist.assistedScore(side: which, widths: widths) {
-                centeringLabel = String(format: "%.1f assisted", score)
+                local = String(format: "%.1f assisted", score)
             } else {
-                centeringLabel = nil
+                local = nil
+            }
+            let server = centeringLabel.flatMap { $0.isEmpty ? nil : $0 }
+            let matches = server == local
+            CenteringAssist.lastTableCheck = AssistedTableCheck(
+                serverLabel: server,
+                localLabel: local,
+                side: which,
+                matches: matches
+            )
+            if !matches {
+                CenteringAssist.logTableMismatch(server: server, local: local, side: which)
             }
         }
 
@@ -344,6 +353,24 @@ public enum CenteringAssist {
         return nil
     }
 
+    struct AssistedTableCheck: Equatable {
+        var serverLabel: String?
+        var localLabel: String?
+        var side: String
+        var matches: Bool
+    }
+
+    /// Last comparison of the server's assisted label with the local table.
+    static var lastTableCheck: AssistedTableCheck?
+
+    private static let tableLog = Logger(subsystem: "com.cardgrader.thejudge", category: "centering-assist")
+
+    static func logTableMismatch(server: String?, local: String?, side: String) {
+        let serverText = server ?? "nil"
+        let localText = local ?? "nil"
+        tableLog.error("assisted centering table mismatch side=\(side, privacy: .public) server=\(serverText, privacy: .public) local=\(localText, privacy: .public)")
+    }
+
     static func assistedScore(side: String, widths: [String: Double]) -> Double? {
         guard let worst = worstSharePct(widths) else { return nil }
         if side == "back" { return assistedBackScore(worst) }
@@ -432,7 +459,7 @@ public enum CenteringAssist {
             adjustedCount: Int(doubleValue(assist?["adjustedCount"]) ?? 0),
             side: cardSide
         )
-        snap.applyAssistedTable()
+        snap.checkAssistedTable()
         return snap
     }
 
@@ -622,14 +649,49 @@ public enum CenteringAssist {
         ]
         let backSnap = parse(report: backReport, item: ["side": "back", "deckId": "TD-06"])
         precondition(backSnap?.side == "back")
-        precondition(backSnap?.centeringLabel == "10.0 assisted", "back 60/40 must not keep the front-table 9.0")
+        precondition(backSnap?.centeringLabel == "9.0 assisted", "the phone shows the server label")
+        precondition(lastTableCheck?.matches == false, "a front-table 9 on a back is a mismatch")
+        precondition(lastTableCheck?.localLabel == "10.0 assisted")
+        precondition(lastTableCheck?.serverLabel == "9.0 assisted")
+        precondition(lastTableCheck?.side == "back")
         precondition(backSnap?.assistedLRText == "60.0%/40.0% assisted")
         precondition(backSnap?.assistedTBText == "50.0%/50.0% assisted")
-        precondition(backSnap?.displayLine == "10.0 assisted — Centering (you adjusted 1 side)")
+        precondition(backSnap?.displayLine == "9.0 assisted — Centering (you adjusted 1 side)")
+        var agreeAssist = backReport["centeringAssist"] as! [String: Any]
+        agreeAssist["centeringLabel"] = "10.0 assisted"
+        var agreeReport = backReport
+        agreeReport["centeringAssist"] = agreeAssist
+        let agreeSnap = parse(report: agreeReport, item: ["side": "back", "deckId": "TD-06"])
+        precondition(agreeSnap?.centeringLabel == "10.0 assisted", "an agreeing server label is shown as stored")
+        precondition(lastTableCheck?.matches == true)
+        precondition(agreeSnap?.displayLine?.contains("PSA") == false)
         let frontReport = backReport.merging(["side": "front"]) { _, new in new }
         let frontSnap = parse(report: frontReport, item: ["side": "front"])
         precondition(frontSnap?.centeringLabel == "9.0 assisted", "front 60/40 stays on the front table")
+        precondition(lastTableCheck?.matches == true)
+        precondition(lastTableCheck?.localLabel == "9.0 assisted")
         precondition(frontSnap?.displayLine?.contains("PSA") == false)
+        var pastReport = agreeReport
+        var pastMetrics = pastReport["centeringMetrics"] as! [String: Any]
+        pastMetrics["borderWidthsMm"] = ["left": 9.1, "right": 0.9, "top": 5.0, "bottom": 5.0]
+        pastReport["centeringMetrics"] = pastMetrics
+        var pastAssist = pastReport["centeringAssist"] as! [String: Any]
+        var pastSides = pastAssist["sides"] as! [String: Any]
+        pastSides["left"] = ["userWidthMm": 9.1, "engineWidthMm": 5.0, "kind": "disagreement"]
+        pastSides["right"] = ["engineWidthMm": 0.9]
+        pastAssist["sides"] = pastSides
+        pastAssist["centeringLabel"] = NSNull()
+        pastReport["centeringAssist"] = pastAssist
+        let pastSnap = parse(report: pastReport, item: ["side": "back"])
+        precondition(pastSnap?.centeringLabel == nil, "a back past 90/10 keeps a withheld server label")
+        precondition(lastTableCheck?.matches == true)
+        precondition(lastTableCheck?.localLabel == nil)
+        pastAssist["centeringLabel"] = "1.0 assisted"
+        pastReport["centeringAssist"] = pastAssist
+        let fabricated = parse(report: pastReport, item: ["side": "back"])
+        precondition(fabricated?.centeringLabel == "1.0 assisted", "the phone shows the server label when the tables disagree")
+        precondition(lastTableCheck?.matches == false)
+        precondition(lastTableCheck?.localLabel == nil)
         var quiet = backSnap!
         quiet.adjustedCount = 0
         precondition(quiet.assistedLRText == nil, "an unadjusted scan keeps the engine ratio")
@@ -648,7 +710,7 @@ public enum CenteringAssist {
             incomplete: true,
             cornersGrade: nil,
             debugPath: nil,
-            centeringAssist: backSnap,
+            centeringAssist: agreeSnap,
             deckId: "TD-06",
             side: "back"
         )
