@@ -188,31 +188,52 @@ function assistedSide(report, meta) {
   return 'front';
 }
 
+function assistScanId(item) {
+  const report = item && item.gradingReport;
+  const id = (item && (item.scanId || item.id)) || (report && report.scanId);
+  return id ? String(id) : 'unknown';
+}
+
+function labelText(value) {
+  if (value == null || value === '') return 'null';
+  return String(value);
+}
+
 /**
  * Rewrite a stored assisted label from the scan side and the placed widths.
- * Engine fields on the report are not touched. Returns true when the label changed.
+ * Engine fields on the report are not touched. Returns null when nothing
+ * changed, otherwise the scan id and the old and new labels.
  */
 function rescoreStoredAssist(item) {
   const report = item && item.gradingReport;
   const assist = report && report.centeringAssist;
-  if (!assist || !(assist.adjustedCount > 0)) return false;
+  if (!assist || !(assist.adjustedCount > 0)) return null;
   const ratios = geometry.ratiosFromWidthsMm(assist.borderWidthsMm);
-  if (!ratios) return false;
+  if (!ratios) return null;
   const side = assistedSide(report, { side: item.side });
   const scored = scoreAssistedCentering(side, ratios);
-  if (assist.side === side && assist.centering === scored.score && assist.centeringLabel === scored.label) {
-    return false;
+  const oldLabel = assist.centeringLabel;
+  if (assist.side === side && assist.centering === scored.score && oldLabel === scored.label) {
+    return null;
   }
   assist.side = side;
   assist.centering = scored.score;
   assist.centeringLabel = scored.label;
-  return true;
+  return {
+    scanId: assistScanId(item),
+    oldLabel: labelText(oldLabel),
+    newLabel: labelText(scored.label)
+  };
 }
 
-function rescoreDatabase(db) {
+function rescoreDatabase(db, emit) {
+  const log = typeof emit === 'function' ? emit : console.log;
   let changed = 0;
   ((db && db.inventory) || []).forEach(function (item) {
-    if (rescoreStoredAssist(item)) changed += 1;
+    const row = rescoreStoredAssist(item);
+    if (!row) return;
+    changed += 1;
+    log('[centering-assist] rescore scanId=' + row.scanId + ' old=' + row.oldLabel + ' new=' + row.newLabel);
   });
   return changed;
 }

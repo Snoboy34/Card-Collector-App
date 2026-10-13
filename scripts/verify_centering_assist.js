@@ -160,6 +160,7 @@ async function main() {
     backByMeta.ok === true && backByMeta.assist.centeringLabel === '10.0 assisted', backByMeta.assist && backByMeta.assist.centeringLabel);
   const storedBack = {
     inventory: [{
+      scanId: '366A0E19',
       side: 'back',
       gradingReport: {
         side: 'back',
@@ -176,20 +177,73 @@ async function main() {
     }]
   };
   const storedSubs = JSON.stringify(storedBack.inventory[0].gradingReport.subGrades);
+  const rescoreLog = [];
+  const emitRescore = function (line) { rescoreLog.push(line); };
   assert('a stored back 60/40 is rewritten onto the back table',
-    assist.rescoreDatabase(storedBack) === 1 &&
+    assist.rescoreDatabase(storedBack, emitRescore) === 1 &&
     storedBack.inventory[0].gradingReport.centeringAssist.centering === 10 &&
     storedBack.inventory[0].gradingReport.centeringAssist.centeringLabel === '10.0 assisted' &&
     storedBack.inventory[0].gradingReport.centeringAssist.side === 'back' &&
     JSON.stringify(storedBack.inventory[0].gradingReport.subGrades) === storedSubs);
-  assert('a second pass leaves the corrected assist', assist.rescoreDatabase(storedBack) === 0);
+  assert('the rewrite logs the scan id and the old and new labels',
+    rescoreLog.length === 1 &&
+    rescoreLog[0] === '[centering-assist] rescore scanId=366A0E19 old=9.0 assisted new=10.0 assisted',
+    rescoreLog);
+  rescoreLog.length = 0;
+  assert('a second pass leaves the corrected assist',
+    assist.rescoreDatabase(storedBack, emitRescore) === 0 && rescoreLog.length === 0, rescoreLog);
   storedBack.inventory[0].gradingReport.centeringAssist.borderWidthsMm = { left: 9.1, right: 0.9, top: 5, bottom: 5 };
   storedBack.inventory[0].gradingReport.centeringAssist.centering = 1;
   storedBack.inventory[0].gradingReport.centeringAssist.centeringLabel = '1.0 assisted';
   assert('a stored back past 90/10 loses the fabricated label',
-    assist.rescoreDatabase(storedBack) === 1 &&
+    assist.rescoreDatabase(storedBack, emitRescore) === 1 &&
     storedBack.inventory[0].gradingReport.centeringAssist.centering === null &&
-    storedBack.inventory[0].gradingReport.centeringAssist.centeringLabel === null);
+    storedBack.inventory[0].gradingReport.centeringAssist.centeringLabel === null &&
+    rescoreLog.length === 1 &&
+    rescoreLog[0] === '[centering-assist] rescore scanId=366A0E19 old=1.0 assisted new=null',
+    rescoreLog);
+  rescoreLog.length = 0;
+  assert('a second pass after withholding logs nothing',
+    assist.rescoreDatabase(storedBack, emitRescore) === 0 && rescoreLog.length === 0, rescoreLog);
+  const loggedByDefault = [];
+  const previousLog = console.log;
+  console.log = function (line) {
+    loggedByDefault.push(line);
+    previousLog.apply(console, arguments);
+  };
+  const defaultDb = {
+    inventory: [{
+      id: 'default-log-scan',
+      side: 'back',
+      gradingReport: {
+        side: 'back',
+        subGrades: { centering: null },
+        centeringAssist: {
+          adjustedCount: 1,
+          side: 'front',
+          centering: 9,
+          centeringLabel: '9.0 assisted',
+          borderWidthsMm: { left: 6, right: 4, top: 5, bottom: 5 }
+        }
+      }
+    }]
+  };
+  let defaultChanged = 0;
+  let defaultSecond = 1;
+  try {
+    defaultChanged = assist.rescoreDatabase(defaultDb);
+    const afterFirst = loggedByDefault.length;
+    defaultSecond = assist.rescoreDatabase(defaultDb);
+    assert('startup rewrite logs through console.log',
+      defaultChanged === 1 &&
+      afterFirst === 1 &&
+      loggedByDefault[0] === '[centering-assist] rescore scanId=default-log-scan old=9.0 assisted new=10.0 assisted' &&
+      defaultSecond === 0 &&
+      loggedByDefault.length === 1,
+      loggedByDefault);
+  } finally {
+    console.log = previousLog;
+  }
   assert('user mm stored', built.assist.sides.left.userWidthMm === 4 && built.assist.sides.left.kind === 'assisted');
   assert('unmoved measured sides stay engine', built.assist.sides.right.source === 'engine' && built.assist.sides.right.userWidthMm === null);
   assert('engine centering on the report object is unchanged',
