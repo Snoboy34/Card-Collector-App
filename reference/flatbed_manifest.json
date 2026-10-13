@@ -1,4 +1,11 @@
 {
+  "scanner": {
+    "model": "HP ENVY 6400",
+    "imageTop": "hinge/shadow",
+    "rule": "2026.10.13-shadow-free-v1",
+    "ruleText": "Top and bottom are each taken from the scan in which that edge faces image-bottom. Left and right remain the mean of both scans. Bias is reported and is never subtracted. No fixed band subtraction.",
+    "shadowLabelNote": "SHADOW-*_90 and SHADOW-*_270 filenames are swapped relative to the card orientation. A file named _90 has the card top toward image-left. A file named _270 has the card top toward image-right. These files are not answer-key scans."
+  },
   "TD-01_up.png": { "deck": "TD-01", "orientation": "up" },
   "TD-01_180.png": { "deck": "TD-01", "orientation": "180" },
   "TD-02_up.png": { "deck": "TD-02", "orientation": "up" },

@@ -65,10 +65,13 @@
  * A card-sized result from the crop is kept, so a lower sheet gate cannot
  * move a card that was already found.
  *
- * A 180° pair cancels a directional scanner bias. The answer-key value is
- * the mean of the two orientations. An axis is kept only when the bias
+ * On the HP ENVY 6400 the hinge is at image-top, and that edge carries a
+ * shadow. Top and bottom are each taken from the scan in which that edge
+ * faces image-bottom. Left and right stay the mean of the upright scan and
+ * the swapped 180 degree scan, and that axis is kept only when the bias
  * estimated from each of its two sides agrees. The bias is reported and
- * is never subtracted as a fixed correction.
+ * is never subtracted. No fixed band is subtracted. Rule
+ * 2026.10.13-shadow-free-v1.
  *
  * Run: node scripts/measure_flatbed.js [--flatbed DIR] [--self-test]
  */
@@ -84,6 +87,7 @@ const NOMINAL_W_MM = 63.5;
 const NOMINAL_H_MM = 88.9;
 const DEFAULT_DPI = 1200;
 const BIAS_AGREE_MM = 0.02;
+const BORDER_RULE = '2026.10.13-shadow-free-v1';
 const SIZE_AXIS_MM = 1;
 const PARTIAL_COVERAGE = 0.32;
 // A real outline is found along the side. Foil and gloss make some stations
@@ -2587,10 +2591,25 @@ function agreeEdges(upSides, rotSides) {
     let mm = null;
     let withheld = true;
     let reason = 'unmeasured';
-    if (axis.agree && upMm != null && rotMm != null) {
+    let pickedFrom = null;
+    const alongSide = side === 'top' || side === 'bottom';
+    // Image-bottom is the clear edge. Card top faces image-bottom on the
+    // 180 scan. Card bottom faces image-bottom on the upright scan. A
+    // missing clear reading stays unmeasured. It does not fall back to the
+    // shadowed scan, and nothing is subtracted from the reading.
+    if (alongSide) {
+      const picked = side === 'top' ? rotMm : upMm;
+      if (picked != null) {
+        mm = picked;
+        withheld = false;
+        reason = null;
+        pickedFrom = side === 'top' ? '180-image-bottom' : 'up-image-bottom';
+      }
+    } else if (axis.agree && upMm != null && rotMm != null) {
       mm = (upMm + rotMm) / 2;
       withheld = false;
       reason = null;
+      pickedFrom = 'mean';
     } else if (upMm == null || rotMm == null) {
       reason = 'unmeasured';
     } else if (oppPair[0] == null || oppPair[1] == null) {
@@ -2600,16 +2619,24 @@ function agreeEdges(upSides, rotSides) {
     }
     const a = upSides[imageSide[side]];
     const b = rotSides[rotImage[side]];
-    const confs = [];
-    if (a && a.confidence) confs.push(a.confidence);
-    if (b && b.confidence) confs.push(b.confidence);
+    let confidence = 0;
+    if (alongSide) {
+      const pickedSide = side === 'top' ? b : a;
+      if (pickedSide && pickedSide.confidence) confidence = pickedSide.confidence;
+    } else {
+      const confs = [];
+      if (a && a.confidence) confs.push(a.confidence);
+      if (b && b.confidence) confs.push(b.confidence);
+      if (confs.length) confidence = Math.min.apply(null, confs);
+    }
     const diff = upMm != null && rotMm != null ? upMm - rotMm : null;
     sides[side] = {
       mm: mm == null ? null : roundMm(mm),
-      confidence: confs.length ? Math.round(Math.min.apply(null, confs) * 1000) / 1000 : 0,
+      confidence: Math.round(confidence * 1000) / 1000,
       withheld: withheld,
       reason: reason,
       approved: false,
+      pickedFrom: pickedFrom,
       upMm: upMm == null ? null : roundMm(upMm),
       rot180Mm: rotMm == null ? null : roundMm(rotMm),
       diffMm: diff == null ? null : roundMm(diff),
@@ -2632,7 +2659,8 @@ function loadApproved(file) {
         keep[id][side] = {
           approved: !!sides[side].approved,
           approved_by: sides[side].approved_by || null,
-          approved_on: sides[side].approved_on || null
+          approved_on: sides[side].approved_on || null,
+          mm: sides[side].mm == null || !isFinite(sides[side].mm) ? null : sides[side].mm
         };
       });
     });
@@ -2662,7 +2690,10 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
     ['top', 'bottom', 'left', 'right'].forEach(function (side) {
       const kept = prev[side];
       const wasApproved = kept === true || (kept && kept.approved);
-      if (!wasApproved) return;
+      const priorMm = kept && kept.mm != null && isFinite(kept.mm) ? kept.mm : null;
+      const sameMm = wasApproved && priorMm != null && agreed[side].mm != null &&
+        Math.abs(agreed[side].mm - priorMm) <= 0.02;
+      if (!sameMm) return;
       agreed[side].approved = true;
       if (kept && kept.approved_by) agreed[side].approved_by = kept.approved_by;
       if (kept && kept.approved_on) agreed[side].approved_on = kept.approved_on;
@@ -2702,7 +2733,8 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
     dpi: dpi,
     nominalCardMm: { width: NOMINAL_W_MM, height: NOMINAL_H_MM },
     biasAgreeMm: BIAS_AGREE_MM,
-    definition: 'Border is the perpendicular distance from the card edge to the outermost points of the design-block outline on that side. A patterned margin is margin, including chrome rays and angled shapes. The outline may be a segment: the same thin-silver, thicker-black, thin-silver profile has to appear on all four sides, parallel to the edges. A gold line with black immediately inside it is the outline when that same profile is on all four sides; the contacts are the outer corners, two per side. A logo, stamp, lettering, or ray on only one side is not the outline. The published value is the mean of the upright scan and the swapped 180 degree scan. An axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. That bias is reported and is not subtracted as a constant. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. A design-referenced name edge or an anchor (a diamond tip, a letter descender) is not a centering measurement and is not a grade. Unapproved until a person checks the overlay.',
+    borderRule: BORDER_RULE,
+    definition: 'Border is the perpendicular distance from the card edge to the outermost points of the design-block outline on that side. A patterned margin is margin, including chrome rays and angled shapes. The outline may be a segment: the same thin-silver, thicker-black, thin-silver profile has to appear on all four sides, parallel to the edges. A gold line with black immediately inside it is the outline when that same profile is on all four sides; the contacts are the outer corners, two per side. A logo, stamp, lettering, or ray on only one side is not the outline. On the HP ENVY 6400, image-top is the hinge and the shadow side. Top and bottom are each taken from the scan in which that edge faces image-bottom (rule 2026.10.13-shadow-free-v1). Left and right stay the mean of the upright scan and the swapped 180 degree scan, and that axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. Bias is reported and is not subtracted. No fixed band is subtracted. A side whose clear scan is withheld stays unmeasured. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. A design-referenced name edge or an anchor (a diamond tip, a letter descender) is not a centering measurement and is not a grade. Unapproved until a person checks the overlay.',
     cards: outCards
   };
 }
@@ -3453,13 +3485,28 @@ async function writeCardReviewSheet(cardId, scans, dest) {
     if (a.orientation === b.orientation) return 0;
     return a.orientation === 'up' ? -1 : 1;
   });
+  const upScan = ordered.filter(function (s) { return s.orientation === 'up'; })[0];
+  const rotScan = ordered.filter(function (s) { return s.orientation === '180'; })[0];
+  if (upScan && rotScan && upScan.result && upScan.result.sides && rotScan.result && rotScan.result.sides) {
+    const agreed = agreeEdges(upScan.result.sides, rotScan.result.sides);
+    const bits = ['top', 'bottom', 'left', 'right'].map(function (name) {
+      const side = agreed.sides[name];
+      if (!side || side.mm == null) return name + ' withheld';
+      return name + ' ' + side.mm.toFixed(3);
+    });
+    add(reviewCaption(cardId + '  shadow-free  ' + bits.join('   '), canvasW), 0, y);
+    y += 28;
+  }
   for (let i = 0; i < ordered.length; i++) {
     const scan = ordered[i];
     const result = scan.result;
     const cardMm = result && result.cardMm;
     const sizeText = cardMm ? cardMm.width.toFixed(2) + ' x ' + cardMm.height.toFixed(2) + ' mm' : 'no card';
+    const publishNote = scan.orientation === 'up'
+      ? '  image-bottom publishes card bottom'
+      : (scan.orientation === '180' ? '  image-bottom publishes card top' : '');
     const header = cardId + '  ' + scan.orientation + '  ' + sizeText +
-      (result && result.sizeOk === false ? '  NOT CARD SIZED' : '');
+      (result && result.sizeOk === false ? '  NOT CARD SIZED' : '') + publishNote;
     add(reviewCaption(header, canvasW), 0, y);
     y += 28;
     if (!result || !result.ok) {
@@ -3862,11 +3909,29 @@ async function selfTest() {
   const bias = agreeEdges(biasUp, biasRot);
   check('bias from top', near(bias.axes.alongScan.biasFromTop, 0.1255, 0.001), bias.axes.alongScan);
   check('bias from bottom', near(bias.axes.alongScan.biasFromBottom, 0.1245, 0.001), bias.axes.alongScan);
-  check('along-scan axis accepted', bias.axes.alongScan.agree === true, bias.axes.alongScan);
-  check('top mean cancels bias', near(bias.sides.top.mm, 3.6515, 0.001), bias.sides.top);
-  check('bottom mean cancels bias', near(bias.sides.bottom.mm, 3.1465, 0.001), bias.sides.bottom);
+  check('along-scan bias still reported', bias.axes.alongScan.agree === true, bias.axes.alongScan);
+  check('top is the 180 image-bottom', near(bias.sides.top.mm, 3.526, 0.001) && bias.sides.top.pickedFrom === '180-image-bottom', bias.sides.top);
+  check('bottom is the upright image-bottom', near(bias.sides.bottom.mm, 3.022, 0.001) && bias.sides.bottom.pickedFrom === 'up-image-bottom', bias.sides.bottom);
+  check('top confidence is the clear scan', bias.sides.top.confidence === 0.83, bias.sides.top.confidence);
   check('across-scan needs both sides', bias.axes.acrossScan.agree === false && bias.sides.right.reason === 'needs-both-sides', bias.sides.right);
-  check('no fixed correction', bias.sides.top.mm === roundMm((3.777 + 3.526) / 2), bias.sides.top.mm);
+  check('no fixed band subtracted', bias.sides.top.mm === roundMm(3.526) && bias.sides.bottom.mm === roundMm(3.022), bias.sides.top.mm);
+  const shadowedOnly = agreeEdges(
+    { top: { mm: 3.76, withheld: false, confidence: 0.7 }, bottom: { mm: null, withheld: true, confidence: 0 }, left: { mm: 3.1, withheld: false, confidence: 0.8 }, right: { mm: 3.2, withheld: false, confidence: 0.8 } },
+    { top: { mm: 3.23, withheld: false, confidence: 0.7 }, bottom: { mm: null, withheld: true, confidence: 0 }, left: { mm: 3.2, withheld: false, confidence: 0.8 }, right: { mm: 3.1, withheld: false, confidence: 0.8 } }
+  );
+  check('missing clear top stays unmeasured', shadowedOnly.sides.top.mm == null && shadowedOnly.sides.top.reason === 'unmeasured', shadowedOnly.sides.top);
+  check('missing clear bottom stays unmeasured', shadowedOnly.sides.bottom.mm == null && shadowedOnly.sides.bottom.reason === 'unmeasured', shadowedOnly.sides.bottom);
+  const approval = buildAnswerKey([
+    { card: 'Z', orientation: 'up', file: 'Z_up.png', fileDpi: null, result: { ok: true, sides: biasUp, cardMm: { width: 63.5, height: 88.9 }, sizeOk: true } },
+    { card: 'Z', orientation: '180', file: 'Z_180.png', fileDpi: null, result: { ok: true, sides: biasRot, cardMm: { width: 63.5, height: 88.9 }, sizeOk: true } }
+  ], 1200, {
+    Z: {
+      top: { approved: true, mm: 3.6515, approved_by: 'owner', approved_on: '2026-10-06' },
+      bottom: { approved: true, mm: 3.022, approved_by: 'owner', approved_on: '2026-10-06' }
+    }
+  });
+  check('moved top drops approval', approval.cards.Z.sides.top.approved === false && near(approval.cards.Z.sides.top.mm, 3.526, 0.001), approval.cards.Z.sides.top);
+  check('unchanged bottom keeps approval', approval.cards.Z.sides.bottom.approved === true && approval.cards.Z.sides.bottom.approved_by === 'owner', approval.cards.Z.sides.bottom);
 
   const tiltedPng = await sharp(mixed.data, {
     raw: { width: mixed.width, height: mixed.height, channels: 3 }
