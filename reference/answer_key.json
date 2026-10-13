@@ -6,42 +6,41 @@
     "height": 88.9
   },
   "biasAgreeMm": 0.02,
-  "definition": "Border is the perpendicular distance from the card edge to the outermost points of the design-block outline on that side. A patterned margin is margin, including chrome rays and angled shapes. The outline may be a segment: the same thin-silver, thicker-black, thin-silver profile has to appear on all four sides, parallel to the edges. A gold line with black immediately inside it is the outline when that same profile is on all four sides; the contacts are the outer corners, two per side. A logo, stamp, lettering, or ray on only one side is not the outline. The published value is the mean of the upright scan and the swapped 180 degree scan. An axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. That bias is reported and is not subtracted as a constant. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. A design-referenced name edge or an anchor (a diamond tip, a letter descender) is not a centering measurement and is not a grade. Unapproved until a person checks the overlay.",
+  "definition": "Border is the perpendicular distance from the card edge to the outermost points of the design-block outline on that side. A patterned margin is margin, including chrome rays and angled shapes. The outline may be a segment: the same thin-silver, thicker-black, thin-silver profile has to appear on all four sides, parallel to the edges. A gold line with black immediately inside it is the outline when that same profile is on all four sides; the contacts are the outer corners, two per side. A logo, stamp, lettering, or ray on only one side is not the outline. On the HP ENVY 6400, image-top is the hinge and the shadow side. Top and bottom are each taken from the scan in which that edge faces image-bottom (rule 2026.10.13-shadow-free-v1). Left and right stay the mean of the upright scan and the swapped 180 degree scan, and that axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. Bias is reported and is not subtracted. No fixed band is subtracted. A side whose clear scan is withheld stays unmeasured. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. A design-referenced name edge or an anchor (a diamond tip, a letter descender) is not a centering measurement and is not a grade. Unapproved until a person checks the overlay.",
   "cards": {
     "TD-01": {
       "sides": {
         "top": {
-          "mm": 3.643,
+          "mm": 3.527,
           "confidence": 0.677,
           "withheld": false,
           "reason": null,
-          "approved": true,
+          "approved": false,
+          "pickedFrom": "180-image-bottom",
           "upMm": 3.76,
           "rot180Mm": 3.527,
           "diffMm": 0.233,
-          "agree": true,
-          "approved_by": "owner",
-          "approved_on": "2026-10-06"
+          "agree": true
         },
         "bottom": {
-          "mm": 3.123,
+          "mm": 3.014,
           "confidence": 0.716,
           "withheld": false,
           "reason": null,
-          "approved": true,
+          "approved": false,
+          "pickedFrom": "up-image-bottom",
           "upMm": 3.014,
           "rot180Mm": 3.232,
           "diffMm": -0.218,
-          "agree": true,
-          "approved_by": "owner",
-          "approved_on": "2026-10-06"
+          "agree": true
         },
         "left": {
           "mm": 3.102,
-          "confidence": 0.722,
+          "confidence": 0.672,
           "withheld": false,
           "reason": null,
           "approved": true,
+          "pickedFrom": "mean",
           "upMm": 3.091,
           "rot180Mm": 3.113,
           "diffMm": -0.022,
@@ -51,13 +50,14 @@
         },
         "right": {
           "mm": 3.252,
-          "confidence": 0.864,
+          "confidence": 0.813,
           "withheld": false,
           "reason": null,
           "approved": true,
-          "upMm": 3.274,
+          "pickedFrom": "mean",
+          "upMm": 3.273,
           "rot180Mm": 3.23,
-          "diffMm": 0.044,
+          "diffMm": 0.043,
           "agree": true,
           "approved_by": "owner",
           "approved_on": "2026-10-06"
@@ -85,9 +85,9 @@
       },
       "ratios": {
         "leftOverRight": 0.954,
-        "topOverBottom": 1.167,
+        "topOverBottom": 1.17,
         "leftShare": 0.488,
-        "topShare": 0.538
+        "topShare": 0.539
       },
       "scans": {
         "180": {
@@ -116,6 +116,19 @@
             "leftShare": 0.509,
             "topShare": 0.478
           },
+          "frameCheck": {
+            "topShare": {
+              "outline": 0.478,
+              "black": null,
+              "diff": null
+            },
+            "leftShare": {
+              "outline": 0.509,
+              "black": null,
+              "diff": null
+            }
+          },
+          "designReference": null,
           "sides": {
             "top": {
               "mm": 3.232,
@@ -124,6 +137,11 @@
               "reason": null,
               "shape": "outer",
               "coverage": 0.93,
+              "tiltDeg": 0.021,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 13.952,
@@ -464,8 +482,7 @@
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
                 }
-              ],
-              "tiltDeg": 0.021
+              ]
             },
             "bottom": {
               "mm": 3.527,
@@ -474,6 +491,11 @@
               "reason": null,
               "shape": "outer",
               "coverage": 0.984,
+              "tiltDeg": 0.008,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 9.148,
@@ -995,16 +1017,20 @@
                   "refused": false,
                   "why": null
                 }
-              ],
-              "tiltDeg": 0.008
+              ]
             },
             "left": {
               "mm": 3.23,
-              "confidence": 0.864,
+              "confidence": 0.815,
               "withheld": false,
               "reason": null,
               "shape": "outer",
-              "coverage": 0.676,
+              "coverage": 0.615,
+              "tiltDeg": -0.018,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 45.312,
@@ -1035,15 +1061,7 @@
                   "depthMm": 3.213
                 },
                 {
-                  "alongMm": 60.112,
-                  "depthMm": 3.213
-                },
-                {
                   "alongMm": 50.112,
-                  "depthMm": 3.213
-                },
-                {
-                  "alongMm": 72.512,
                   "depthMm": 3.213
                 },
                 {
@@ -1079,10 +1097,6 @@
                   "depthMm": 3.217
                 },
                 {
-                  "alongMm": 54.912,
-                  "depthMm": 3.218
-                },
-                {
                   "alongMm": 68.512,
                   "depthMm": 3.219
                 },
@@ -1111,20 +1125,12 @@
                   "depthMm": 3.223
                 },
                 {
-                  "alongMm": 57.312,
-                  "depthMm": 3.223
-                },
-                {
                   "alongMm": 24.512,
                   "depthMm": 3.223
                 },
                 {
                   "alongMm": 65.712,
                   "depthMm": 3.224
-                },
-                {
-                  "alongMm": 47.312,
-                  "depthMm": 3.225
                 },
                 {
                   "alongMm": 38.912,
@@ -1196,10 +1202,6 @@
                 },
                 {
                   "alongMm": 10.912,
-                  "depthMm": 3.23
-                },
-                {
-                  "alongMm": 44.912,
                   "depthMm": 3.23
                 },
                 {
@@ -1307,10 +1309,6 @@
                   "depthMm": 3.236
                 },
                 {
-                  "alongMm": 49.712,
-                  "depthMm": 3.237
-                },
-                {
                   "alongMm": 31.312,
                   "depthMm": 3.241
                 },
@@ -1343,10 +1341,6 @@
                   "depthMm": 3.244
                 },
                 {
-                  "alongMm": 52.512,
-                  "depthMm": 3.246
-                },
-                {
                   "alongMm": 32.912,
                   "depthMm": 3.246
                 },
@@ -1369,105 +1363,84 @@
               ],
               "elements": [
                 {
-                  "depthMm": 0.372,
-                  "fromMm": 43.712,
-                  "toMm": 62.112,
-                  "coverage": 0.022,
-                  "stations": 4,
-                  "runs": [
-                    {
-                      "fromMm": 43.712,
-                      "toMm": 44.512,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 59.712,
-                      "toMm": 59.712,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 62.112,
-                      "toMm": 62.112,
-                      "stations": 1
-                    }
-                  ],
-                  "runCount": 3,
-                  "role": "edge-shadow",
-                  "refused": true,
-                  "why": "sits in the card-edge transition, not the design block"
-                },
-                {
-                  "depthMm": 0.631,
+                  "depthMm": 0.655,
                   "fromMm": 40.912,
-                  "toMm": 67.312,
-                  "coverage": 0.022,
-                  "stations": 4,
+                  "toMm": 75.312,
+                  "coverage": 0.151,
+                  "stations": 27,
                   "runs": [
                     {
                       "fromMm": 40.912,
-                      "toMm": 40.912,
-                      "stations": 1
+                      "toMm": 42.112,
+                      "stations": 3
                     },
                     {
-                      "fromMm": 46.512,
-                      "toMm": 46.512,
-                      "stations": 1
+                      "fromMm": 44.112,
+                      "toMm": 44.912,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 46.112,
+                      "toMm": 46.912,
+                      "stations": 2
                     },
                     {
                       "fromMm": 49.312,
-                      "toMm": 49.312,
+                      "toMm": 49.712,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 51.312,
+                      "toMm": 52.512,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 54.112,
+                      "toMm": 54.912,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 56.512,
+                      "toMm": 57.312,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 59.312,
+                      "toMm": 60.112,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 62.112,
+                      "toMm": 62.512,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 64.912,
+                      "toMm": 64.912,
                       "stations": 1
                     },
                     {
                       "fromMm": 67.312,
                       "toMm": 67.312,
                       "stations": 1
-                    }
-                  ],
-                  "runCount": 4,
-                  "role": "partial-margin",
-                  "refused": true,
-                  "why": "covers 2% of the side and sits outside the outline that continues along the rest"
-                },
-                {
-                  "depthMm": 0.913,
-                  "fromMm": 41.312,
-                  "toMm": 56.512,
-                  "coverage": 0.028,
-                  "stations": 5,
-                  "runs": [
-                    {
-                      "fromMm": 41.312,
-                      "toMm": 41.312,
-                      "stations": 1
                     },
                     {
-                      "fromMm": 46.112,
-                      "toMm": 46.112,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 51.312,
-                      "toMm": 52.112,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 56.512,
-                      "toMm": 56.512,
+                      "fromMm": 69.712,
+                      "toMm": 69.712,
                       "stations": 1
                     }
                   ],
-                  "runCount": 4,
+                  "runCount": 13,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 3% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 15% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 1.405,
+                  "depthMm": 1.148,
                   "fromMm": 40.512,
-                  "toMm": 72.112,
-                  "coverage": 0.045,
-                  "stations": 8,
+                  "toMm": 77.312,
+                  "coverage": 0.067,
+                  "stations": 12,
                   "runs": [
                     {
                       "fromMm": 40.512,
@@ -1476,18 +1449,28 @@
                     },
                     {
                       "fromMm": 43.312,
-                      "toMm": 44.112,
-                      "stations": 2
+                      "toMm": 43.312,
+                      "stations": 1
                     },
                     {
-                      "fromMm": 54.512,
-                      "toMm": 54.512,
+                      "fromMm": 48.512,
+                      "toMm": 48.512,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 53.712,
+                      "toMm": 53.712,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 56.912,
+                      "toMm": 56.912,
                       "stations": 1
                     },
                     {
                       "fromMm": 58.912,
-                      "toMm": 58.912,
-                      "stations": 1
+                      "toMm": 59.712,
+                      "stations": 2
                     },
                     {
                       "fromMm": 61.712,
@@ -1501,21 +1484,26 @@
                     },
                     {
                       "fromMm": 72.112,
-                      "toMm": 72.112,
+                      "toMm": 72.512,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 77.312,
+                      "toMm": 77.312,
                       "stations": 1
                     }
                   ],
-                  "runCount": 7,
+                  "runCount": 10,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 4% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 7% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 1.727,
+                  "depthMm": 1.733,
                   "fromMm": 45.712,
-                  "toMm": 77.312,
-                  "coverage": 0.067,
-                  "stations": 12,
+                  "toMm": 74.512,
+                  "coverage": 0.039,
+                  "stations": 7,
                   "runs": [
                     {
                       "fromMm": 45.712,
@@ -1523,23 +1511,8 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 46.912,
-                      "toMm": 46.912,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 48.512,
-                      "toMm": 48.512,
-                      "stations": 1
-                    },
-                    {
                       "fromMm": 50.912,
-                      "toMm": 51.712,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 53.712,
-                      "toMm": 53.712,
+                      "toMm": 50.912,
                       "stations": 1
                     },
                     {
@@ -1566,30 +1539,58 @@
                       "fromMm": 74.512,
                       "toMm": 74.512,
                       "stations": 1
-                    },
-                    {
-                      "fromMm": 77.312,
-                      "toMm": 77.312,
-                      "stations": 1
                     }
                   ],
-                  "runCount": 11,
+                  "runCount": 7,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 7% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 4% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 2.36,
+                  "depthMm": 2.29,
                   "fromMm": 40.112,
-                  "toMm": 71.712,
-                  "coverage": 0.056,
-                  "stations": 10,
+                  "toMm": 66.512,
+                  "coverage": 0.034,
+                  "stations": 6,
                   "runs": [
                     {
                       "fromMm": 40.112,
                       "toMm": 40.112,
                       "stations": 1
                     },
+                    {
+                      "fromMm": 48.112,
+                      "toMm": 48.912,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 52.112,
+                      "toMm": 52.112,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 58.512,
+                      "toMm": 58.512,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 66.512,
+                      "toMm": 66.512,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 5,
+                  "role": "partial-margin",
+                  "refused": true,
+                  "why": "covers 3% of the side and sits outside the outline that continues along the rest"
+                },
+                {
+                  "depthMm": 2.44,
+                  "fromMm": 41.712,
+                  "toMm": 76.912,
+                  "coverage": 0.028,
+                  "stations": 5,
+                  "runs": [
                     {
                       "fromMm": 41.712,
                       "toMm": 41.712,
@@ -1601,43 +1602,43 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 48.112,
-                      "toMm": 48.912,
-                      "stations": 2
-                    },
-                    {
                       "fromMm": 53.312,
-                      "toMm": 54.112,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 58.512,
-                      "toMm": 58.512,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 66.512,
-                      "toMm": 66.512,
+                      "toMm": 53.312,
                       "stations": 1
                     },
                     {
                       "fromMm": 71.712,
                       "toMm": 71.712,
                       "stations": 1
+                    },
+                    {
+                      "fromMm": 76.912,
+                      "toMm": 76.912,
+                      "stations": 1
                     }
                   ],
-                  "runCount": 8,
+                  "runCount": 5,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 6% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 3% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 2.863,
-                  "fromMm": 50.512,
-                  "toMm": 76.912,
-                  "coverage": 0.056,
-                  "stations": 10,
+                  "depthMm": 2.872,
+                  "fromMm": 43.712,
+                  "toMm": 74.112,
+                  "coverage": 0.045,
+                  "stations": 8,
                   "runs": [
+                    {
+                      "fromMm": 43.712,
+                      "toMm": 43.712,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 46.512,
+                      "toMm": 46.512,
+                      "stations": 1
+                    },
                     {
                       "fromMm": 50.512,
                       "toMm": 50.512,
@@ -1649,24 +1650,14 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 56.912,
-                      "toMm": 56.912,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 59.312,
-                      "toMm": 59.312,
-                      "stations": 1
-                    },
-                    {
                       "fromMm": 60.912,
                       "toMm": 60.912,
                       "stations": 1
                     },
                     {
                       "fromMm": 63.712,
-                      "toMm": 64.512,
-                      "stations": 2
+                      "toMm": 63.712,
+                      "stations": 1
                     },
                     {
                       "fromMm": 68.912,
@@ -1677,24 +1668,19 @@
                       "fromMm": 74.112,
                       "toMm": 74.112,
                       "stations": 1
-                    },
-                    {
-                      "fromMm": 76.912,
-                      "toMm": 76.912,
-                      "stations": 1
                     }
                   ],
-                  "runCount": 9,
+                  "runCount": 8,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 6% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 4% of the side and sits outside the outline that continues along the rest"
                 },
                 {
                   "depthMm": 3.23,
                   "fromMm": 8.912,
                   "toMm": 80.112,
-                  "coverage": 0.503,
-                  "stations": 90,
+                  "coverage": 0.458,
+                  "stations": 82,
                   "runs": [
                     {
                       "fromMm": 8.912,
@@ -1732,50 +1718,58 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 44.912,
+                      "fromMm": 45.312,
                       "toMm": 45.312,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 47.312,
-                      "toMm": 47.712,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 49.712,
-                      "toMm": 50.112,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 52.512,
-                      "toMm": 52.512,
                       "stations": 1
                     },
                     {
-                      "fromMm": 54.912,
+                      "fromMm": 47.712,
+                      "toMm": 47.712,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 50.112,
+                      "toMm": 50.112,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 55.312,
                       "toMm": 55.312,
-                      "stations": 2
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 58.112,
+                      "toMm": 58.112,
+                      "stations": 1
                     }
                   ],
-                  "runCount": 21,
+                  "runCount": 20,
                   "role": "outline",
                   "refused": false,
                   "why": null
                 }
-              ],
-              "tiltDeg": -0.018
+              ]
             },
             "right": {
               "mm": 3.113,
-              "confidence": 0.853,
+              "confidence": 0.791,
               "withheld": false,
               "reason": null,
               "shape": "outer",
-              "coverage": 0.67,
+              "coverage": 0.592,
+              "tiltDeg": 0.013,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 25.323,
                   "depthMm": 3.046
+                },
+                {
+                  "alongMm": 26.523,
+                  "depthMm": 3.06
                 },
                 {
                   "alongMm": 71.323,
@@ -1794,24 +1788,12 @@
                   "depthMm": 3.092
                 },
                 {
-                  "alongMm": 57.323,
-                  "depthMm": 3.093
-                },
-                {
-                  "alongMm": 33.323,
-                  "depthMm": 3.094
-                },
-                {
                   "alongMm": 66.523,
                   "depthMm": 3.094
                 },
                 {
                   "alongMm": 71.723,
                   "depthMm": 3.097
-                },
-                {
-                  "alongMm": 49.323,
-                  "depthMm": 3.1
                 },
                 {
                   "alongMm": 18.523,
@@ -1834,19 +1816,11 @@
                   "depthMm": 3.11
                 },
                 {
-                  "alongMm": 25.723,
-                  "depthMm": 3.111
-                },
-                {
                   "alongMm": 70.523,
                   "depthMm": 3.111
                 },
                 {
                   "alongMm": 64.123,
-                  "depthMm": 3.111
-                },
-                {
-                  "alongMm": 20.123,
                   "depthMm": 3.111
                 },
                 {
@@ -1859,10 +1833,6 @@
                 },
                 {
                   "alongMm": 53.323,
-                  "depthMm": 3.112
-                },
-                {
-                  "alongMm": 38.523,
                   "depthMm": 3.112
                 },
                 {
@@ -1914,10 +1884,6 @@
                   "depthMm": 3.114
                 },
                 {
-                  "alongMm": 46.923,
-                  "depthMm": 3.114
-                },
-                {
                   "alongMm": 69.323,
                   "depthMm": 3.114
                 },
@@ -1950,20 +1916,8 @@
                   "depthMm": 3.115
                 },
                 {
-                  "alongMm": 28.523,
-                  "depthMm": 3.115
-                },
-                {
                   "alongMm": 64.923,
                   "depthMm": 3.116
-                },
-                {
-                  "alongMm": 44.123,
-                  "depthMm": 3.117
-                },
-                {
-                  "alongMm": 54.523,
-                  "depthMm": 3.117
                 },
                 {
                   "alongMm": 77.323,
@@ -1998,10 +1952,6 @@
                   "depthMm": 3.122
                 },
                 {
-                  "alongMm": 23.323,
-                  "depthMm": 3.123
-                },
-                {
                   "alongMm": 72.123,
                   "depthMm": 3.124
                 },
@@ -2016,109 +1966,103 @@
               ],
               "elements": [
                 {
-                  "depthMm": 0.367,
-                  "fromMm": 20.523,
-                  "toMm": 36.523,
-                  "coverage": 0.028,
-                  "stations": 5,
+                  "depthMm": 0.621,
+                  "fromMm": 20.123,
+                  "toMm": 54.523,
+                  "coverage": 0.112,
+                  "stations": 20,
                   "runs": [
                     {
-                      "fromMm": 20.523,
-                      "toMm": 20.523,
-                      "stations": 1
+                      "fromMm": 20.123,
+                      "toMm": 21.323,
+                      "stations": 3
                     },
                     {
-                      "fromMm": 26.123,
-                      "toMm": 26.123,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 28.923,
-                      "toMm": 29.323,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 36.523,
-                      "toMm": 36.523,
-                      "stations": 1
-                    }
-                  ],
-                  "runCount": 4,
-                  "role": "edge-shadow",
-                  "refused": true,
-                  "why": "sits in the card-edge transition, not the design block"
-                },
-                {
-                  "depthMm": 0.466,
-                  "fromMm": 26.523,
-                  "toMm": 41.723,
-                  "coverage": 0.017,
-                  "stations": 3,
-                  "runs": [
-                    {
-                      "fromMm": 26.523,
-                      "toMm": 26.523,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 31.723,
-                      "toMm": 31.723,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 41.723,
-                      "toMm": 41.723,
-                      "stations": 1
-                    }
-                  ],
-                  "runCount": 3,
-                  "role": "partial-margin",
-                  "refused": true,
-                  "why": "covers 2% of the side and sits outside the outline that continues along the rest"
-                },
-                {
-                  "depthMm": 0.797,
-                  "fromMm": 23.723,
-                  "toMm": 44.523,
-                  "coverage": 0.022,
-                  "stations": 4,
-                  "runs": [
-                    {
-                      "fromMm": 23.723,
+                      "fromMm": 24.523,
                       "toMm": 24.523,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 25.723,
+                      "toMm": 25.723,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 26.923,
+                      "toMm": 26.923,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 28.523,
+                      "toMm": 28.923,
                       "stations": 2
                     },
-                    {
-                      "fromMm": 39.323,
-                      "toMm": 39.323,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 44.523,
-                      "toMm": 44.523,
-                      "stations": 1
-                    }
-                  ],
-                  "runCount": 3,
-                  "role": "partial-margin",
-                  "refused": true,
-                  "why": "covers 2% of the side and sits outside the outline that continues along the rest"
-                },
-                {
-                  "depthMm": 1.207,
-                  "fromMm": 31.323,
-                  "toMm": 47.323,
-                  "coverage": 0.028,
-                  "stations": 5,
-                  "runs": [
                     {
                       "fromMm": 31.323,
-                      "toMm": 32.123,
+                      "toMm": 31.723,
                       "stations": 2
+                    },
+                    {
+                      "fromMm": 34.523,
+                      "toMm": 34.523,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 36.123,
+                      "toMm": 36.123,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 38.523,
+                      "toMm": 39.323,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 41.323,
+                      "toMm": 41.723,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 44.123,
+                      "toMm": 44.123,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 49.323,
+                      "toMm": 49.323,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 14,
+                  "role": "partial-margin",
+                  "refused": true,
+                  "why": "covers 11% of the side and sits outside the outline that continues along the rest"
+                },
+                {
+                  "depthMm": 0.916,
+                  "fromMm": 22.123,
+                  "toMm": 49.723,
+                  "coverage": 0.05,
+                  "stations": 9,
+                  "runs": [
+                    {
+                      "fromMm": 22.123,
+                      "toMm": 22.123,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 32.123,
+                      "toMm": 32.123,
+                      "stations": 1
                     },
                     {
                       "fromMm": 33.723,
                       "toMm": 33.723,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 36.523,
+                      "toMm": 36.523,
                       "stations": 1
                     },
                     {
@@ -2127,31 +2071,79 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 47.323,
+                      "fromMm": 44.523,
+                      "toMm": 44.523,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 46.923,
                       "toMm": 47.323,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 49.723,
+                      "toMm": 49.723,
                       "stations": 1
                     }
                   ],
-                  "runCount": 4,
+                  "runCount": 8,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 3% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 5% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 1.509,
-                  "fromMm": 21.323,
-                  "toMm": 54.923,
+                  "depthMm": 1.239,
+                  "fromMm": 23.323,
+                  "toMm": 57.323,
+                  "coverage": 0.039,
+                  "stations": 7,
+                  "runs": [
+                    {
+                      "fromMm": 23.323,
+                      "toMm": 23.723,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 29.723,
+                      "toMm": 29.723,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 30.923,
+                      "toMm": 30.923,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 42.123,
+                      "toMm": 42.123,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 54.923,
+                      "toMm": 54.923,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 57.323,
+                      "toMm": 57.323,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 6,
+                  "role": "partial-margin",
+                  "refused": true,
+                  "why": "covers 4% of the side and sits outside the outline that continues along the rest"
+                },
+                {
+                  "depthMm": 1.572,
+                  "fromMm": 37.323,
+                  "toMm": 52.523,
                   "coverage": 0.022,
                   "stations": 4,
                   "runs": [
                     {
-                      "fromMm": 21.323,
-                      "toMm": 21.323,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 34.523,
-                      "toMm": 34.523,
+                      "fromMm": 37.323,
+                      "toMm": 37.323,
                       "stations": 1
                     },
                     {
@@ -2160,8 +2152,13 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 54.923,
-                      "toMm": 54.923,
+                      "fromMm": 44.923,
+                      "toMm": 44.923,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 52.523,
+                      "toMm": 52.523,
                       "stations": 1
                     }
                   ],
@@ -2171,30 +2168,25 @@
                   "why": "covers 2% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 1.918,
-                  "fromMm": 22.123,
-                  "toMm": 52.523,
-                  "coverage": 0.078,
-                  "stations": 14,
+                  "depthMm": 2.038,
+                  "fromMm": 24.923,
+                  "toMm": 50.123,
+                  "coverage": 0.034,
+                  "stations": 6,
                   "runs": [
                     {
-                      "fromMm": 22.123,
-                      "toMm": 22.123,
+                      "fromMm": 24.923,
+                      "toMm": 24.923,
                       "stations": 1
                     },
                     {
-                      "fromMm": 24.123,
-                      "toMm": 24.923,
-                      "stations": 2
+                      "fromMm": 26.123,
+                      "toMm": 26.123,
+                      "stations": 1
                     },
                     {
-                      "fromMm": 26.923,
+                      "fromMm": 27.323,
                       "toMm": 27.323,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 29.723,
-                      "toMm": 29.723,
                       "stations": 1
                     },
                     {
@@ -2203,67 +2195,47 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 37.323,
-                      "toMm": 37.323,
-                      "stations": 1
-                    },
-                    {
                       "fromMm": 40.123,
                       "toMm": 40.123,
                       "stations": 1
                     },
                     {
-                      "fromMm": 42.123,
-                      "toMm": 42.123,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 44.923,
-                      "toMm": 44.923,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 49.723,
+                      "fromMm": 50.123,
                       "toMm": 50.123,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 52.523,
-                      "toMm": 52.523,
                       "stations": 1
                     }
                   ],
-                  "runCount": 11,
+                  "runCount": 6,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 8% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 3% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 2.392,
+                  "depthMm": 2.367,
                   "fromMm": 20.923,
                   "toMm": 57.723,
-                  "coverage": 0.073,
-                  "stations": 13,
+                  "coverage": 0.045,
+                  "stations": 8,
                   "runs": [
                     {
                       "fromMm": 20.923,
-                      "toMm": 22.523,
-                      "stations": 3
-                    },
-                    {
-                      "fromMm": 30.123,
-                      "toMm": 30.123,
+                      "toMm": 20.923,
                       "stations": 1
                     },
                     {
-                      "fromMm": 34.123,
+                      "fromMm": 22.523,
+                      "toMm": 22.523,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 34.923,
                       "toMm": 34.923,
-                      "stations": 2
+                      "stations": 1
                     },
                     {
                       "fromMm": 36.923,
-                      "toMm": 37.723,
-                      "stations": 2
+                      "toMm": 36.923,
+                      "stations": 1
                     },
                     {
                       "fromMm": 42.523,
@@ -2273,11 +2245,6 @@
                     {
                       "fromMm": 47.723,
                       "toMm": 47.723,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 52.923,
-                      "toMm": 52.923,
                       "stations": 1
                     },
                     {
@@ -2291,17 +2258,65 @@
                       "stations": 1
                     }
                   ],
-                  "runCount": 9,
+                  "runCount": 8,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 7% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 4% of the side and sits outside the outline that continues along the rest"
+                },
+                {
+                  "depthMm": 2.763,
+                  "fromMm": 21.723,
+                  "toMm": 52.923,
+                  "coverage": 0.045,
+                  "stations": 8,
+                  "runs": [
+                    {
+                      "fromMm": 21.723,
+                      "toMm": 21.723,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 24.123,
+                      "toMm": 24.123,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 29.323,
+                      "toMm": 30.123,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 34.123,
+                      "toMm": 34.123,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 37.723,
+                      "toMm": 37.723,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 45.323,
+                      "toMm": 45.323,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 52.923,
+                      "toMm": 52.923,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 7,
+                  "role": "partial-margin",
+                  "refused": true,
+                  "why": "covers 4% of the side and sits outside the outline that continues along the rest"
                 },
                 {
                   "depthMm": 3.113,
                   "fromMm": 16.923,
                   "toMm": 79.723,
-                  "coverage": 0.335,
-                  "stations": 60,
+                  "coverage": 0.279,
+                  "stations": 50,
                   "runs": [
                     {
                       "fromMm": 16.923,
@@ -2309,28 +2324,18 @@
                       "stations": 4
                     },
                     {
-                      "fromMm": 20.123,
-                      "toMm": 20.123,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 23.323,
-                      "toMm": 23.323,
-                      "stations": 1
-                    },
-                    {
                       "fromMm": 25.323,
-                      "toMm": 25.723,
-                      "stations": 2
+                      "toMm": 25.323,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 26.523,
+                      "toMm": 26.523,
+                      "stations": 1
                     },
                     {
                       "fromMm": 27.723,
-                      "toMm": 28.523,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 33.323,
-                      "toMm": 33.323,
+                      "toMm": 27.723,
                       "stations": 1
                     },
                     {
@@ -2339,14 +2344,9 @@
                       "stations": 2
                     },
                     {
-                      "fromMm": 38.523,
-                      "toMm": 38.523,
-                      "stations": 1
-                    },
-                    {
                       "fromMm": 43.323,
-                      "toMm": 44.123,
-                      "stations": 2
+                      "toMm": 43.323,
+                      "stations": 1
                     },
                     {
                       "fromMm": 45.723,
@@ -2354,38 +2354,35 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 46.923,
-                      "toMm": 46.923,
+                      "fromMm": 48.123,
+                      "toMm": 48.923,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 50.523,
+                      "toMm": 50.523,
                       "stations": 1
                     },
                     {
-                      "fromMm": 48.123,
-                      "toMm": 49.323,
-                      "stations": 4
+                      "fromMm": 51.723,
+                      "toMm": 51.723,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 53.323,
+                      "toMm": 53.323,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 56.123,
+                      "toMm": 56.123,
+                      "stations": 1
                     }
                   ],
-                  "runCount": 22,
+                  "runCount": 16,
                   "role": "outline",
                   "refused": false,
                   "why": null
-                },
-                {
-                  "depthMm": 4.081,
-                  "fromMm": 12.123,
-                  "toMm": 12.523,
-                  "coverage": 0.011,
-                  "stations": 2,
-                  "runs": [
-                    {
-                      "fromMm": 12.123,
-                      "toMm": 12.523,
-                      "stations": 2
-                    }
-                  ],
-                  "runCount": 1,
-                  "role": "isolated",
-                  "refused": true,
-                  "why": "single-station readings, not an outline"
                 },
                 {
                   "depthMm": 4.17,
@@ -2404,9 +2401,26 @@
                   "role": "deeper-element",
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 4.629,
+                  "fromMm": 12.523,
+                  "toMm": 12.523,
+                  "coverage": 0.006,
+                  "stations": 1,
+                  "runs": [
+                    {
+                      "fromMm": 12.523,
+                      "toMm": 12.523,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "isolated",
+                  "refused": true,
+                  "why": "single-station readings, not an outline"
                 }
-              ],
-              "tiltDeg": 0.013
+              ]
             }
           }
         },
@@ -2436,6 +2450,19 @@
             "leftShare": 0.486,
             "topShare": 0.555
           },
+          "frameCheck": {
+            "topShare": {
+              "outline": 0.555,
+              "black": null,
+              "diff": null
+            },
+            "leftShare": {
+              "outline": 0.486,
+              "black": null,
+              "diff": null
+            }
+          },
+          "designReference": null,
           "sides": {
             "top": {
               "mm": 3.76,
@@ -2444,6 +2471,11 @@
               "reason": null,
               "shape": "outer",
               "coverage": 0.984,
+              "tiltDeg": 0.016,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 37.95,
@@ -2821,8 +2853,7 @@
                   "refused": true,
                   "why": "single-station readings, not an outline"
                 }
-              ],
-              "tiltDeg": 0.016
+              ]
             },
             "bottom": {
               "mm": 3.014,
@@ -2831,6 +2862,11 @@
               "reason": null,
               "shape": "outer",
               "coverage": 0.891,
+              "tiltDeg": -0.004,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 35.553,
@@ -3344,16 +3380,20 @@
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
                 }
-              ],
-              "tiltDeg": -0.004
+              ]
             },
             "left": {
               "mm": 3.091,
-              "confidence": 0.722,
+              "confidence": 0.672,
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.648,
+              "coverage": 0.57,
+              "tiltDeg": 0.017,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 64.115,
@@ -3396,20 +3436,12 @@
                   "depthMm": 3.057
                 },
                 {
-                  "alongMm": 56.115,
-                  "depthMm": 3.058
-                },
-                {
                   "alongMm": 21.715,
                   "depthMm": 3.06
                 },
                 {
                   "alongMm": 70.115,
                   "depthMm": 3.063
-                },
-                {
-                  "alongMm": 32.115,
-                  "depthMm": 3.066
                 },
                 {
                   "alongMm": 11.715,
@@ -3464,10 +3496,6 @@
                   "depthMm": 3.073
                 },
                 {
-                  "alongMm": 45.315,
-                  "depthMm": 3.073
-                },
-                {
                   "alongMm": 38.515,
                   "depthMm": 3.073
                 },
@@ -3502,10 +3530,6 @@
                 {
                   "alongMm": 19.315,
                   "depthMm": 3.077
-                },
-                {
-                  "alongMm": 63.715,
-                  "depthMm": 3.078
                 },
                 {
                   "alongMm": 28.515,
@@ -3544,10 +3568,6 @@
                   "depthMm": 3.088
                 },
                 {
-                  "alongMm": 50.915,
-                  "depthMm": 3.088
-                },
-                {
                   "alongMm": 38.115,
                   "depthMm": 3.088
                 },
@@ -3558,10 +3578,6 @@
                 {
                   "alongMm": 27.715,
                   "depthMm": 3.088
-                },
-                {
-                  "alongMm": 34.915,
-                  "depthMm": 3.089
                 },
                 {
                   "alongMm": 73.715,
@@ -3576,10 +3592,6 @@
                   "depthMm": 3.09
                 },
                 {
-                  "alongMm": 32.515,
-                  "depthMm": 3.09
-                },
-                {
                   "alongMm": 56.515,
                   "depthMm": 3.091
                 },
@@ -3588,19 +3600,11 @@
                   "depthMm": 3.091
                 },
                 {
-                  "alongMm": 48.115,
-                  "depthMm": 3.092
-                },
-                {
                   "alongMm": 66.515,
                   "depthMm": 3.092
                 },
                 {
                   "alongMm": 46.115,
-                  "depthMm": 3.092
-                },
-                {
-                  "alongMm": 55.715,
                   "depthMm": 3.092
                 },
                 {
@@ -3617,10 +3621,6 @@
                 },
                 {
                   "alongMm": 71.315,
-                  "depthMm": 3.094
-                },
-                {
-                  "alongMm": 42.515,
                   "depthMm": 3.094
                 },
                 {
@@ -3676,10 +3676,6 @@
                   "depthMm": 3.1
                 },
                 {
-                  "alongMm": 40.115,
-                  "depthMm": 3.1
-                },
-                {
                   "alongMm": 22.115,
                   "depthMm": 3.101
                 },
@@ -3713,10 +3709,6 @@
                 },
                 {
                   "alongMm": 54.115,
-                  "depthMm": 3.106
-                },
-                {
-                  "alongMm": 69.315,
                   "depthMm": 3.106
                 },
                 {
@@ -3768,10 +3760,6 @@
                   "depthMm": 3.124
                 },
                 {
-                  "alongMm": 37.715,
-                  "depthMm": 3.129
-                },
-                {
                   "alongMm": 25.315,
                   "depthMm": 3.129
                 },
@@ -3814,66 +3802,170 @@
                 {
                   "alongMm": 41.315,
                   "depthMm": 3.189
-                },
-                {
-                  "alongMm": 42.915,
-                  "depthMm": 3.193
                 }
               ],
               "elements": [
                 {
-                  "depthMm": 0.39,
-                  "fromMm": 52.915,
-                  "toMm": 68.115,
-                  "coverage": 0.022,
-                  "stations": 4,
+                  "depthMm": 0.64,
+                  "fromMm": 32.515,
+                  "toMm": 69.315,
+                  "coverage": 0.145,
+                  "stations": 26,
                   "runs": [
                     {
-                      "fromMm": 52.915,
-                      "toMm": 52.915,
+                      "fromMm": 32.515,
+                      "toMm": 32.515,
                       "stations": 1
+                    },
+                    {
+                      "fromMm": 37.315,
+                      "toMm": 37.715,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 40.115,
+                      "toMm": 40.115,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 42.515,
+                      "toMm": 42.915,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 47.715,
+                      "toMm": 48.115,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 50.115,
+                      "toMm": 50.915,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 52.915,
+                      "toMm": 53.315,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 54.915,
+                      "toMm": 54.915,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 56.115,
+                      "toMm": 56.115,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 57.715,
+                      "toMm": 58.115,
+                      "stations": 2
                     },
                     {
                       "fromMm": 60.515,
-                      "toMm": 60.515,
-                      "stations": 1
+                      "toMm": 60.915,
+                      "stations": 2
                     },
                     {
-                      "fromMm": 63.315,
+                      "fromMm": 62.515,
                       "toMm": 63.315,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 15,
+                  "role": "partial-margin",
+                  "refused": true,
+                  "why": "covers 15% of the side and sits outside the outline that continues along the rest"
+                },
+                {
+                  "depthMm": 1.005,
+                  "fromMm": 32.115,
+                  "toMm": 67.315,
+                  "coverage": 0.067,
+                  "stations": 12,
+                  "runs": [
+                    {
+                      "fromMm": 32.115,
+                      "toMm": 32.115,
                       "stations": 1
                     },
                     {
-                      "fromMm": 68.115,
-                      "toMm": 68.115,
+                      "fromMm": 34.515,
+                      "toMm": 34.915,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 39.715,
+                      "toMm": 39.715,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 42.115,
+                      "toMm": 42.115,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 45.315,
+                      "toMm": 45.315,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 47.315,
+                      "toMm": 47.315,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 49.715,
+                      "toMm": 49.715,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 57.315,
+                      "toMm": 57.315,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 58.515,
+                      "toMm": 58.515,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 63.715,
+                      "toMm": 63.715,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 67.315,
+                      "toMm": 67.315,
                       "stations": 1
                     }
                   ],
-                  "runCount": 4,
-                  "role": "edge-shadow",
+                  "runCount": 11,
+                  "role": "partial-margin",
                   "refused": true,
-                  "why": "sits in the card-edge transition, not the design block"
+                  "why": "covers 7% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 0.587,
-                  "fromMm": 50.515,
+                  "depthMm": 1.485,
+                  "fromMm": 52.115,
                   "toMm": 68.915,
                   "coverage": 0.022,
                   "stations": 4,
                   "runs": [
                     {
-                      "fromMm": 50.515,
-                      "toMm": 50.515,
+                      "fromMm": 52.115,
+                      "toMm": 52.115,
                       "stations": 1
                     },
                     {
-                      "fromMm": 60.115,
-                      "toMm": 60.115,
+                      "fromMm": 59.715,
+                      "toMm": 59.715,
                       "stations": 1
                     },
                     {
-                      "fromMm": 65.315,
-                      "toMm": 65.315,
+                      "fromMm": 66.115,
+                      "toMm": 66.115,
                       "stations": 1
                     },
                     {
@@ -3888,92 +3980,16 @@
                   "why": "covers 2% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 1.162,
-                  "fromMm": 50.115,
-                  "toMm": 65.715,
-                  "coverage": 0.034,
-                  "stations": 6,
-                  "runs": [
-                    {
-                      "fromMm": 50.115,
-                      "toMm": 50.115,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 54.915,
-                      "toMm": 55.315,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 62.515,
-                      "toMm": 62.515,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 64.915,
-                      "toMm": 65.715,
-                      "stations": 2
-                    }
-                  ],
-                  "runCount": 4,
-                  "role": "partial-margin",
-                  "refused": true,
-                  "why": "covers 3% of the side and sits outside the outline that continues along the rest"
-                },
-                {
-                  "depthMm": 1.478,
-                  "fromMm": 34.515,
-                  "toMm": 66.115,
-                  "coverage": 0.034,
-                  "stations": 6,
-                  "runs": [
-                    {
-                      "fromMm": 34.515,
-                      "toMm": 34.515,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 39.715,
-                      "toMm": 39.715,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 47.315,
-                      "toMm": 47.315,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 49.715,
-                      "toMm": 49.715,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 57.715,
-                      "toMm": 57.715,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 66.115,
-                      "toMm": 66.115,
-                      "stations": 1
-                    }
-                  ],
-                  "runCount": 6,
-                  "role": "partial-margin",
-                  "refused": true,
-                  "why": "covers 3% of the side and sits outside the outline that continues along the rest"
-                },
-                {
                   "depthMm": 1.769,
                   "fromMm": 36.915,
-                  "toMm": 67.315,
-                  "coverage": 0.05,
-                  "stations": 9,
+                  "toMm": 64.515,
+                  "coverage": 0.028,
+                  "stations": 5,
                   "runs": [
                     {
                       "fromMm": 36.915,
-                      "toMm": 37.315,
-                      "stations": 2
+                      "toMm": 36.915,
+                      "stations": 1
                     },
                     {
                       "fromMm": 44.515,
@@ -3981,18 +3997,8 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 52.115,
-                      "toMm": 52.115,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 57.315,
-                      "toMm": 57.315,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 59.715,
-                      "toMm": 59.715,
+                      "fromMm": 55.715,
+                      "toMm": 55.715,
                       "stations": 1
                     },
                     {
@@ -4004,24 +4010,19 @@
                       "fromMm": 64.515,
                       "toMm": 64.515,
                       "stations": 1
-                    },
-                    {
-                      "fromMm": 67.315,
-                      "toMm": 67.315,
-                      "stations": 1
                     }
                   ],
-                  "runCount": 8,
+                  "runCount": 5,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 5% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 3% of the side and sits outside the outline that continues along the rest"
                 },
                 {
                   "depthMm": 2.204,
                   "fromMm": 31.715,
                   "toMm": 68.515,
-                  "coverage": 0.073,
-                  "stations": 13,
+                  "coverage": 0.061,
+                  "stations": 11,
                   "runs": [
                     {
                       "fromMm": 31.715,
@@ -4045,8 +4046,8 @@
                     },
                     {
                       "fromMm": 46.915,
-                      "toMm": 47.715,
-                      "stations": 2
+                      "toMm": 46.915,
+                      "stations": 1
                     },
                     {
                       "fromMm": 49.315,
@@ -4064,36 +4065,36 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 58.115,
-                      "toMm": 58.115,
+                      "fromMm": 62.915,
+                      "toMm": 62.915,
                       "stations": 1
                     },
                     {
                       "fromMm": 66.915,
+                      "toMm": 66.915,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 68.515,
                       "toMm": 68.515,
-                      "stations": 3
+                      "stations": 1
                     }
                   ],
-                  "runCount": 10,
+                  "runCount": 11,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 7% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 6% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 2.59,
+                  "depthMm": 2.569,
                   "fromMm": 39.315,
-                  "toMm": 62.915,
-                  "coverage": 0.039,
-                  "stations": 7,
+                  "toMm": 67.715,
+                  "coverage": 0.045,
+                  "stations": 8,
                   "runs": [
                     {
                       "fromMm": 39.315,
                       "toMm": 39.315,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 42.115,
-                      "toMm": 42.115,
                       "stations": 1
                     },
                     {
@@ -4107,13 +4108,18 @@
                       "stations": 2
                     },
                     {
-                      "fromMm": 59.315,
-                      "toMm": 59.315,
+                      "fromMm": 55.315,
+                      "toMm": 55.315,
                       "stations": 1
                     },
                     {
-                      "fromMm": 62.915,
-                      "toMm": 62.915,
+                      "fromMm": 59.315,
+                      "toMm": 60.115,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 67.715,
+                      "toMm": 67.715,
                       "stations": 1
                     }
                   ],
@@ -4126,48 +4132,53 @@
                   "depthMm": 3.091,
                   "fromMm": 8.915,
                   "toMm": 78.115,
-                  "coverage": 0.648,
-                  "stations": 116,
+                  "coverage": 0.57,
+                  "stations": 102,
                   "runs": [
                     {
                       "fromMm": 8.915,
+                      "toMm": 31.315,
+                      "stations": 53
+                    },
+                    {
+                      "fromMm": 32.915,
                       "toMm": 33.715,
-                      "stations": 58
-                    },
-                    {
-                      "fromMm": 34.915,
-                      "toMm": 36.515,
-                      "stations": 5
-                    },
-                    {
-                      "fromMm": 37.715,
-                      "toMm": 38.915,
-                      "stations": 4
-                    },
-                    {
-                      "fromMm": 40.115,
-                      "toMm": 41.315,
-                      "stations": 4
-                    },
-                    {
-                      "fromMm": 42.515,
-                      "toMm": 43.715,
-                      "stations": 4
-                    },
-                    {
-                      "fromMm": 45.315,
-                      "toMm": 46.515,
-                      "stations": 4
-                    },
-                    {
-                      "fromMm": 48.115,
-                      "toMm": 48.915,
                       "stations": 3
                     },
                     {
-                      "fromMm": 50.915,
-                      "toMm": 51.315,
+                      "fromMm": 35.315,
+                      "toMm": 36.515,
+                      "stations": 4
+                    },
+                    {
+                      "fromMm": 38.115,
+                      "toMm": 38.915,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 40.515,
+                      "toMm": 41.315,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 43.315,
+                      "toMm": 43.715,
                       "stations": 2
+                    },
+                    {
+                      "fromMm": 45.715,
+                      "toMm": 46.515,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 48.515,
+                      "toMm": 48.915,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 51.315,
+                      "toMm": 51.315,
+                      "stations": 1
                     },
                     {
                       "fromMm": 53.715,
@@ -4175,25 +4186,53 @@
                       "stations": 2
                     },
                     {
-                      "fromMm": 55.715,
+                      "fromMm": 56.515,
                       "toMm": 56.515,
-                      "stations": 3
+                      "stations": 1
                     },
                     {
                       "fromMm": 58.915,
                       "toMm": 58.915,
                       "stations": 1
-                    },
-                    {
-                      "fromMm": 61.315,
-                      "toMm": 61.715,
-                      "stations": 2
                     }
                   ],
-                  "runCount": 16,
+                  "runCount": 17,
                   "role": "outline",
                   "refused": false,
                   "why": null
+                },
+                {
+                  "depthMm": 3.373,
+                  "fromMm": 12.915,
+                  "toMm": 77.315,
+                  "coverage": 0.022,
+                  "stations": 4,
+                  "runs": [
+                    {
+                      "fromMm": 12.915,
+                      "toMm": 12.915,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 18.115,
+                      "toMm": 18.115,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 19.715,
+                      "toMm": 19.715,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 77.315,
+                      "toMm": 77.315,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 4,
+                  "role": "deeper-element",
+                  "refused": true,
+                  "why": "deeper than the outermost points of the design block"
                 },
                 {
                   "depthMm": 4.128,
@@ -4214,16 +4253,16 @@
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 4.159,
+                  "depthMm": 4.729,
                   "fromMm": 76.915,
-                  "toMm": 77.315,
-                  "coverage": 0.011,
-                  "stations": 2,
+                  "toMm": 76.915,
+                  "coverage": 0.006,
+                  "stations": 1,
                   "runs": [
                     {
                       "fromMm": 76.915,
-                      "toMm": 77.315,
-                      "stations": 2
+                      "toMm": 76.915,
+                      "stations": 1
                     }
                   ],
                   "runCount": 1,
@@ -4231,16 +4270,20 @@
                   "refused": true,
                   "why": "single-station readings, not an outline"
                 }
-              ],
-              "tiltDeg": 0.017
+              ]
             },
             "right": {
-              "mm": 3.274,
-              "confidence": 0.867,
+              "mm": 3.273,
+              "confidence": 0.813,
               "withheld": false,
               "reason": null,
               "shape": "outer",
-              "coverage": 0.687,
+              "coverage": 0.62,
+              "tiltDeg": 0.009,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 33.718,
@@ -4287,10 +4330,6 @@
                   "depthMm": 3.253
                 },
                 {
-                  "alongMm": 36.918,
-                  "depthMm": 3.253
-                },
-                {
                   "alongMm": 51.718,
                   "depthMm": 3.253
                 },
@@ -4307,16 +4346,8 @@
                   "depthMm": 3.255
                 },
                 {
-                  "alongMm": 12.118,
-                  "depthMm": 3.258
-                },
-                {
                   "alongMm": 60.118,
                   "depthMm": 3.259
-                },
-                {
-                  "alongMm": 42.118,
-                  "depthMm": 3.26
                 },
                 {
                   "alongMm": 41.718,
@@ -4443,10 +4474,6 @@
                   "depthMm": 3.274
                 },
                 {
-                  "alongMm": 34.518,
-                  "depthMm": 3.274
-                },
-                {
                   "alongMm": 54.918,
                   "depthMm": 3.274
                 },
@@ -4489,10 +4516,6 @@
                 {
                   "alongMm": 57.318,
                   "depthMm": 3.277
-                },
-                {
-                  "alongMm": 39.718,
-                  "depthMm": 3.278
                 },
                 {
                   "alongMm": 78.518,
@@ -4539,20 +4562,12 @@
                   "depthMm": 3.284
                 },
                 {
-                  "alongMm": 26.918,
-                  "depthMm": 3.285
-                },
-                {
                   "alongMm": 51.318,
                   "depthMm": 3.286
                 },
                 {
                   "alongMm": 58.118,
                   "depthMm": 3.286
-                },
-                {
-                  "alongMm": 21.718,
-                  "depthMm": 3.287
                 },
                 {
                   "alongMm": 21.318,
@@ -4587,10 +4602,6 @@
                   "depthMm": 3.291
                 },
                 {
-                  "alongMm": 29.318,
-                  "depthMm": 3.292
-                },
-                {
                   "alongMm": 74.518,
                   "depthMm": 3.293
                 },
@@ -4619,10 +4630,6 @@
                   "depthMm": 3.309
                 },
                 {
-                  "alongMm": 16.918,
-                  "depthMm": 3.309
-                },
-                {
                   "alongMm": 80.118,
                   "depthMm": 3.31
                 },
@@ -4641,48 +4648,15 @@
               ],
               "elements": [
                 {
-                  "depthMm": 0.515,
-                  "fromMm": 29.718,
-                  "toMm": 44.918,
-                  "coverage": 0.034,
-                  "stations": 6,
+                  "depthMm": 0.61,
+                  "fromMm": 16.918,
+                  "toMm": 47.318,
+                  "coverage": 0.145,
+                  "stations": 26,
                   "runs": [
                     {
-                      "fromMm": 29.718,
-                      "toMm": 30.118,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 40.118,
-                      "toMm": 40.518,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 42.518,
-                      "toMm": 42.518,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 44.918,
-                      "toMm": 44.918,
-                      "stations": 1
-                    }
-                  ],
-                  "runCount": 4,
-                  "role": "partial-margin",
-                  "refused": true,
-                  "why": "covers 3% of the side and sits outside the outline that continues along the rest"
-                },
-                {
-                  "depthMm": 0.96,
-                  "fromMm": 14.518,
-                  "toMm": 48.518,
-                  "coverage": 0.034,
-                  "stations": 6,
-                  "runs": [
-                    {
-                      "fromMm": 14.518,
-                      "toMm": 14.518,
+                      "fromMm": 16.918,
+                      "toMm": 16.918,
                       "stations": 1
                     },
                     {
@@ -4691,41 +4665,124 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 27.718,
+                      "fromMm": 21.718,
+                      "toMm": 21.718,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 24.518,
+                      "toMm": 24.918,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 26.918,
                       "toMm": 27.718,
-                      "stations": 1
+                      "stations": 3
                     },
                     {
-                      "fromMm": 38.118,
+                      "fromMm": 29.318,
+                      "toMm": 29.718,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 32.118,
+                      "toMm": 32.918,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 34.518,
+                      "toMm": 35.318,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 36.918,
                       "toMm": 38.118,
-                      "stations": 1
+                      "stations": 3
                     },
                     {
-                      "fromMm": 43.318,
+                      "fromMm": 39.718,
+                      "toMm": 40.118,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 42.118,
                       "toMm": 43.318,
-                      "stations": 1
+                      "stations": 3
                     },
                     {
-                      "fromMm": 48.518,
-                      "toMm": 48.518,
-                      "stations": 1
+                      "fromMm": 45.318,
+                      "toMm": 45.718,
+                      "stations": 2
                     }
                   ],
-                  "runCount": 6,
+                  "runCount": 13,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 3% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 15% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 1.508,
+                  "depthMm": 0.98,
                   "fromMm": 17.318,
                   "toMm": 48.918,
-                  "coverage": 0.061,
-                  "stations": 11,
+                  "coverage": 0.05,
+                  "stations": 9,
                   "runs": [
                     {
                       "fromMm": 17.318,
                       "toMm": 17.318,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 30.518,
+                      "toMm": 30.518,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 34.918,
+                      "toMm": 34.918,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 37.318,
+                      "toMm": 37.318,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 40.518,
+                      "toMm": 40.918,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 44.518,
+                      "toMm": 44.518,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 48.518,
+                      "toMm": 48.918,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 7,
+                  "role": "partial-margin",
+                  "refused": true,
+                  "why": "covers 5% of the side and sits outside the outline that continues along the rest"
+                },
+                {
+                  "depthMm": 1.289,
+                  "fromMm": 12.118,
+                  "toMm": 48.118,
+                  "coverage": 0.034,
+                  "stations": 6,
+                  "runs": [
+                    {
+                      "fromMm": 12.118,
+                      "toMm": 12.118,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 14.518,
+                      "toMm": 14.518,
                       "stations": 1
                     },
                     {
@@ -4734,23 +4791,8 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 32.918,
-                      "toMm": 32.918,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 34.918,
-                      "toMm": 35.318,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 37.318,
-                      "toMm": 37.718,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 42.918,
-                      "toMm": 42.918,
+                      "fromMm": 35.718,
+                      "toMm": 35.718,
                       "stations": 1
                     },
                     {
@@ -4760,21 +4802,21 @@
                     },
                     {
                       "fromMm": 48.118,
-                      "toMm": 48.918,
-                      "stations": 2
+                      "toMm": 48.118,
+                      "stations": 1
                     }
                   ],
-                  "runCount": 8,
+                  "runCount": 6,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 6% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 3% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 1.789,
+                  "depthMm": 1.882,
                   "fromMm": 14.918,
-                  "toMm": 45.718,
-                  "coverage": 0.084,
-                  "stations": 15,
+                  "toMm": 44.918,
+                  "coverage": 0.056,
+                  "stations": 10,
                   "runs": [
                     {
                       "fromMm": 14.918,
@@ -4787,28 +4829,28 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 24.918,
-                      "toMm": 25.318,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 27.318,
-                      "toMm": 28.118,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 30.518,
-                      "toMm": 30.518,
+                      "fromMm": 22.118,
+                      "toMm": 22.118,
                       "stations": 1
                     },
                     {
-                      "fromMm": 32.118,
-                      "toMm": 33.318,
-                      "stations": 3
+                      "fromMm": 25.318,
+                      "toMm": 25.318,
+                      "stations": 1
                     },
                     {
-                      "fromMm": 35.718,
-                      "toMm": 35.718,
+                      "fromMm": 28.118,
+                      "toMm": 28.118,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 30.118,
+                      "toMm": 30.118,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 33.318,
+                      "toMm": 33.318,
                       "stations": 1
                     },
                     {
@@ -4817,32 +4859,27 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 40.918,
-                      "toMm": 40.918,
-                      "stations": 1
-                    },
-                    {
                       "fromMm": 43.718,
                       "toMm": 43.718,
                       "stations": 1
                     },
                     {
-                      "fromMm": 45.718,
-                      "toMm": 45.718,
+                      "fromMm": 44.918,
+                      "toMm": 44.918,
                       "stations": 1
                     }
                   ],
-                  "runCount": 11,
+                  "runCount": 10,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 8% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 6% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 2.497,
+                  "depthMm": 2.522,
                   "fromMm": 12.518,
                   "toMm": 49.318,
-                  "coverage": 0.056,
-                  "stations": 10,
+                  "coverage": 0.05,
+                  "stations": 9,
                   "runs": [
                     {
                       "fromMm": 12.518,
@@ -4855,9 +4892,9 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 22.118,
+                      "fromMm": 22.918,
                       "toMm": 22.918,
-                      "stations": 2
+                      "stations": 1
                     },
                     {
                       "fromMm": 30.918,
@@ -4893,7 +4930,7 @@
                   "runCount": 9,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 6% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 5% of the side and sits outside the outline that continues along the rest"
                 },
                 {
                   "depthMm": 2.977,
@@ -4924,21 +4961,26 @@
                   "why": "covers 2% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 3.274,
+                  "depthMm": 3.273,
                   "fromMm": 8.918,
                   "toMm": 80.118,
-                  "coverage": 0.553,
-                  "stations": 99,
+                  "coverage": 0.503,
+                  "stations": 90,
                   "runs": [
                     {
                       "fromMm": 8.918,
+                      "toMm": 11.718,
+                      "stations": 6
+                    },
+                    {
+                      "fromMm": 12.918,
                       "toMm": 14.118,
-                      "stations": 11
+                      "stations": 4
                     },
                     {
                       "fromMm": 16.118,
-                      "toMm": 16.918,
-                      "stations": 3
+                      "toMm": 16.518,
+                      "stations": 2
                     },
                     {
                       "fromMm": 18.118,
@@ -4947,8 +4989,8 @@
                     },
                     {
                       "fromMm": 21.318,
-                      "toMm": 21.718,
-                      "stations": 2
+                      "toMm": 21.318,
+                      "stations": 1
                     },
                     {
                       "fromMm": 23.318,
@@ -4957,13 +4999,13 @@
                     },
                     {
                       "fromMm": 26.518,
-                      "toMm": 26.918,
-                      "stations": 2
+                      "toMm": 26.518,
+                      "stations": 1
                     },
                     {
                       "fromMm": 28.918,
-                      "toMm": 29.318,
-                      "stations": 2
+                      "toMm": 28.918,
+                      "stations": 1
                     },
                     {
                       "fromMm": 31.318,
@@ -4972,32 +5014,26 @@
                     },
                     {
                       "fromMm": 33.718,
-                      "toMm": 34.518,
-                      "stations": 3
+                      "toMm": 34.118,
+                      "stations": 2
                     },
                     {
                       "fromMm": 36.518,
-                      "toMm": 36.918,
-                      "stations": 2
+                      "toMm": 36.518,
+                      "stations": 1
                     },
                     {
                       "fromMm": 38.918,
-                      "toMm": 39.718,
-                      "stations": 3
-                    },
-                    {
-                      "fromMm": 41.718,
-                      "toMm": 42.118,
+                      "toMm": 39.318,
                       "stations": 2
                     }
                   ],
-                  "runCount": 18,
+                  "runCount": 19,
                   "role": "outline",
                   "refused": false,
                   "why": null
                 }
-              ],
-              "tiltDeg": 0.009
+              ]
             }
           }
         }
@@ -5006,40 +5042,39 @@
     "TD-02": {
       "sides": {
         "top": {
-          "mm": 3.437,
-          "confidence": 0.489,
+          "mm": 3.345,
+          "confidence": 0.494,
           "withheld": false,
           "reason": null,
-          "approved": true,
-          "upMm": 3.531,
-          "rot180Mm": 3.343,
-          "diffMm": 0.188,
-          "agree": true,
-          "approved_by": "owner",
-          "approved_on": "2026-10-06"
+          "approved": false,
+          "pickedFrom": "180-image-bottom",
+          "upMm": 3.534,
+          "rot180Mm": 3.345,
+          "diffMm": 0.19,
+          "agree": true
         },
         "bottom": {
-          "mm": 3.994,
+          "mm": 3.897,
           "confidence": 0.631,
           "withheld": false,
           "reason": null,
-          "approved": true,
+          "approved": false,
+          "pickedFrom": "up-image-bottom",
           "upMm": 3.897,
           "rot180Mm": 4.091,
           "diffMm": -0.194,
-          "agree": true,
-          "approved_by": "owner",
-          "approved_on": "2026-10-06"
+          "agree": true
         },
         "left": {
-          "mm": 4.111,
-          "confidence": 0.433,
+          "mm": 4.113,
+          "confidence": 0.43,
           "withheld": false,
           "reason": null,
           "approved": true,
-          "upMm": 4.095,
+          "pickedFrom": "mean",
+          "upMm": 4.098,
           "rot180Mm": 4.128,
-          "diffMm": -0.032,
+          "diffMm": -0.029,
           "agree": true,
           "approved_by": "owner",
           "approved_on": "2026-10-06"
@@ -5050,6 +5085,7 @@
           "withheld": false,
           "reason": null,
           "approved": true,
+          "pickedFrom": "mean",
           "upMm": 3.427,
           "rot180Mm": 3.43,
           "diffMm": -0.002,
@@ -5064,7 +5100,7 @@
             "top",
             "bottom"
           ],
-          "biasFromTop": 0.094,
+          "biasFromTop": 0.095,
           "biasFromBottom": 0.097,
           "agree": true
         },
@@ -5073,16 +5109,16 @@
             "left",
             "right"
           ],
-          "biasFromLeft": -0.016,
+          "biasFromLeft": -0.015,
           "biasFromRight": 0.001,
           "agree": true
         }
       },
       "ratios": {
-        "leftOverRight": 1.199,
-        "topOverBottom": 0.861,
+        "leftOverRight": 1.2,
+        "topOverBottom": 0.858,
         "leftShare": 0.545,
-        "topShare": 0.463
+        "topShare": 0.462
       },
       "scans": {
         "180": {
@@ -5107,10 +5143,23 @@
           "sizeOk": true,
           "ratios": {
             "leftOverRight": 0.831,
-            "topOverBottom": 1.224,
+            "topOverBottom": 1.223,
             "leftShare": 0.454,
             "topShare": 0.55
           },
+          "frameCheck": {
+            "topShare": {
+              "outline": 0.55,
+              "black": 0.577,
+              "diff": -0.026
+            },
+            "leftShare": {
+              "outline": 0.454,
+              "black": null,
+              "diff": null
+            }
+          },
+          "designReference": null,
           "sides": {
             "top": {
               "mm": 4.091,
@@ -5119,6 +5168,11 @@
               "reason": null,
               "shape": "outer",
               "coverage": 0.609,
+              "tiltDeg": -0.015,
+              "frameOuterMm": 4.5,
+              "blackOuterMm": 4.74,
+              "frameDiffMm": 0.24,
+              "frameWidthMm": 0.24,
               "points": [
                 {
                   "alongMm": 55.969,
@@ -5605,16 +5659,20 @@
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
                 }
-              ],
-              "tiltDeg": -0.015
+              ]
             },
             "bottom": {
-              "mm": 3.343,
-              "confidence": 0.489,
+              "mm": 3.345,
+              "confidence": 0.494,
               "withheld": false,
               "reason": null,
               "shape": "outer",
-              "coverage": 0.383,
+              "coverage": 0.391,
+              "tiltDeg": -0.135,
+              "frameOuterMm": 3.36,
+              "blackOuterMm": 3.48,
+              "frameDiffMm": 0.12,
+              "frameWidthMm": 0.26,
               "points": [
                 {
                   "alongMm": 43.56,
@@ -5765,6 +5823,10 @@
                   "depthMm": 3.398
                 },
                 {
+                  "alongMm": 11.56,
+                  "depthMm": 3.4
+                },
+                {
                   "alongMm": 44.36,
                   "depthMm": 3.405
                 },
@@ -5815,29 +5877,11 @@
               ],
               "elements": [
                 {
-                  "depthMm": 0.679,
-                  "fromMm": 12.36,
-                  "toMm": 13.16,
-                  "coverage": 0.016,
-                  "stations": 2,
-                  "runs": [
-                    {
-                      "fromMm": 12.36,
-                      "toMm": 13.16,
-                      "stations": 2
-                    }
-                  ],
-                  "runCount": 1,
-                  "role": "partial-margin",
-                  "refused": true,
-                  "why": "covers 2% of the side and sits outside the outline that continues along the rest"
-                },
-                {
-                  "depthMm": 3.343,
+                  "depthMm": 3.345,
                   "fromMm": 6.36,
                   "toMm": 53.16,
-                  "coverage": 0.383,
-                  "stations": 49,
+                  "coverage": 0.391,
+                  "stations": 50,
                   "runs": [
                     {
                       "fromMm": 6.36,
@@ -5851,8 +5895,8 @@
                     },
                     {
                       "fromMm": 10.36,
-                      "toMm": 11.16,
-                      "stations": 3
+                      "toMm": 11.56,
+                      "stations": 4
                     },
                     {
                       "fromMm": 17.16,
@@ -5906,11 +5950,11 @@
                   "why": null
                 },
                 {
-                  "depthMm": 3.535,
+                  "depthMm": 3.532,
                   "fromMm": 7.56,
                   "toMm": 54.76,
-                  "coverage": 0.273,
-                  "stations": 35,
+                  "coverage": 0.266,
+                  "stations": 34,
                   "runs": [
                     {
                       "fromMm": 7.56,
@@ -5918,9 +5962,9 @@
                       "stations": 2
                     },
                     {
-                      "fromMm": 15.96,
+                      "fromMm": 16.36,
                       "toMm": 16.36,
-                      "stations": 2
+                      "stations": 1
                     },
                     {
                       "fromMm": 17.56,
@@ -5979,12 +6023,17 @@
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 3.912,
-                  "fromMm": 16.76,
+                  "depthMm": 3.914,
+                  "fromMm": 13.56,
                   "toMm": 55.96,
-                  "coverage": 0.125,
-                  "stations": 16,
+                  "coverage": 0.141,
+                  "stations": 18,
                   "runs": [
+                    {
+                      "fromMm": 13.56,
+                      "toMm": 13.56,
+                      "stations": 1
+                    },
                     {
                       "fromMm": 16.76,
                       "toMm": 16.76,
@@ -6039,11 +6088,6 @@
                       "fromMm": 47.56,
                       "toMm": 47.56,
                       "stations": 1
-                    },
-                    {
-                      "fromMm": 48.76,
-                      "toMm": 48.76,
-                      "stations": 1
                     }
                   ],
                   "runCount": 14,
@@ -6052,58 +6096,15 @@
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 4.127,
-                  "fromMm": 8.76,
-                  "toMm": 14.76,
-                  "coverage": 0.031,
-                  "stations": 4,
-                  "runs": [
-                    {
-                      "fromMm": 8.76,
-                      "toMm": 8.76,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 11.56,
-                      "toMm": 11.56,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 12.76,
-                      "toMm": 12.76,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 14.76,
-                      "toMm": 14.76,
-                      "stations": 1
-                    }
-                  ],
-                  "runCount": 4,
-                  "role": "isolated",
-                  "refused": true,
-                  "why": "single-station readings, not an outline"
-                },
-                {
-                  "depthMm": 4.385,
-                  "fromMm": 13.56,
+                  "depthMm": 4.481,
+                  "fromMm": 13.96,
                   "toMm": 56.76,
-                  "coverage": 0.047,
-                  "stations": 6,
+                  "coverage": 0.023,
+                  "stations": 3,
                   "runs": [
                     {
-                      "fromMm": 13.56,
+                      "fromMm": 13.96,
                       "toMm": 13.96,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 15.56,
-                      "toMm": 15.56,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 55.16,
-                      "toMm": 55.16,
                       "stations": 1
                     },
                     {
@@ -6112,13 +6113,13 @@
                       "stations": 2
                     }
                   ],
-                  "runCount": 4,
+                  "runCount": 2,
                   "role": "deeper-element",
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 4.823,
+                  "depthMm": 4.813,
                   "fromMm": 14.36,
                   "toMm": 57.16,
                   "coverage": 0.016,
@@ -6139,9 +6140,36 @@
                   "role": "deeper-element",
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 6.74,
+                  "fromMm": 8.76,
+                  "toMm": 15.96,
+                  "coverage": 0.023,
+                  "stations": 3,
+                  "runs": [
+                    {
+                      "fromMm": 8.76,
+                      "toMm": 8.76,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 14.76,
+                      "toMm": 14.76,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 15.96,
+                      "toMm": 15.96,
+                      "stations": 1
+                    }
+                  ],
+                  "runCount": 3,
+                  "role": "isolated",
+                  "refused": true,
+                  "why": "single-station readings, not an outline"
                 }
-              ],
-              "tiltDeg": -0.135
+              ]
             },
             "left": {
               "mm": 3.43,
@@ -6150,6 +6178,11 @@
               "reason": null,
               "shape": "line",
               "coverage": 0.916,
+              "tiltDeg": -0.015,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 78.097,
@@ -6767,8 +6800,7 @@
                   "refused": true,
                   "why": "single-station readings, not an outline"
                 }
-              ],
-              "tiltDeg": -0.015
+              ]
             },
             "right": {
               "mm": 4.128,
@@ -6777,6 +6809,11 @@
               "reason": null,
               "shape": "outer",
               "coverage": 0.385,
+              "tiltDeg": 0.003,
+              "frameOuterMm": 3.92,
+              "blackOuterMm": 4.28,
+              "frameDiffMm": 0.36,
+              "frameWidthMm": 0.27,
               "points": [
                 {
                   "alongMm": 15.309,
@@ -7057,27 +7094,22 @@
               ],
               "elements": [
                 {
-                  "depthMm": 2.017,
-                  "fromMm": 10.909,
+                  "depthMm": 1.976,
+                  "fromMm": 13.709,
                   "toMm": 14.109,
-                  "coverage": 0.017,
-                  "stations": 3,
+                  "coverage": 0.011,
+                  "stations": 2,
                   "runs": [
-                    {
-                      "fromMm": 10.909,
-                      "toMm": 10.909,
-                      "stations": 1
-                    },
                     {
                       "fromMm": 13.709,
                       "toMm": 14.109,
                       "stations": 2
                     }
                   ],
-                  "runCount": 2,
+                  "runCount": 1,
                   "role": "partial-margin",
                   "refused": true,
-                  "why": "covers 2% of the side and sits outside the outline that continues along the rest"
+                  "why": "covers 1% of the side and sits outside the outline that continues along the rest"
                 },
                 {
                   "depthMm": 2.666,
@@ -7395,17 +7427,22 @@
                 {
                   "depthMm": 5.352,
                   "fromMm": 10.509,
-                  "toMm": 10.509,
-                  "coverage": 0.006,
-                  "stations": 1,
+                  "toMm": 13.309,
+                  "coverage": 0.017,
+                  "stations": 3,
                   "runs": [
                     {
                       "fromMm": 10.509,
-                      "toMm": 10.509,
+                      "toMm": 10.909,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 13.309,
+                      "toMm": 13.309,
                       "stations": 1
                     }
                   ],
-                  "runCount": 1,
+                  "runCount": 2,
                   "role": "isolated",
                   "refused": true,
                   "why": "single-station readings, not an outline"
@@ -7434,33 +7471,15 @@
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 8.27,
-                  "fromMm": 12.109,
-                  "toMm": 12.509,
+                  "depthMm": 8.54,
+                  "fromMm": 12.509,
+                  "toMm": 12.909,
                   "coverage": 0.011,
                   "stations": 2,
                   "runs": [
                     {
-                      "fromMm": 12.109,
-                      "toMm": 12.509,
-                      "stations": 2
-                    }
-                  ],
-                  "runCount": 1,
-                  "role": "deeper-element",
-                  "refused": true,
-                  "why": "deeper than the outermost points of the design block"
-                },
-                {
-                  "depthMm": 8.819,
-                  "fromMm": 12.909,
-                  "toMm": 13.309,
-                  "coverage": 0.011,
-                  "stations": 2,
-                  "runs": [
-                    {
-                      "fromMm": 12.909,
-                      "toMm": 13.309,
+                      "fromMm": 12.509,
+                      "toMm": 12.909,
                       "stations": 2
                     }
                   ],
@@ -7469,8 +7488,7 @@
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
                 }
-              ],
-              "tiltDeg": 0.003
+              ]
             }
           }
         },
@@ -7495,19 +7513,37 @@
           },
           "sizeOk": true,
           "ratios": {
-            "leftOverRight": 1.195,
-            "topOverBottom": 0.906,
-            "leftShare": 0.544,
-            "topShare": 0.475
+            "leftOverRight": 1.196,
+            "topOverBottom": 0.907,
+            "leftShare": 0.545,
+            "topShare": 0.476
           },
+          "frameCheck": {
+            "topShare": {
+              "outline": 0.476,
+              "black": 0.415,
+              "diff": 0.061
+            },
+            "leftShare": {
+              "outline": 0.545,
+              "black": null,
+              "diff": null
+            }
+          },
+          "designReference": null,
           "sides": {
             "top": {
-              "mm": 3.531,
-              "confidence": 0.499,
+              "mm": 3.534,
+              "confidence": 0.504,
               "withheld": false,
               "reason": null,
               "shape": "outer",
-              "coverage": 0.406,
+              "coverage": 0.414,
+              "tiltDeg": 0.115,
+              "frameOuterMm": 3.24,
+              "blackOuterMm": 3.42,
+              "frameDiffMm": 0.18,
+              "frameWidthMm": 0.26,
               "points": [
                 {
                   "alongMm": 21.162,
@@ -7686,6 +7722,10 @@
                   "depthMm": 3.597
                 },
                 {
+                  "alongMm": 48.762,
+                  "depthMm": 3.6
+                },
+                {
                   "alongMm": 17.562,
                   "depthMm": 3.608
                 },
@@ -7720,57 +7760,11 @@
               ],
               "elements": [
                 {
-                  "depthMm": 1,
-                  "fromMm": 47.962,
-                  "toMm": 50.762,
-                  "coverage": 0.016,
-                  "stations": 2,
-                  "runs": [
-                    {
-                      "fromMm": 47.962,
-                      "toMm": 47.962,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 50.762,
-                      "toMm": 50.762,
-                      "stations": 1
-                    }
-                  ],
-                  "runCount": 2,
-                  "role": "isolated",
-                  "refused": true,
-                  "why": "single-station readings, not an outline"
-                },
-                {
-                  "depthMm": 1.535,
-                  "fromMm": 47.562,
-                  "toMm": 51.162,
-                  "coverage": 0.016,
-                  "stations": 2,
-                  "runs": [
-                    {
-                      "fromMm": 47.562,
-                      "toMm": 47.562,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 51.162,
-                      "toMm": 51.162,
-                      "stations": 1
-                    }
-                  ],
-                  "runCount": 2,
-                  "role": "partial-margin",
-                  "refused": true,
-                  "why": "covers 2% of the side and sits outside the outline that continues along the rest"
-                },
-                {
-                  "depthMm": 3.531,
+                  "depthMm": 3.534,
                   "fromMm": 9.562,
                   "toMm": 56.362,
-                  "coverage": 0.406,
-                  "stations": 52,
+                  "coverage": 0.414,
+                  "stations": 53,
                   "runs": [
                     {
                       "fromMm": 9.562,
@@ -7833,7 +7827,7 @@
                       "stations": 3
                     }
                   ],
-                  "runCount": 14,
+                  "runCount": 15,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -7980,11 +7974,11 @@
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 4.629,
+                  "depthMm": 4.699,
                   "fromMm": 6.762,
-                  "toMm": 50.362,
-                  "coverage": 0.039,
-                  "stations": 5,
+                  "toMm": 49.562,
+                  "coverage": 0.031,
+                  "stations": 4,
                   "runs": [
                     {
                       "fromMm": 6.762,
@@ -7993,8 +7987,8 @@
                     },
                     {
                       "fromMm": 49.562,
-                      "toMm": 50.362,
-                      "stations": 2
+                      "toMm": 49.562,
+                      "stations": 1
                     }
                   ],
                   "runCount": 2,
@@ -8003,7 +7997,7 @@
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 5.314,
+                  "depthMm": 5.364,
                   "fromMm": 6.362,
                   "toMm": 49.162,
                   "coverage": 0.016,
@@ -8024,9 +8018,26 @@
                   "role": "deeper-element",
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
+                },
+                {
+                  "depthMm": 5.92,
+                  "fromMm": 47.562,
+                  "toMm": 47.962,
+                  "coverage": 0.016,
+                  "stations": 2,
+                  "runs": [
+                    {
+                      "fromMm": 47.562,
+                      "toMm": 47.962,
+                      "stations": 2
+                    }
+                  ],
+                  "runCount": 1,
+                  "role": "isolated",
+                  "refused": true,
+                  "why": "single-station readings, not an outline"
                 }
-              ],
-              "tiltDeg": 0.115
+              ]
             },
             "bottom": {
               "mm": 3.897,
@@ -8035,6 +8046,11 @@
               "reason": null,
               "shape": "outer",
               "coverage": 0.57,
+              "tiltDeg": 0.04,
+              "frameOuterMm": 4.58,
+              "blackOuterMm": 4.82,
+              "frameDiffMm": 0.24,
+              "frameWidthMm": 0.24,
               "points": [
                 {
                   "alongMm": 9.567,
@@ -8529,16 +8545,20 @@
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
                 }
-              ],
-              "tiltDeg": 0.04
+              ]
             },
             "left": {
-              "mm": 4.095,
-              "confidence": 0.433,
+              "mm": 4.098,
+              "confidence": 0.43,
               "withheld": false,
               "reason": null,
               "shape": "outer",
-              "coverage": 0.296,
+              "coverage": 0.291,
+              "tiltDeg": 0.046,
+              "frameOuterMm": 3.89,
+              "blackOuterMm": 4.21,
+              "frameDiffMm": 0.32,
+              "frameWidthMm": 0.26,
               "points": [
                 {
                   "alongMm": 29.708,
@@ -8583,10 +8603,6 @@
                 {
                   "alongMm": 45.708,
                   "depthMm": 4.048
-                },
-                {
-                  "alongMm": 77.308,
-                  "depthMm": 4.051
                 },
                 {
                   "alongMm": 57.308,
@@ -8755,29 +8771,6 @@
               ],
               "elements": [
                 {
-                  "depthMm": 1.901,
-                  "fromMm": 75.708,
-                  "toMm": 78.508,
-                  "coverage": 0.011,
-                  "stations": 2,
-                  "runs": [
-                    {
-                      "fromMm": 75.708,
-                      "toMm": 75.708,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 78.508,
-                      "toMm": 78.508,
-                      "stations": 1
-                    }
-                  ],
-                  "runCount": 2,
-                  "role": "partial-margin",
-                  "refused": true,
-                  "why": "covers 1% of the side and sits outside the outline that continues along the rest"
-                },
-                {
                   "depthMm": 2.611,
                   "fromMm": 23.308,
                   "toMm": 75.308,
@@ -8872,11 +8865,11 @@
                   "why": "covers 3% of the side and sits outside the outline that continues along the rest"
                 },
                 {
-                  "depthMm": 4.095,
+                  "depthMm": 4.098,
                   "fromMm": 9.708,
-                  "toMm": 77.308,
-                  "coverage": 0.296,
-                  "stations": 53,
+                  "toMm": 72.908,
+                  "coverage": 0.291,
+                  "stations": 52,
                   "runs": [
                     {
                       "fromMm": 9.708,
@@ -8939,7 +8932,7 @@
                       "stations": 1
                     }
                   ],
-                  "runCount": 29,
+                  "runCount": 28,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -9091,11 +9084,11 @@
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 5.61,
+                  "depthMm": 5.729,
                   "fromMm": 32.908,
-                  "toMm": 76.108,
-                  "coverage": 0.011,
-                  "stations": 2,
+                  "toMm": 78.508,
+                  "coverage": 0.017,
+                  "stations": 3,
                   "runs": [
                     {
                       "fromMm": 32.908,
@@ -9103,18 +9096,23 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 76.108,
-                      "toMm": 76.108,
+                      "fromMm": 36.108,
+                      "toMm": 36.108,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 78.508,
+                      "toMm": 78.508,
                       "stations": 1
                     }
                   ],
-                  "runCount": 2,
+                  "runCount": 3,
                   "role": "deeper-element",
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 5.94,
+                  "depthMm": 6.12,
                   "fromMm": 14.508,
                   "toMm": 78.108,
                   "coverage": 0.017,
@@ -9126,8 +9124,8 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 36.108,
-                      "toMm": 36.108,
+                      "fromMm": 75.708,
+                      "toMm": 75.708,
                       "stations": 1
                     },
                     {
@@ -9197,8 +9195,7 @@
                   "refused": true,
                   "why": "single-station readings, not an outline"
                 }
-              ],
-              "tiltDeg": 0.046
+              ]
             },
             "right": {
               "mm": 3.427,
@@ -9207,6 +9204,11 @@
               "reason": null,
               "shape": "line",
               "coverage": 0.905,
+              "tiltDeg": -0.004,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 45.3,
@@ -9637,8 +9639,7 @@
                   "refused": true,
                   "why": "single-station readings, not an outline"
                 }
-              ],
-              "tiltDeg": -0.004
+              ]
             }
           }
         }
@@ -9647,30 +9648,28 @@
     "KARROS": {
       "sides": {
         "top": {
-          "mm": 2.996,
-          "confidence": 0.47,
+          "mm": 2.909,
+          "confidence": 0.497,
           "withheld": false,
           "reason": null,
-          "approved": true,
+          "approved": false,
+          "pickedFrom": "180-image-bottom",
           "upMm": 3.084,
           "rot180Mm": 2.909,
-          "diffMm": 0.174,
-          "agree": true,
-          "approved_by": "owner",
-          "approved_on": "2026-10-07"
+          "diffMm": 0.175,
+          "agree": true
         },
         "bottom": {
-          "mm": 3.757,
-          "confidence": 0.56,
+          "mm": 3.681,
+          "confidence": 0.564,
           "withheld": false,
           "reason": null,
-          "approved": true,
-          "upMm": 3.682,
+          "approved": false,
+          "pickedFrom": "up-image-bottom",
+          "upMm": 3.681,
           "rot180Mm": 3.832,
-          "diffMm": -0.15,
-          "agree": true,
-          "approved_by": "owner",
-          "approved_on": "2026-10-07"
+          "diffMm": -0.151,
+          "agree": true
         },
         "left": {
           "mm": 3.706,
@@ -9678,6 +9677,7 @@
           "withheld": false,
           "reason": null,
           "approved": true,
+          "pickedFrom": "mean",
           "upMm": 3.683,
           "rot180Mm": 3.728,
           "diffMm": -0.046,
@@ -9686,14 +9686,15 @@
           "approved_on": "2026-10-07"
         },
         "right": {
-          "mm": 2.767,
-          "confidence": 0.517,
+          "mm": 2.768,
+          "confidence": 0.514,
           "withheld": false,
           "reason": null,
           "approved": true,
-          "upMm": 2.789,
+          "pickedFrom": "mean",
+          "upMm": 2.79,
           "rot180Mm": 2.746,
-          "diffMm": 0.043,
+          "diffMm": 0.044,
           "agree": true,
           "approved_by": "owner",
           "approved_on": "2026-10-07"
@@ -9706,7 +9707,7 @@
             "bottom"
           ],
           "biasFromTop": 0.087,
-          "biasFromBottom": 0.075,
+          "biasFromBottom": 0.076,
           "agree": true
         },
         "acrossScan": {
@@ -9715,15 +9716,15 @@
             "right"
           ],
           "biasFromLeft": -0.023,
-          "biasFromRight": -0.021,
+          "biasFromRight": -0.022,
           "agree": true
         }
       },
       "ratios": {
         "leftOverRight": 1.339,
-        "topOverBottom": 0.797,
-        "leftShare": 0.573,
-        "topShare": 0.444
+        "topOverBottom": 0.79,
+        "leftShare": 0.572,
+        "topShare": 0.441
       },
       "scans": {
         "180": {
@@ -9752,6 +9753,19 @@
             "leftShare": 0.424,
             "topShare": 0.568
           },
+          "frameCheck": {
+            "topShare": {
+              "outline": 0.568,
+              "black": null,
+              "diff": null
+            },
+            "leftShare": {
+              "outline": 0.424,
+              "black": null,
+              "diff": null
+            }
+          },
+          "designReference": null,
           "sides": {
             "top": {
               "mm": 3.832,
@@ -9760,6 +9774,11 @@
               "reason": null,
               "shape": "outer",
               "coverage": 0.563,
+              "tiltDeg": 0.099,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 27.967,
@@ -10215,20 +10234,15 @@
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 9.4,
+                  "depthMm": 9.42,
                   "fromMm": 20.367,
                   "toMm": 38.367,
-                  "coverage": 0.031,
-                  "stations": 4,
+                  "coverage": 0.023,
+                  "stations": 3,
                   "runs": [
                     {
                       "fromMm": 20.367,
                       "toMm": 20.367,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 23.167,
-                      "toMm": 23.167,
                       "stations": 1
                     },
                     {
@@ -10242,21 +10256,25 @@
                       "stations": 1
                     }
                   ],
-                  "runCount": 4,
+                  "runCount": 3,
                   "role": "deeper-element",
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
                 }
-              ],
-              "tiltDeg": 0.099
+              ]
             },
             "bottom": {
               "mm": 2.909,
-              "confidence": 0.501,
+              "confidence": 0.497,
               "withheld": false,
               "reason": null,
               "shape": "outer",
-              "coverage": 0.391,
+              "coverage": 0.383,
+              "tiltDeg": -0.02,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 46.364,
@@ -10395,10 +10413,6 @@
                   "depthMm": 2.948
                 },
                 {
-                  "alongMm": 45.964,
-                  "depthMm": 2.956
-                },
-                {
                   "alongMm": 42.764,
                   "depthMm": 2.967
                 },
@@ -10464,13 +10478,13 @@
                   "depthMm": 2.909,
                   "fromMm": 27.964,
                   "toMm": 49.164,
-                  "coverage": 0.391,
-                  "stations": 50,
+                  "coverage": 0.383,
+                  "stations": 49,
                   "runs": [
                     {
                       "fromMm": 27.964,
                       "toMm": 46.764,
-                      "stations": 47
+                      "stations": 46
                     },
                     {
                       "fromMm": 48.364,
@@ -10547,8 +10561,7 @@
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
                 }
-              ],
-              "tiltDeg": -0.02
+              ]
             },
             "left": {
               "mm": 2.746,
@@ -10557,6 +10570,11 @@
               "reason": null,
               "shape": "outer",
               "coverage": 0.354,
+              "tiltDeg": 0.043,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 18.089,
@@ -10831,16 +10849,16 @@
                   "why": "single-station readings, not an outline"
                 },
                 {
-                  "depthMm": 7.277,
-                  "fromMm": 12.889,
+                  "depthMm": 7.211,
+                  "fromMm": 12.489,
                   "toMm": 64.089,
-                  "coverage": 0.017,
-                  "stations": 3,
+                  "coverage": 0.022,
+                  "stations": 4,
                   "runs": [
                     {
-                      "fromMm": 12.889,
+                      "fromMm": 12.489,
                       "toMm": 12.889,
-                      "stations": 1
+                      "stations": 2
                     },
                     {
                       "fromMm": 53.289,
@@ -10881,8 +10899,7 @@
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
                 }
-              ],
-              "tiltDeg": 0.043
+              ]
             },
             "right": {
               "mm": 3.728,
@@ -10891,6 +10908,11 @@
               "reason": null,
               "shape": "outer",
               "coverage": 0.899,
+              "tiltDeg": -0.087,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 75.288,
@@ -11580,8 +11602,7 @@
                   "refused": false,
                   "why": null
                 }
-              ],
-              "tiltDeg": -0.087
+              ]
             }
           }
         },
@@ -11606,19 +11627,37 @@
           },
           "sizeOk": true,
           "ratios": {
-            "leftOverRight": 1.321,
+            "leftOverRight": 1.32,
             "topOverBottom": 0.838,
             "leftShare": 0.569,
             "topShare": 0.456
           },
+          "frameCheck": {
+            "topShare": {
+              "outline": 0.456,
+              "black": null,
+              "diff": null
+            },
+            "leftShare": {
+              "outline": 0.569,
+              "black": null,
+              "diff": null
+            }
+          },
+          "designReference": null,
           "sides": {
             "top": {
               "mm": 3.084,
-              "confidence": 0.47,
+              "confidence": 0.465,
               "withheld": false,
               "reason": null,
               "shape": "outer",
-              "coverage": 0.375,
+              "coverage": 0.367,
+              "tiltDeg": -0.048,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 19.167,
@@ -11627,10 +11666,6 @@
                 {
                   "alongMm": 23.967,
                   "depthMm": 2.974
-                },
-                {
-                  "alongMm": 14.367,
-                  "depthMm": 2.98
                 },
                 {
                   "alongMm": 28.767,
@@ -11818,8 +11853,8 @@
                   "depthMm": 3.084,
                   "fromMm": 6.767,
                   "toMm": 34.767,
-                  "coverage": 0.375,
-                  "stations": 48,
+                  "coverage": 0.367,
+                  "stations": 47,
                   "runs": [
                     {
                       "fromMm": 6.767,
@@ -11834,7 +11869,7 @@
                     {
                       "fromMm": 13.567,
                       "toMm": 14.767,
-                      "stations": 4
+                      "stations": 3
                     },
                     {
                       "fromMm": 16.767,
@@ -11926,16 +11961,20 @@
                   "refused": true,
                   "why": "single-station readings, not an outline"
                 }
-              ],
-              "tiltDeg": -0.048
+              ]
             },
             "bottom": {
-              "mm": 3.682,
-              "confidence": 0.56,
+              "mm": 3.681,
+              "confidence": 0.564,
               "withheld": false,
               "reason": null,
               "shape": "outer",
-              "coverage": 0.563,
+              "coverage": 0.57,
+              "tiltDeg": -0.032,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 31.564,
@@ -11962,10 +12001,6 @@
                   "depthMm": 3.574
                 },
                 {
-                  "alongMm": 40.364,
-                  "depthMm": 3.58
-                },
-                {
                   "alongMm": 19.164,
                   "depthMm": 3.58
                 },
@@ -11990,6 +12025,10 @@
                   "depthMm": 3.58
                 },
                 {
+                  "alongMm": 40.364,
+                  "depthMm": 3.58
+                },
+                {
                   "alongMm": 41.164,
                   "depthMm": 3.58
                 },
@@ -12003,6 +12042,10 @@
                 },
                 {
                   "alongMm": 21.564,
+                  "depthMm": 3.6
+                },
+                {
+                  "alongMm": 30.364,
                   "depthMm": 3.6
                 },
                 {
@@ -12142,6 +12185,10 @@
                   "depthMm": 3.749
                 },
                 {
+                  "alongMm": 33.964,
+                  "depthMm": 3.755
+                },
+                {
                   "alongMm": 42.764,
                   "depthMm": 3.756
                 },
@@ -12214,10 +12261,6 @@
                   "depthMm": 3.826
                 },
                 {
-                  "alongMm": 41.964,
-                  "depthMm": 3.827
-                },
-                {
                   "alongMm": 17.964,
                   "depthMm": 3.828
                 },
@@ -12228,11 +12271,11 @@
               ],
               "elements": [
                 {
-                  "depthMm": 3.682,
+                  "depthMm": 3.681,
                   "fromMm": 9.964,
                   "toMm": 55.964,
-                  "coverage": 0.563,
-                  "stations": 72,
+                  "coverage": 0.57,
+                  "stations": 73,
                   "runs": [
                     {
                       "fromMm": 9.964,
@@ -12256,8 +12299,13 @@
                     },
                     {
                       "fromMm": 27.564,
+                      "toMm": 41.164,
+                      "stations": 31
+                    },
+                    {
+                      "fromMm": 42.364,
                       "toMm": 43.564,
-                      "stations": 34
+                      "stations": 4
                     },
                     {
                       "fromMm": 44.764,
@@ -12280,7 +12328,7 @@
                       "stations": 2
                     }
                   ],
-                  "runCount": 9,
+                  "runCount": 10,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -12378,20 +12426,15 @@
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 9.2,
+                  "depthMm": 9.19,
                   "fromMm": 16.764,
                   "toMm": 44.364,
-                  "coverage": 0.039,
-                  "stations": 5,
+                  "coverage": 0.031,
+                  "stations": 4,
                   "runs": [
                     {
                       "fromMm": 16.764,
                       "toMm": 16.764,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 30.364,
-                      "toMm": 30.364,
                       "stations": 1
                     },
                     {
@@ -12405,7 +12448,7 @@
                       "stations": 2
                     }
                   ],
-                  "runCount": 4,
+                  "runCount": 3,
                   "role": "deeper-element",
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
@@ -12428,8 +12471,7 @@
                   "refused": true,
                   "why": "single-station readings, not an outline"
                 }
-              ],
-              "tiltDeg": -0.032
+              ]
             },
             "left": {
               "mm": 3.683,
@@ -12438,6 +12480,11 @@
               "reason": null,
               "shape": "outer",
               "coverage": 0.904,
+              "tiltDeg": 0.078,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 12.484,
@@ -13121,16 +13168,20 @@
                   "refused": true,
                   "why": "single-station readings, not an outline"
                 }
-              ],
-              "tiltDeg": 0.078
+              ]
             },
             "right": {
-              "mm": 2.789,
-              "confidence": 0.517,
+              "mm": 2.79,
+              "confidence": 0.514,
               "withheld": false,
               "reason": null,
               "shape": "outer",
-              "coverage": 0.438,
+              "coverage": 0.433,
+              "tiltDeg": -0.092,
+              "frameOuterMm": null,
+              "blackOuterMm": null,
+              "frameDiffMm": null,
+              "frameWidthMm": null,
               "points": [
                 {
                   "alongMm": 70.493,
@@ -13215,10 +13266,6 @@
                 {
                   "alongMm": 48.093,
                   "depthMm": 2.75
-                },
-                {
-                  "alongMm": 43.293,
-                  "depthMm": 2.751
                 },
                 {
                   "alongMm": 48.493,
@@ -13447,11 +13494,11 @@
               ],
               "elements": [
                 {
-                  "depthMm": 2.789,
+                  "depthMm": 2.79,
                   "fromMm": 21.693,
                   "toMm": 72.493,
-                  "coverage": 0.438,
-                  "stations": 78,
+                  "coverage": 0.433,
+                  "stations": 77,
                   "runs": [
                     {
                       "fromMm": 21.693,
@@ -13489,9 +13536,9 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 43.293,
+                      "fromMm": 43.693,
                       "toMm": 52.893,
-                      "stations": 24
+                      "stations": 23
                     },
                     {
                       "fromMm": 63.293,
@@ -13503,29 +13550,6 @@
                   "role": "outline",
                   "refused": false,
                   "why": null
-                },
-                {
-                  "depthMm": 3.987,
-                  "fromMm": 28.493,
-                  "toMm": 33.693,
-                  "coverage": 0.011,
-                  "stations": 2,
-                  "runs": [
-                    {
-                      "fromMm": 28.493,
-                      "toMm": 28.493,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 33.693,
-                      "toMm": 33.693,
-                      "stations": 1
-                    }
-                  ],
-                  "runCount": 2,
-                  "role": "deeper-element",
-                  "refused": true,
-                  "why": "deeper than the outermost points of the design block"
                 },
                 {
                   "depthMm": 5.027,
@@ -13587,12 +13611,22 @@
                   "why": "deeper than the outermost points of the design block"
                 },
                 {
-                  "depthMm": 8.493,
-                  "fromMm": 36.893,
+                  "depthMm": 7.839,
+                  "fromMm": 28.493,
                   "toMm": 77.693,
-                  "coverage": 0.034,
-                  "stations": 6,
+                  "coverage": 0.045,
+                  "stations": 8,
                   "runs": [
+                    {
+                      "fromMm": 28.493,
+                      "toMm": 28.493,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 33.693,
+                      "toMm": 33.693,
+                      "stations": 1
+                    },
                     {
                       "fromMm": 36.893,
                       "toMm": 36.893,
@@ -13614,7 +13648,7 @@
                       "stations": 3
                     }
                   ],
-                  "runCount": 4,
+                  "runCount": 6,
                   "role": "isolated",
                   "refused": true,
                   "why": "single-station readings, not an outline"
@@ -13665,8 +13699,7 @@
                   "refused": true,
                   "why": "deeper than the outermost points of the design block"
                 }
-              ],
-              "tiltDeg": -0.092
+              ]
             }
           }
         }
@@ -13676,10 +13709,11 @@
       "sides": {
         "top": {
           "mm": null,
-          "confidence": 0.475,
+          "confidence": 0,
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -13691,6 +13725,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -13702,6 +13737,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -13713,6 +13749,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -14263,26 +14300,28 @@
     "TD-03": {
       "sides": {
         "top": {
-          "mm": null,
-          "confidence": 0.507,
-          "withheld": true,
-          "reason": "bias-disagreement",
+          "mm": 2.66,
+          "confidence": 0.653,
+          "withheld": false,
+          "reason": null,
           "approved": false,
+          "pickedFrom": "180-image-bottom",
           "upMm": 2.793,
           "rot180Mm": 2.66,
           "diffMm": 0.133,
-          "agree": false
+          "agree": true
         },
         "bottom": {
-          "mm": null,
-          "confidence": 0.654,
-          "withheld": true,
-          "reason": "bias-disagreement",
+          "mm": 2.333,
+          "confidence": 0.672,
+          "withheld": false,
+          "reason": null,
           "approved": false,
+          "pickedFrom": "up-image-bottom",
           "upMm": 2.333,
           "rot180Mm": 2.54,
           "diffMm": -0.207,
-          "agree": false
+          "agree": true
         },
         "left": {
           "mm": null,
@@ -14290,6 +14329,7 @@
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
+          "pickedFrom": null,
           "upMm": 2.489,
           "rot180Mm": 2.736,
           "diffMm": -0.247,
@@ -14301,6 +14341,7 @@
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
+          "pickedFrom": null,
           "upMm": 2.287,
           "rot180Mm": 2.304,
           "diffMm": -0.018,
@@ -14329,9 +14370,9 @@
       },
       "ratios": {
         "leftOverRight": null,
-        "topOverBottom": null,
+        "topOverBottom": 1.14,
         "leftShare": null,
-        "topShare": null
+        "topShare": 0.533
       },
       "scans": {
         "180": {
@@ -19366,22 +19407,24 @@
     "TD-04": {
       "sides": {
         "top": {
-          "mm": 3.568,
+          "mm": 3.41,
           "confidence": 0.692,
           "withheld": false,
           "reason": null,
           "approved": false,
+          "pickedFrom": "180-image-bottom",
           "upMm": 3.726,
           "rot180Mm": 3.41,
           "diffMm": 0.316,
           "agree": true
         },
         "bottom": {
-          "mm": 1.561,
+          "mm": 1.416,
           "confidence": 0.682,
           "withheld": false,
           "reason": null,
           "approved": false,
+          "pickedFrom": "up-image-bottom",
           "upMm": 1.416,
           "rot180Mm": 1.707,
           "diffMm": -0.29,
@@ -19393,6 +19436,7 @@
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
+          "pickedFrom": null,
           "upMm": 2.45,
           "rot180Mm": 2.549,
           "diffMm": -0.099,
@@ -19404,6 +19448,7 @@
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
+          "pickedFrom": null,
           "upMm": 2.351,
           "rot180Mm": 2.338,
           "diffMm": 0.013,
@@ -19432,9 +19477,9 @@
       },
       "ratios": {
         "leftOverRight": null,
-        "topOverBottom": 2.286,
+        "topOverBottom": 2.408,
         "leftShare": null,
-        "topShare": 0.696
+        "topShare": 0.707
       },
       "scans": {
         "180": {
@@ -24034,6 +24079,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -24045,6 +24091,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -24056,6 +24103,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -24067,6 +24115,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -28790,26 +28839,28 @@
     "TD-06": {
       "sides": {
         "top": {
-          "mm": null,
+          "mm": 3.06,
           "confidence": 0.62,
-          "withheld": true,
-          "reason": "bias-disagreement",
+          "withheld": false,
+          "reason": null,
           "approved": false,
+          "pickedFrom": "180-image-bottom",
           "upMm": 3.74,
           "rot180Mm": 3.06,
           "diffMm": 0.68,
-          "agree": false
+          "agree": true
         },
         "bottom": {
-          "mm": null,
+          "mm": 3.47,
           "confidence": 0.62,
-          "withheld": true,
-          "reason": "bias-disagreement",
+          "withheld": false,
+          "reason": null,
           "approved": false,
+          "pickedFrom": "up-image-bottom",
           "upMm": 3.47,
           "rot180Mm": 3.99,
           "diffMm": -0.52,
-          "agree": false
+          "agree": true
         },
         "left": {
           "mm": null,
@@ -28817,6 +28868,7 @@
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
+          "pickedFrom": null,
           "upMm": 3.09,
           "rot180Mm": 3.12,
           "diffMm": -0.03,
@@ -28828,6 +28880,7 @@
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
+          "pickedFrom": null,
           "upMm": 3.64,
           "rot180Mm": 3.82,
           "diffMm": -0.18,
@@ -28856,9 +28909,9 @@
       },
       "ratios": {
         "leftOverRight": null,
-        "topOverBottom": null,
+        "topOverBottom": 0.882,
         "leftShare": null,
-        "topShare": null
+        "topShare": 0.469
       },
       "scans": {
         "180": {
@@ -31820,22 +31873,24 @@
     "TD-07": {
       "sides": {
         "top": {
-          "mm": 2.73,
+          "mm": 2.58,
           "confidence": 0.529,
           "withheld": false,
           "reason": null,
           "approved": false,
+          "pickedFrom": "180-image-bottom",
           "upMm": 2.88,
           "rot180Mm": 2.58,
           "diffMm": 0.3,
           "agree": true
         },
         "bottom": {
-          "mm": 3.61,
-          "confidence": 0.534,
+          "mm": 3.46,
+          "confidence": 0.561,
           "withheld": false,
           "reason": null,
           "approved": false,
+          "pickedFrom": "up-image-bottom",
           "upMm": 3.46,
           "rot180Mm": 3.76,
           "diffMm": -0.3,
@@ -31847,6 +31902,7 @@
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
+          "pickedFrom": null,
           "upMm": 3.72,
           "rot180Mm": 3.74,
           "diffMm": -0.02,
@@ -31858,6 +31914,7 @@
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
+          "pickedFrom": null,
           "upMm": 3.27,
           "rot180Mm": 3.17,
           "diffMm": 0.1,
@@ -31886,9 +31943,9 @@
       },
       "ratios": {
         "leftOverRight": null,
-        "topOverBottom": 0.756,
+        "topOverBottom": 0.746,
         "leftShare": null,
-        "topShare": 0.431
+        "topShare": 0.427
       },
       "scans": {
         "180": {
@@ -37814,15 +37871,16 @@
     "TD-08": {
       "sides": {
         "top": {
-          "mm": null,
+          "mm": 3.12,
           "confidence": 0.565,
-          "withheld": true,
-          "reason": "needs-both-sides",
+          "withheld": false,
+          "reason": null,
           "approved": false,
+          "pickedFrom": "180-image-bottom",
           "upMm": 3.64,
           "rot180Mm": 3.12,
           "diffMm": 0.52,
-          "agree": false
+          "agree": true
         },
         "bottom": {
           "mm": null,
@@ -37830,6 +37888,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": 2.81,
           "diffMm": null,
@@ -37841,6 +37900,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -37852,6 +37912,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": 3.08,
           "diffMm": null,
@@ -42884,6 +42945,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": 3.38,
           "rot180Mm": null,
           "diffMm": null,
@@ -42895,6 +42957,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": 2.75,
           "diffMm": null,
@@ -42906,6 +42969,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -42917,6 +42981,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": 1.481,
           "diffMm": null,
@@ -48529,26 +48594,28 @@
     "TD-10": {
       "sides": {
         "top": {
-          "mm": null,
+          "mm": 2.66,
           "confidence": 0.52,
-          "withheld": true,
-          "reason": "bias-disagreement",
+          "withheld": false,
+          "reason": null,
           "approved": false,
+          "pickedFrom": "180-image-bottom",
           "upMm": 3.04,
           "rot180Mm": 2.66,
           "diffMm": 0.38,
-          "agree": false
+          "agree": true
         },
         "bottom": {
-          "mm": null,
+          "mm": 3.28,
           "confidence": 0.52,
-          "withheld": true,
-          "reason": "bias-disagreement",
+          "withheld": false,
+          "reason": null,
           "approved": false,
+          "pickedFrom": "up-image-bottom",
           "upMm": 3.28,
           "rot180Mm": 3.56,
           "diffMm": -0.28,
-          "agree": false
+          "agree": true
         },
         "left": {
           "mm": null,
@@ -48556,6 +48623,7 @@
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
+          "pickedFrom": null,
           "upMm": 2.42,
           "rot180Mm": 2.58,
           "diffMm": -0.16,
@@ -48567,6 +48635,7 @@
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
+          "pickedFrom": null,
           "upMm": 4.42,
           "rot180Mm": 4.35,
           "diffMm": 0.07,
@@ -48595,9 +48664,9 @@
       },
       "ratios": {
         "leftOverRight": null,
-        "topOverBottom": null,
+        "topOverBottom": 0.811,
         "leftShare": null,
-        "topShare": null
+        "topShare": 0.448
       },
       "scans": {
         "180": {
@@ -54458,6 +54527,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -54469,6 +54539,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -54480,6 +54551,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -54491,6 +54563,7 @@
           "withheld": true,
           "reason": "unmeasured",
           "approved": false,
+          "pickedFrom": null,
           "upMm": null,
           "rot180Mm": null,
           "diffMm": null,
@@ -60507,5 +60580,6 @@
         }
       }
     }
-  }
+  },
+  "borderRule": "2026.10.13-shadow-free-v1"
 }

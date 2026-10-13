@@ -3660,6 +3660,9 @@ async function runDirectory(dir, opts) {
       try {
         stored = JSON.parse(fs.readFileSync(opts.out, 'utf8'));
         stored.definition = key.definition;
+        stored.borderRule = key.borderRule;
+        stored.biasAgreeMm = key.biasAgreeMm;
+        stored.dpi = key.dpi;
         stored.cards = stored.cards || {};
         Object.keys(key.cards).forEach(function (id) {
           if (!approvedMeansHeld(stored.cards[id], key.cards[id])) {
