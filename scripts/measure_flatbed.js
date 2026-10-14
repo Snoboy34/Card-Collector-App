@@ -21,13 +21,16 @@
  * withheld. The overlay follows those points, so a tilted frame is not
  * crossed by a single-depth line. tiltDeg is the frame's angle against
  * the card edge, in degrees. Positive means the border widens toward the
- * side's end corner.
+ * side's end corner. A border that is not parallel to the cut is still
+ * one line: the two ends are not a shallow outline and a deeper element.
  *
  * A patterned margin (a wave, a foil, a refractor) is margin however busy
  * it is. The outline is the outer edge of the first thin line that is
  * parallel to the edge and closes a rectangle with the same stroke on the
  * other three sides. The line may be a segment; it does not have to run
- * the whole side. What qualifies it is the same profile on all four sides:
+ * the whole side. A piece that sits only in the corners does not hide that
+ * stroke when the same profile already crosses the middle of the side.
+ * What qualifies it is the same profile on all four sides:
  * a thin silver line, a thicker black line, and a thin silver line inside
  * that. A thin line under half a millimetre counts. A logo, stamp, or
  * lettering that sits on only one side does not. The width is the
@@ -62,8 +65,10 @@
  * include the card, and that raises the bed gate until a silver or yellow
  * edge counts as the sheet. When that gate does not yield a card-sized
  * quad, the measurement is retried with the uncropped sheet's bed colour.
- * A card-sized result from the crop is kept, so a lower sheet gate cannot
- * move a card that was already found.
+ * A card-sized crop quad is kept when it matches that sheet quad. When the
+ * crop quad is more than 0.10 mm smaller on an axis, the crop gate stopped
+ * inside a light edge: a side the sheet reads at least 0.04 mm further out
+ * takes the sheet reading, and a side the two gates already agree on stays.
  *
  * On the HP ENVY 6400 the hinge is at image-top, and that edge carries a
  * shadow. Top and bottom are each taken from the scan in which that edge
@@ -1441,7 +1446,13 @@ function profileRuns(line) {
 // The same silver-black-silver profile on every side, including a segment
 // that does not run the whole side. A profile that is missing on any side
 // is not the outline.
-function matchedProfileSegments(lists) {
+function matchedProfileSegments(lists, opts) {
+  opts = opts || {};
+  const requireInner = opts.requireInner !== false;
+  const wAbs = opts.wAbs == null ? 0.12 : opts.wAbs;
+  const wRangeMax = opts.wRangeMax == null ? 0.16 : opts.wRangeMax;
+  const bAbs = opts.bAbs == null ? 0.36 : opts.bAbs;
+  const bRangeMax = opts.bRangeMax == null ? 0.52 : opts.bRangeMax;
   const names = ['top', 'bottom', 'left', 'right'];
   const near = {};
   names.forEach(function (name) {
@@ -1450,13 +1461,73 @@ function matchedProfileSegments(lists) {
       near[name] = [];
       return;
     }
-    const floor = list[0].median;
+    // A short dark gap in the pattern is not the frame's black band. It
+    // must not set the floor, or the real stroke about a millimetre deeper
+    // is never tried. The frame's black band is thicker than that gap.
+    const solid = list.filter(function (line) {
+      return line.blackWidth >= 1.05 && line.width >= 0.24 && line.points.length >= 8;
+    });
+    let pool = solid.length ? solid : list;
+    // A silver piece that sits only in the corners is the corner, not the
+    // side. It must not set the floor when the same profile already crosses
+    // the middle of that side, or the real stroke a millimetre deeper is
+    // never tried.
+    let spanLo = Infinity;
+    let spanHi = -Infinity;
+    pool.forEach(function (line) {
+      (line.points || []).forEach(function (p) {
+        if (p.alongMm < spanLo) spanLo = p.alongMm;
+        if (p.alongMm > spanHi) spanHi = p.alongMm;
+      });
+    });
+    const span = spanHi - spanLo;
+    if (span > 8) {
+      const midLo = spanLo + span * 0.35;
+      const midHi = spanLo + span * 0.65;
+      function coversMiddle(line) {
+        return (line.points || []).some(function (p) {
+          return p.alongMm >= midLo && p.alongMm <= midHi;
+        });
+      }
+      function sameStroke(a, b) {
+        return Math.abs(a.width - b.width) <= 0.16 &&
+          a.blackWidth != null && b.blackWidth != null &&
+          Math.abs(a.blackWidth - b.blackWidth) <= 0.45;
+      }
+      const middle = pool.filter(coversMiddle);
+      if (middle.length) {
+        const midFloor = middle[0].median;
+        pool = pool.filter(function (line) {
+          if (coversMiddle(line) || line.median >= midFloor - 0.15) return true;
+          // Only a corner piece sitting just outside the same stroke. An
+          // interior frame two millimetres deeper is a different line.
+          return !middle.some(function (other) {
+            return sameStroke(line, other) &&
+              other.median > line.median + 0.35 &&
+              other.median <= line.median + 1.5;
+          });
+        });
+      }
+    }
+    const floor = pool[0].median;
     // The outline is the outer stroke. A line several millimetres deeper
     // is an interior frame, not a second try at the same edge.
-    near[name] = list.filter(function (line) { return line.median <= floor + 0.8; });
+    near[name] = pool.filter(function (line) { return line.median <= floor + 1.2; });
+    if (process.env.TRACE_POOL) {
+      process.stdout.write(name + ' span ' + spanLo.toFixed(1) + '-' + spanHi.toFixed(1) +
+        ' mid ' + (span > 8 ? (spanLo + span * 0.35).toFixed(1) + '-' + (spanLo + span * 0.65).toFixed(1) : 'na') +
+        ' near ' + near[name].map(function (line) {
+          const along = (line.points || []).map(function (p) { return p.alongMm; });
+          const lo = along.length ? Math.min.apply(null, along) : 0;
+          const hi = along.length ? Math.max.apply(null, along) : 0;
+          return line.median.toFixed(2) + 'w' + line.width.toFixed(2) + 'b' +
+            (line.blackWidth == null ? '-' : line.blackWidth.toFixed(2)) +
+            '@' + lo.toFixed(0) + '-' + hi.toFixed(0) + 'n' + line.points.length;
+        }).join(' | ') + '\n');
+    }
   });
   const idx = { top: 0, bottom: 0, left: 0, right: 0 };
-  for (let attempt = 0; attempt < 12; attempt++) {
+  for (let attempt = 0; attempt < 16; attempt++) {
     const pick = {};
     let ready = true;
     names.forEach(function (name) {
@@ -1473,12 +1544,15 @@ function matchedProfileSegments(lists) {
     const iMed = median(inners);
     const wRange = Math.max.apply(null, widths) - Math.min.apply(null, widths);
     const bRange = Math.max.apply(null, blacks) - Math.min.apply(null, blacks);
-    const same = wRange <= 0.15 && bRange <= 0.45 && names.every(function (name) {
+    const same = wRange <= wRangeMax && bRange <= bRangeMax && names.every(function (name) {
       const line = pick[name];
+      const innerOk = !requireInner || (
+        line.innerWidth != null && iMed != null && Math.abs(line.innerWidth - iMed) <= 0.2
+      );
       return line.points.length >= 2 &&
-        Math.abs(line.width - wMed) <= 0.12 &&
-        line.blackWidth != null && Math.abs(line.blackWidth - bMed) <= 0.3 &&
-        line.innerWidth != null && Math.abs(line.innerWidth - iMed) <= 0.2 &&
+        Math.abs(line.width - wMed) <= wAbs &&
+        line.blackWidth != null && Math.abs(line.blackWidth - bMed) <= bAbs &&
+        innerOk &&
         line.blackWidth > line.width + 0.05;
     });
     if (same) return pick;
@@ -1486,8 +1560,8 @@ function matchedProfileSegments(lists) {
     let worstD = -1;
     names.forEach(function (name) {
       const line = pick[name];
-      const d = Math.abs(line.width - wMed) / 0.12 +
-        Math.abs((line.blackWidth == null ? 0 : line.blackWidth) - bMed) / 0.3;
+      const d = Math.abs(line.width - wMed) / wAbs +
+        Math.abs((line.blackWidth == null ? 0 : line.blackWidth) - bMed) / bAbs;
       if (d > worstD) {
         worstD = d;
         worst = name;
@@ -1496,6 +1570,37 @@ function matchedProfileSegments(lists) {
     idx[worst] += 1;
   }
   return null;
+}
+
+// The black band's outer edge is the side of that band nearest the card
+// edge. The bright stroke just outside it is only the lead-in.
+function lineAtBlackEdge(line) {
+  const points = (line.points || []).filter(function (p) {
+    return p && p.black != null && isFinite(p.black);
+  }).map(function (p) {
+    return {
+      i: p.i,
+      depth: p.black,
+      x: p.x,
+      y: p.y,
+      nx: p.nx,
+      ny: p.ny,
+      alongMm: p.alongMm,
+      black: p.black
+    };
+  });
+  if (points.length < 2) return null;
+  const depths = points.map(function (p) { return p.depth; });
+  return {
+    points: points,
+    median: median(depths),
+    min: Math.min.apply(null, depths),
+    max: Math.max.apply(null, depths),
+    width: line.width,
+    blackWidth: line.blackWidth,
+    innerWidth: line.innerWidth,
+    cov: line.cov
+  };
 }
 
 function publishFrameLine(side, line, stations) {
@@ -1735,7 +1840,9 @@ function applyRectangularFrame(sides) {
         (line.blackWidth == null ? '-' : line.blackWidth.toFixed(2)) + ' n' + line.points.length;
     }).join(' | ') : 'none') + ' chromatic ' + chromaticCount + ' open ' + allOpen + '\n');
   }
-  if (profileMatch && (chromaticCount >= 3 || allOpen)) {
+  // One patterned side is enough. A reading in the coloured margin is not
+  // an outline outside the frame, so it does not block the matched stroke.
+  if (profileMatch && (chromaticCount >= 1 || allOpen)) {
     names.forEach(function (name) {
       const side = sides[name];
       if (!side) return;
@@ -1746,6 +1853,39 @@ function applyRectangularFrame(sides) {
       delete side.goldEnds;
     });
     return;
+  }
+  // No silver-black-silver rectangle. A black band of the same width on
+  // every side is the outline when that is the shared profile. Measure the
+  // outer edge of the band, the edge nearest the card edge. A segment is
+  // enough. The coloured texture at the cut is not that band.
+  if (chromaticCount >= 1 || allOpen) {
+    const blackMatch = matchedProfileSegments(segments, {
+      requireInner: false,
+      wAbs: 0.22,
+      wRangeMax: 0.28,
+      bAbs: 0.36,
+      bRangeMax: 0.52
+    });
+    if (blackMatch) {
+      const blackLines = {};
+      let blackReady = true;
+      names.forEach(function (name) {
+        blackLines[name] = lineAtBlackEdge(blackMatch[name]);
+        if (!blackLines[name]) blackReady = false;
+      });
+      if (blackReady) {
+        names.forEach(function (name) {
+          const side = sides[name];
+          if (!side) return;
+          side.marginPatterned = !!chromaticSide[name];
+          side.sawProfile = segments[name].length > 0;
+          publishFrameLine(side, blackLines[name], side.stations || []);
+          delete side.stations;
+          delete side.goldEnds;
+        });
+        return;
+      }
+    }
   }
   // No silver-black-silver rectangle. A gold line with black immediately
   // inside, the same profile at all four outer corners, is the outline when
@@ -2018,6 +2158,76 @@ function layerElement(layer, stationCount, role, refused, why) {
   };
 }
 
+function slantFit(points) {
+  let s0 = 0;
+  let s1 = 0;
+  let s2 = 0;
+  let z0 = 0;
+  let z1 = 0;
+  for (let i = 0; i < points.length; i++) {
+    const t = points[i].alongMm;
+    const z = points[i].depth;
+    s0 += 1;
+    s1 += t;
+    s2 += t * t;
+    z0 += z;
+    z1 += z * t;
+  }
+  const det = s0 * s2 - s1 * s1;
+  if (Math.abs(det) < 1e-6) return null;
+  const slope = (s0 * z1 - s1 * z0) / det;
+  const intercept = (z0 - slope * s1) / s0;
+  let err = 0;
+  for (let i = 0; i < points.length; i++) {
+    const d = points[i].depth - (intercept + slope * points[i].alongMm);
+    err += d * d;
+  }
+  return { slope: slope, intercept: intercept, rms: Math.sqrt(err / points.length) };
+}
+
+// A straight border that is not parallel to the card edge spans more than
+// the depth window, so the two ends land in two layers. They are one line
+// when a single slope fits them. Two different bands do not.
+function joinSlantLayers(layers) {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    let bestI = -1;
+    let bestJ = -1;
+    let bestRms = 0.10;
+    for (let i = 0; i < layers.length; i++) {
+      for (let j = i + 1; j < layers.length; j++) {
+        const a = layers[i];
+        const b = layers[j];
+        if (Math.abs(a.median - b.median) > 0.40) continue;
+        const pts = a.points.concat(b.points);
+        if (pts.length < 6) continue;
+        const fit = slantFit(pts);
+        if (process.env.TRACE_SLANT && fit) {
+          process.stdout.write('slant ' + a.median.toFixed(3) + '+' + b.median.toFixed(3) +
+            ' rms ' + fit.rms.toFixed(3) + ' slope ' + fit.slope.toFixed(4) + '\n');
+        }
+        if (!fit || fit.rms >= bestRms || Math.abs(fit.slope) > 0.015) continue;
+        bestRms = fit.rms;
+        bestI = i;
+        bestJ = j;
+      }
+    }
+    if (bestI < 0) break;
+    const points = layers[bestI].points.concat(layers[bestJ].points);
+    const depths = points.map(function (p) { return p.depth; });
+    layers[bestI] = {
+      points: points,
+      median: median(depths),
+      min: Math.min.apply(null, depths),
+      max: Math.max.apply(null, depths)
+    };
+    layers.splice(bestJ, 1);
+    changed = true;
+  }
+  layers.sort(function (a, b) { return a.median - b.median; });
+}
+
 function summarizeDesign(stations) {
   const empty = {
     mm: null,
@@ -2051,6 +2261,7 @@ function summarizeDesign(stations) {
     else readings.push(point);
   });
   const layers = mergeCloseLayers(clusterDepths(readings));
+  joinSlantLayers(layers);
   layers.forEach(function (layer) {
     layer.cov = layer.points.length / n;
     layer.partial = false;
@@ -2180,6 +2391,30 @@ function measureImage(data, w, h, dpi, bedModel) {
       bedModel.threshold + 1 < paperModel.threshold) {
     const retry = measureWithPaper(data, w, h, dpi, ppm, bedModel);
     if (retry.ok && retry.sizeOk) return retry;
+  }
+  // Corners of a tight crop can include the card, so this gate rises and
+  // the quad stops inside a light edge. The sheet bed still sees that
+  // edge. Take the bed reading on a side the crop pulled inward, and keep
+  // a side the two gates already read the same.
+  if (first.ok && first.sizeOk && bedModel && isFinite(bedModel.threshold) &&
+      paperModel.threshold > bedModel.threshold + 20) {
+    const retry = measureWithPaper(data, w, h, dpi, ppm, bedModel);
+    const grew = retry.ok && retry.sizeOk && (
+      retry.cardMm.width > first.cardMm.width + 0.10 ||
+      retry.cardMm.height > first.cardMm.height + 0.10
+    );
+    if (grew) {
+      ['top', 'bottom', 'left', 'right'].forEach(function (name) {
+        const cropSide = first.sides[name];
+        const bedSide = retry.sides[name];
+        if (!cropSide || !bedSide || cropSide.mm == null || bedSide.mm == null) return;
+        if (bedSide.mm > cropSide.mm + 0.04) first.sides[name] = bedSide;
+      });
+      first.cardMm = {
+        width: roundMm(Math.max(first.cardMm.width, retry.cardMm.width)),
+        height: roundMm(Math.max(first.cardMm.height, retry.cardMm.height))
+      };
+    }
   }
   return first;
 }
