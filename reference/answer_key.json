@@ -29088,8 +29088,8 @@
           "approved": false,
           "pickedFrom": "up-image-bottom",
           "upMm": 3.47,
-          "rot180Mm": 3.99,
-          "diffMm": -0.52,
+          "rot180Mm": 4.06,
+          "diffMm": -0.59,
           "agree": true
         },
         "left": {
@@ -29112,8 +29112,8 @@
           "approved": false,
           "pickedFrom": null,
           "upMm": 3.64,
-          "rot180Mm": 3.82,
-          "diffMm": -0.18,
+          "rot180Mm": 3.49,
+          "diffMm": 0.15,
           "agree": false
         }
       },
@@ -29124,7 +29124,7 @@
             "bottom"
           ],
           "biasFromTop": 0.34,
-          "biasFromBottom": 0.26,
+          "biasFromBottom": 0.295,
           "agree": false
         },
         "acrossScan": {
@@ -29133,7 +29133,7 @@
             "right"
           ],
           "biasFromLeft": -0.015,
-          "biasFromRight": 0.09,
+          "biasFromRight": -0.075,
           "agree": false
         }
       },
@@ -29165,53 +29165,61 @@
           },
           "sizeOk": true,
           "ratios": {
-            "leftOverRight": 1.224,
-            "topOverBottom": 1.304,
-            "leftShare": 0.55,
-            "topShare": 0.566
+            "leftOverRight": 1.119,
+            "topOverBottom": 1.327,
+            "leftShare": 0.528,
+            "topShare": 0.57
           },
           "frameCheck": {
             "topShare": {
-              "outline": 0.566,
-              "black": 0.568,
-              "diff": -0.002
+              "outline": 0.57,
+              "black": 0.577,
+              "diff": -0.007
             },
             "leftShare": {
-              "outline": 0.55,
-              "black": 0.558,
-              "diff": -0.007
+              "outline": 0.528,
+              "black": 0.541,
+              "diff": -0.013
             }
           },
           "designReference": null,
           "sides": {
             "top": {
-              "mm": 3.99,
+              "mm": 4.06,
               "confidence": 0.62,
               "withheld": false,
               "reason": null,
               "shape": "corners",
-              "coverage": 0.024,
-              "tiltDeg": 0.3,
-              "frameOuterMm": 3.99,
-              "blackOuterMm": 4.29,
-              "frameDiffMm": 0.3,
-              "frameWidthMm": 0.39,
+              "coverage": 0.036,
+              "tiltDeg": 0.136,
+              "frameOuterMm": 4.06,
+              "blackOuterMm": 4.4,
+              "frameDiffMm": 0.34,
+              "frameWidthMm": 0.25,
               "points": [
+                {
+                  "alongMm": 4.95,
+                  "depthMm": 4.06
+                },
+                {
+                  "alongMm": 5.2,
+                  "depthMm": 4.06
+                },
                 {
                   "alongMm": 5.45,
                   "depthMm": 4.04
                 },
                 {
-                  "alongMm": 5.7,
-                  "depthMm": 3.94
+                  "alongMm": 6.757,
+                  "depthMm": 4.14
                 },
                 {
                   "alongMm": 58.963,
                   "depthMm": 4.12
                 },
                 {
-                  "alongMm": 57.963,
-                  "depthMm": 4.42
+                  "alongMm": 57.157,
+                  "depthMm": 4.28
                 }
               ],
               "elements": [
@@ -29613,12 +29621,12 @@
               "withheld": false,
               "reason": null,
               "shape": "corners",
-              "coverage": 0.024,
-              "tiltDeg": 0.431,
+              "coverage": 0.03,
+              "tiltDeg": 0.304,
               "frameOuterMm": 3.06,
-              "blackOuterMm": 3.26,
-              "frameDiffMm": 0.2,
-              "frameWidthMm": 0.24,
+              "blackOuterMm": 3.22,
+              "frameDiffMm": 0.16,
+              "frameWidthMm": 0.18,
               "points": [
                 {
                   "alongMm": 4.45,
@@ -29629,12 +29637,16 @@
                   "depthMm": 3.06
                 },
                 {
-                  "alongMm": 58.722,
-                  "depthMm": 3.44
+                  "alongMm": 4.95,
+                  "depthMm": 3.06
                 },
                 {
                   "alongMm": 59.472,
-                  "depthMm": 3.5
+                  "depthMm": 3.26
+                },
+                {
+                  "alongMm": 58.722,
+                  "depthMm": 3.44
                 }
               ],
               "elements": [
@@ -29692,17 +29704,17 @@
               ]
             },
             "left": {
-              "mm": 3.82,
+              "mm": 3.49,
               "confidence": 0.62,
               "withheld": false,
               "reason": null,
               "shape": "corners",
               "coverage": 0.021,
-              "tiltDeg": 0.01,
-              "frameOuterMm": 3.82,
-              "blackOuterMm": 4.26,
-              "frameDiffMm": 0.44,
-              "frameWidthMm": 0.44,
+              "tiltDeg": -0.243,
+              "frameOuterMm": 3.49,
+              "blackOuterMm": 3.86,
+              "frameDiffMm": 0.37,
+              "frameWidthMm": 0.34,
               "points": [
                 {
                   "alongMm": 4.95,
@@ -29713,16 +29725,16 @@
                   "depthMm": 3.84
                 },
                 {
-                  "alongMm": 83.243,
-                  "depthMm": 3.84
+                  "alongMm": 5.95,
+                  "depthMm": 3.88
                 },
                 {
-                  "alongMm": 83.493,
-                  "depthMm": 3.82
+                  "alongMm": 84.743,
+                  "depthMm": 3.5
                 },
                 {
-                  "alongMm": 83.743,
-                  "depthMm": 3.78
+                  "alongMm": 84.993,
+                  "depthMm": 3.48
                 }
               ],
               "elements": [
@@ -30277,9 +30289,9 @@
               "coverage": 0.025,
               "tiltDeg": 0.094,
               "frameOuterMm": 3.12,
-              "blackOuterMm": 3.38,
-              "frameDiffMm": 0.26,
-              "frameWidthMm": 0.24,
+              "blackOuterMm": 3.28,
+              "frameDiffMm": 0.16,
+              "frameWidthMm": 0.14,
               "points": [
                 {
                   "alongMm": 4.7,
@@ -30298,12 +30310,12 @@
                   "depthMm": 3.16
                 },
                 {
-                  "alongMm": 84.746,
-                  "depthMm": 3.2
-                },
-                {
                   "alongMm": 83.996,
                   "depthMm": 3.32
+                },
+                {
+                  "alongMm": 84.746,
+                  "depthMm": 3.2
                 }
               ],
               "elements": [
@@ -30622,13 +30634,13 @@
           "frameCheck": {
             "topShare": {
               "outline": 0.519,
-              "black": 0.521,
-              "diff": -0.002
+              "black": 0.516,
+              "diff": 0.003
             },
             "leftShare": {
               "outline": 0.459,
-              "black": 0.449,
-              "diff": 0.01
+              "black": 0.465,
+              "diff": -0.006
             }
           },
           "designReference": null,
@@ -30640,11 +30652,11 @@
               "reason": null,
               "shape": "corners",
               "coverage": 0.024,
-              "tiltDeg": 0.869,
+              "tiltDeg": 0.425,
               "frameOuterMm": 3.74,
-              "blackOuterMm": 4.2,
-              "frameDiffMm": 0.46,
-              "frameWidthMm": 0.34,
+              "blackOuterMm": 4.05,
+              "frameDiffMm": 0.31,
+              "frameWidthMm": 0.31,
               "points": [
                 {
                   "alongMm": 4.45,
@@ -30655,12 +30667,12 @@
                   "depthMm": 3.74
                 },
                 {
-                  "alongMm": 55.96,
-                  "depthMm": 4.24
+                  "alongMm": 57.493,
+                  "depthMm": 4.02
                 },
                 {
-                  "alongMm": 56.36,
-                  "depthMm": 4.8
+                  "alongMm": 55.96,
+                  "depthMm": 4.24
                 }
               ],
               "elements": [
@@ -30698,9 +30710,9 @@
               "coverage": 0.024,
               "tiltDeg": 0.127,
               "frameOuterMm": 3.47,
-              "blackOuterMm": 3.86,
-              "frameDiffMm": 0.39,
-              "frameWidthMm": 0.25,
+              "blackOuterMm": 3.8,
+              "frameDiffMm": 0.33,
+              "frameWidthMm": 0.15,
               "points": [
                 {
                   "alongMm": 3.95,
@@ -31233,12 +31245,12 @@
               "withheld": false,
               "reason": null,
               "shape": "corners",
-              "coverage": 0.033,
-              "tiltDeg": -0.092,
+              "coverage": 0.042,
+              "tiltDeg": -0.083,
               "frameOuterMm": 3.09,
-              "blackOuterMm": 3.33,
-              "frameDiffMm": 0.24,
-              "frameWidthMm": 0.39,
+              "blackOuterMm": 3.29,
+              "frameDiffMm": 0.2,
+              "frameWidthMm": 0.19,
               "points": [
                 {
                   "alongMm": 4.45,
@@ -31259,6 +31271,14 @@
                 {
                   "alongMm": 5.45,
                   "depthMm": 3.26
+                },
+                {
+                  "alongMm": 5.7,
+                  "depthMm": 3.26
+                },
+                {
+                  "alongMm": 83.459,
+                  "depthMm": 3.18
                 },
                 {
                   "alongMm": 83.709,
@@ -31562,9 +31582,9 @@
               "coverage": 0.021,
               "tiltDeg": 0.088,
               "frameOuterMm": 3.64,
-              "blackOuterMm": 4.09,
-              "frameDiffMm": 0.45,
-              "frameWidthMm": 0.44,
+              "blackOuterMm": 3.78,
+              "frameDiffMm": 0.14,
+              "frameWidthMm": 0.16,
               "points": [
                 {
                   "alongMm": 4.45,

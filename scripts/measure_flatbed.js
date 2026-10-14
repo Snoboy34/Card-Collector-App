@@ -1215,7 +1215,10 @@ function goldMarksFromProfile(profile, stepMm) {
     while (lo > 0 && (i - lo) <= maxWidth && yel[i] - yel[lo] < 5) lo--;
     if (yel[i] - yel[lo] < 5) continue;
     let hi = i;
-    while (hi < n - 1 && (hi - i) <= maxWidth && lum[hi + 1] >= 42 && yel[i] - yel[hi + 1] < 12) hi++;
+    // The inner edge is the same yellowness drop as the outer edge. A luma
+    // shoulder at a rounded corner smears the measured width past 0.55 mm
+    // and drops the real contact. The 0.55 mm cap stays.
+    while (hi < n - 1 && (hi - i) <= maxWidth && yel[i] - yel[hi + 1] < 5) hi++;
     const widthMm = (hi - lo) * stepMm;
     if (widthMm < 0.06 || widthMm > 0.55) continue;
     let dark = 0;
@@ -1646,9 +1649,10 @@ function publishFrameLine(side, line, stations) {
   return true;
 }
 
-// The shallowest gold-with-black mark in one end of the side. It counts only
-// when the same edge continues and deepens toward the middle, which is the
-// frame corner sticking out past the angled side. A ray does not.
+// The outer gold corner is the shallowest point of the continuous frame run
+// in that end of the side. A run breaks when the next mark is more than
+// 2.5 mm along the side or more than 2 mm deeper, which is how an inboard
+// ray separates from the frame. The run has to deepen toward the middle.
 function goldEndContact(stations, fromStart, lengthMm) {
   const len = lengthMm || 0;
   if (!len || !stations.length) return null;
@@ -1673,32 +1677,54 @@ function goldEndContact(stations, fromStart, lengthMm) {
   if (marks.length < 2) return null;
   const inWindow = marks.filter(function (m) {
     return fromStart ? m.alongMm <= windowMm : m.alongMm >= len - windowMm;
-  });
-  const kept = inWindow.filter(function (h) {
-    return marks.some(function (o) {
-      return o !== h && Math.abs(o.alongMm - h.alongMm) <= 2 && Math.abs(o.depth - h.depth) <= 0.8;
+  }).slice().sort(function (a, b) { return a.alongMm - b.alongMm; });
+  if (inWindow.length < 3) return null;
+  const runs = [];
+  let cur = [inWindow[0]];
+  for (let i = 1; i < inWindow.length; i++) {
+    const prev = inWindow[i - 1];
+    const m = inWindow[i];
+    if ((m.alongMm - prev.alongMm) > 2.5 || Math.abs(m.depth - prev.depth) > 2.0) {
+      runs.push(cur);
+      cur = [m];
+    } else {
+      cur.push(m);
+    }
+  }
+  runs.push(cur);
+  const qualifying = [];
+  runs.forEach(function (run) {
+    if (run.length < 3) return;
+    const minD = Math.min.apply(null, run.map(function (p) { return p.depth; }));
+    const tip = run.filter(function (p) { return p.depth <= minD + 0.12; });
+    const corner = tip.slice().sort(function (a, b) {
+      return fromStart ? a.alongMm - b.alongMm : b.alongMm - a.alongMm;
+    })[0];
+    const towardMid = marks.some(function (m) {
+      const past = fromStart ? m.alongMm > corner.alongMm + 1.2 : m.alongMm < corner.alongMm - 1.2;
+      const near = Math.abs(m.alongMm - corner.alongMm) <= 14;
+      return past && near && m.depth >= corner.depth + 0.3;
     });
+    if (!towardMid) return;
+    qualifying.push({ run: run, minD: minD, tip: tip, corner: corner });
   });
-  if (!kept.length) return null;
-  const minD = Math.min.apply(null, kept.map(function (p) { return p.depth; }));
-  const tip = kept.filter(function (p) { return p.depth <= minD + 0.1; });
-  const corner = tip.slice().sort(function (a, b) {
-    return fromStart ? a.alongMm - b.alongMm : b.alongMm - a.alongMm;
-  })[0];
-  const towardMid = marks.some(function (m) {
-    const past = fromStart ? m.alongMm > corner.alongMm + 1.2 : m.alongMm < corner.alongMm - 1.2;
-    const near = Math.abs(m.alongMm - corner.alongMm) <= 14;
-    return past && near && m.depth >= corner.depth + 0.3;
-  });
-  if (!towardMid) return null;
+  if (!qualifying.length) return null;
+  qualifying.sort(function (a, b) { return a.minD - b.minD; });
+  const best = qualifying[0];
+  const tip = best.tip;
+  const corner = best.corner;
   const use = tip.length >= 2
     ? tip
-    : kept.slice().sort(function (a, b) { return a.depth - b.depth; }).slice(0, Math.min(2, kept.length));
-  if (!use.length) return null;
+    : best.run.slice().sort(function (a, b) { return a.depth - b.depth; }).slice(0, Math.min(2, best.run.length));
+  const flank = best.run.filter(function (m) {
+    const inward = fromStart ? m.alongMm - corner.alongMm : corner.alongMm - m.alongMm;
+    return inward >= 1.2 && inward <= 6 && m.width <= 0.55;
+  });
+  const widthSrc = flank.length ? flank : use;
   return {
     mm: median(use.map(function (p) { return p.depth; })),
     black: median(use.map(function (p) { return p.black; })),
-    width: median(use.map(function (p) { return p.width; })),
+    width: median(widthSrc.map(function (p) { return p.width; })),
     blackWidth: median(use.map(function (p) { return p.blackWidth; })),
     points: use,
     corner: corner
