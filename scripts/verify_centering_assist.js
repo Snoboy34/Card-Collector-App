@@ -96,6 +96,7 @@ async function main() {
     demoRange && 11.43 > demoRange.maxMm && demoRange.minMm >= 0, demoRange);
   const inRange = geo.plausibleRangeMm('left', geo.measuredWidthsMm(withheld));
   assert('2.2 mm is inside the fixture range', inRange && 2.2 >= inRange.minMm && 2.2 <= inRange.maxMm, inRange);
+  withheld.side = 'front';
   const quiet = assist.buildFromLines(withheld, { left: lineForMm('left', 2.2) }, { scanId: 'assist-test-scan-0001' });
   assert('a plausible line saves without a warning',
     quiet.ok === true && quiet.examples[0].warningShown === false, quiet);
@@ -115,6 +116,348 @@ async function main() {
   assert('grade source is assisted', built.assist.gradeSource === 'assisted' && built.assist.source === 'assisted');
   assert('centering score is the Judge table, not 50/50', built.assist.centering === 7, built.assist);
   assert('centering label says assisted', built.assist.centeringLabel === '7.0 assisted', built.assist.centeringLabel);
+  assert('a stored front uses the front table', built.assist.side === 'front');
+  const noSideReport = reportWith();
+  const noSide = assist.buildFromLines(noSideReport, { left: lineForMm('left', 4) }, {
+    scanId: 'assist-test-scan-0001',
+    confirmImplausible: true
+  });
+  assert('a report with no side does not default to the front table',
+    noSide.ok === true &&
+    noSide.assist.side == null &&
+    noSide.assist.centering == null &&
+    noSide.assist.centeringLabel == null,
+    noSide.assist && { side: noSide.assist.side, centering: noSide.assist.centering, label: noSide.assist.centeringLabel });
+  assert('assisted label does not say PSA', String(built.assist.centeringLabel).indexOf('PSA') === -1);
+
+  function blankWidths(side) {
+    const report = reportWith({ side: side });
+    report.centeringMetrics = {
+      borderWidthsMm: { left: null, right: null, top: null, bottom: null },
+      borderVoteLowConfidenceEdges: [],
+      leftRightRatio: null,
+      topBottomRatio: null
+    };
+    report.subGrades = { centering: null, surface: null, edges: null, corners: null };
+    return report;
+  }
+  const tableCases = [
+    { name: '60/40', widths: { left: 6, right: 4, top: 5, bottom: 5 }, front: 9, frontLabel: '9.0 assisted', back: 10, backLabel: '10.0 assisted' },
+    { name: '75/25', widths: { left: 7.5, right: 2.5, top: 5, bottom: 5 }, front: 6, frontLabel: '6.0 assisted', back: 10, backLabel: '10.0 assisted' },
+    { name: '80/20', widths: { left: 8, right: 2, top: 5, bottom: 5 }, front: 6, frontLabel: '6.0 assisted', back: 9, backLabel: '9.0 assisted' },
+    { name: '90/10', widths: { left: 9, right: 1, top: 5, bottom: 5 }, front: 3, frontLabel: '3.0 assisted', back: 9, backLabel: '9.0 assisted' },
+    { name: 'past 90/10', widths: { left: 9.1, right: 0.9, top: 5, bottom: 5 }, front: 1, frontLabel: '1.0 assisted', back: null, backLabel: null }
+  ];
+  tableCases.forEach(function (row) {
+    ['front', 'back'].forEach(function (side) {
+      const before = blankWidths(side);
+      const engineBefore = JSON.stringify(before.subGrades);
+      const builtRow = assist.buildFromMillimetres(before, row.widths, { scanId: 'table-' + side, confirmImplausible: true });
+      const expectScore = side === 'back' ? row.back : row.front;
+      const expectLabel = side === 'back' ? row.backLabel : row.frontLabel;
+      assert(side + ' ' + row.name + ' assisted score',
+        builtRow.ok === true &&
+        builtRow.assist.side === side &&
+        builtRow.assist.centering === expectScore &&
+        builtRow.assist.centeringLabel === expectLabel &&
+        String(builtRow.assist.centeringLabel || '').indexOf('PSA') === -1 &&
+        JSON.stringify(before.subGrades) === engineBefore,
+        builtRow.assist && { side: builtRow.assist.side, centering: builtRow.assist.centering, label: builtRow.assist.centeringLabel });
+    });
+  });
+  const backByMeta = assist.buildFromMillimetres(blankWidths(undefined), tableCases[0].widths, {
+    scanId: 'table-meta-back', side: 'back', confirmImplausible: true
+  });
+  assert('item side back uses the back table when the report has no side',
+    backByMeta.ok === true && backByMeta.assist.centeringLabel === '10.0 assisted', backByMeta.assist && backByMeta.assist.centeringLabel);
+  const storedBack = {
+    inventory: [{
+      scanId: '366A0E19',
+      side: 'back',
+      gradingReport: {
+        side: 'back',
+        finalScore: null,
+        subGrades: { centering: null, surface: 8, edges: 8, corners: 8 },
+        centeringAssist: {
+          adjustedCount: 1,
+          side: 'front',
+          centering: 9,
+          centeringLabel: '9.0 assisted',
+          borderWidthsMm: { left: 6, right: 4, top: 5, bottom: 5 }
+        }
+      }
+    }]
+  };
+  const storedSubs = JSON.stringify(storedBack.inventory[0].gradingReport.subGrades);
+  const rescoreLog = [];
+  const emitRescore = function (line) { rescoreLog.push(line); };
+  assert('a stored back 60/40 is rewritten onto the back table',
+    assist.rescoreDatabase(storedBack, emitRescore) === 1 &&
+    storedBack.inventory[0].gradingReport.centeringAssist.centering === 10 &&
+    storedBack.inventory[0].gradingReport.centeringAssist.centeringLabel === '10.0 assisted' &&
+    storedBack.inventory[0].gradingReport.centeringAssist.side === 'back' &&
+    JSON.stringify(storedBack.inventory[0].gradingReport.subGrades) === storedSubs);
+  assert('the rewrite logs the scan id and the old and new labels',
+    rescoreLog.length === 1 &&
+    rescoreLog[0] === '[centering-assist] rescore scanId=366A0E19 old=9.0 assisted new=10.0 assisted',
+    rescoreLog);
+  rescoreLog.length = 0;
+  assert('a second pass leaves the corrected assist',
+    assist.rescoreDatabase(storedBack, emitRescore) === 0 && rescoreLog.length === 0, rescoreLog);
+  storedBack.inventory[0].gradingReport.centeringAssist.borderWidthsMm = { left: 9.1, right: 0.9, top: 5, bottom: 5 };
+  storedBack.inventory[0].gradingReport.centeringAssist.centering = 1;
+  storedBack.inventory[0].gradingReport.centeringAssist.centeringLabel = '1.0 assisted';
+  assert('a stored back past 90/10 loses the fabricated label',
+    assist.rescoreDatabase(storedBack, emitRescore) === 1 &&
+    storedBack.inventory[0].gradingReport.centeringAssist.centering === null &&
+    storedBack.inventory[0].gradingReport.centeringAssist.centeringLabel === null &&
+    rescoreLog.length === 1 &&
+    rescoreLog[0] === '[centering-assist] rescore scanId=366A0E19 old=1.0 assisted new=null',
+    rescoreLog);
+  rescoreLog.length = 0;
+  assert('a second pass after withholding logs nothing',
+    assist.rescoreDatabase(storedBack, emitRescore) === 0 && rescoreLog.length === 0, rescoreLog);
+  const loggedByDefault = [];
+  const previousLog = console.log;
+  console.log = function (line) {
+    loggedByDefault.push(line);
+    previousLog.apply(console, arguments);
+  };
+  const defaultDb = {
+    inventory: [{
+      id: 'default-log-scan',
+      side: 'back',
+      gradingReport: {
+        side: 'back',
+        subGrades: { centering: null },
+        centeringAssist: {
+          adjustedCount: 1,
+          side: 'front',
+          centering: 9,
+          centeringLabel: '9.0 assisted',
+          borderWidthsMm: { left: 6, right: 4, top: 5, bottom: 5 }
+        }
+      }
+    }]
+  };
+  let defaultChanged = 0;
+  let defaultSecond = 1;
+  try {
+    defaultChanged = assist.rescoreDatabase(defaultDb);
+    const afterFirst = loggedByDefault.length;
+    defaultSecond = assist.rescoreDatabase(defaultDb);
+    assert('startup rewrite logs through console.log',
+      defaultChanged === 1 &&
+      afterFirst === 1 &&
+      loggedByDefault[0] === '[centering-assist] rescore scanId=default-log-scan old=9.0 assisted new=10.0 assisted' &&
+      defaultSecond === 0 &&
+      loggedByDefault.length === 1,
+      loggedByDefault);
+  } finally {
+    console.log = previousLog;
+  }
+
+  const repairLog = [];
+  const captureInstant = '2026-10-12T21:57:08.000Z';
+  const corrupt = {
+    inventory: [{
+      scanId: '366A0E19-0000-4000-8000-000000000001',
+      deckId: 'TD-13',
+      side: 'front',
+      name: 'replaced',
+      createdAt: '2026-10-13T13:54:36.000Z',
+      gradingReport: {
+        side: 'front',
+        centeringAssist: { adjustedCount: 1, centeringLabel: '9.0 assisted', borderWidthsMm: { left: 5.6, right: 4.4, top: 5, bottom: 5 } }
+      }
+    }]
+  };
+  const backup = {
+    missing: false,
+    path: 'data/' + assist.BACKUP_366_NAME,
+    inventory: [{
+      scanId: '366A0E19-0000-4000-8000-000000000001',
+      deckId: 'TD-06',
+      side: 'back',
+      name: 'Dana Evans',
+      pairId: 'front-pair-1',
+      createdAt: captureInstant,
+      gradingReport: { side: 'back', finalScore: null, centeringAssist: { centeringLabel: 'old' } }
+    }]
+  };
+  assert('366A0E19 copies createdAt and other original fields from the backup',
+    assist.repairRecord366A0E19(corrupt, function (line) { repairLog.push(line); }, backup) === 1 &&
+    corrupt.inventory[0].deckId === 'TD-06' &&
+    corrupt.inventory[0].side === 'back' &&
+    corrupt.inventory[0].gradingReport.side === 'back' &&
+    corrupt.inventory[0].createdAt === captureInstant &&
+    corrupt.inventory[0].name === 'Dana Evans' &&
+    corrupt.inventory[0].pairId === 'front-pair-1' &&
+    corrupt.inventory[0].gradingReport.centeringAssist.centeringLabel === '9.0 assisted' &&
+    corrupt.inventory[0].createdAt !== '2026-10-12T20:57:08.000Z');
+  assert('the repair log names the scan, the deck, the side, and the backup time',
+    repairLog.length === 1 &&
+    repairLog[0].indexOf('scanId=366A0E19-0000-4000-8000-000000000001') !== -1 &&
+    repairLog[0].indexOf('deckId TD-13 -> TD-06') !== -1 &&
+    repairLog[0].indexOf('side front -> back') !== -1 &&
+    repairLog[0].indexOf('2026-10-13T13:54:36.000Z') !== -1 &&
+    repairLog[0].indexOf(captureInstant) !== -1 &&
+    repairLog[0].indexOf('restored') !== -1 &&
+    repairLog[0].indexOf('2026-10-12T20:57:08') === -1,
+    repairLog);
+  assert('a second repair from the same backup logs nothing',
+    assist.repairRecord366A0E19(corrupt, function (line) { repairLog.push(line); }, backup) === 0 &&
+    repairLog.length === 1, repairLog);
+  const missingBackupLog = [];
+  const missingClock = {
+    inventory: [{
+      scanId: '366A0E19-0000-4000-8000-000000000001',
+      deckId: 'TD-13',
+      side: 'front',
+      createdAt: '2026-10-13T13:54:36.000Z',
+      gradingReport: { side: 'front' }
+    }]
+  };
+  assert('a missing backup leaves createdAt unchanged and still sets TD-06 back',
+    assist.repairRecord366A0E19(missingClock, function (line) { missingBackupLog.push(line); }, {
+      missing: true,
+      path: 'data/' + assist.BACKUP_366_NAME
+    }) === 1 &&
+    missingClock.inventory[0].createdAt === '2026-10-13T13:54:36.000Z' &&
+    missingClock.inventory[0].deckId === 'TD-06' &&
+    missingClock.inventory[0].side === 'back' &&
+    missingBackupLog.length === 1 &&
+    missingBackupLog[0].indexOf('backup missing') !== -1 &&
+    missingBackupLog[0].indexOf('createdAt 2026-10-13T13:54:36.000Z left unchanged') !== -1 &&
+    missingBackupLog[0].indexOf('2026-10-12T21:57:08') === -1 &&
+    missingBackupLog[0].indexOf('2026-10-12T20:57:08') === -1,
+    missingBackupLog);
+  const absentLog = [];
+  const absentClock = {
+    inventory: [{
+      scanId: '366A0E19-0000-4000-8000-000000000001',
+      deckId: 'TD-02',
+      side: 'front',
+      createdAt: '2026-10-13T13:54:36.000Z',
+      gradingReport: { side: 'front' }
+    }]
+  };
+  assert('a backup without that scan leaves createdAt unchanged',
+    assist.repairRecord366A0E19(absentClock, function (line) { absentLog.push(line); }, {
+      missing: false,
+      inventory: [{ scanId: 'other-scan-0001', createdAt: captureInstant, deckId: 'TD-06', side: 'back' }]
+    }) === 1 &&
+    absentClock.inventory[0].createdAt === '2026-10-13T13:54:36.000Z' &&
+    absentClock.inventory[0].deckId === 'TD-06' &&
+    absentClock.inventory[0].side === 'back' &&
+    absentLog[0].indexOf('not in backup') !== -1 &&
+    absentLog[0].indexOf('createdAt 2026-10-13T13:54:36.000Z left unchanged') !== -1,
+    absentLog);
+  const twoLog = [];
+  const twoDb = {
+    inventory: [
+      {
+        id: 'rescore-a',
+        side: 'back',
+        gradingReport: {
+          side: 'back',
+          centeringAssist: {
+            adjustedCount: 1, side: 'front', centering: 9, centeringLabel: '9.0 assisted',
+            borderWidthsMm: { left: 6, right: 4, top: 5, bottom: 5 }
+          }
+        }
+      },
+      {
+        id: 'rescore-b',
+        side: 'back',
+        gradingReport: {
+          side: 'back',
+          centeringAssist: {
+            adjustedCount: 1, side: 'front', centering: 1, centeringLabel: '1.0 assisted',
+            borderWidthsMm: { left: 9.1, right: 0.9, top: 5, bottom: 5 }
+          }
+        }
+      }
+    ]
+  };
+  assert('startup rescore logs each record with the scan id and the old and new labels',
+    assist.rescoreDatabase(twoDb, function (line) { twoLog.push(line); }) === 2 &&
+    twoLog.length === 2 &&
+    twoLog[0] === '[centering-assist] rescore scanId=rescore-a old=9.0 assisted new=10.0 assisted' &&
+    twoLog[1] === '[centering-assist] rescore scanId=rescore-b old=1.0 assisted new=null',
+    twoLog);
+
+  const identityReport = blankWidths('back');
+  const identityBuilt = assist.buildFromMillimetres(identityReport, { left: 5.6, right: 4.4, top: 5, bottom: 5 }, {
+    scanId: 'identity-back-0001',
+    confirmImplausible: true,
+    side: 'back'
+  });
+  const identitySaved = assist.applyStoredAssist({
+    scanId: 'identity-back-0001',
+    deckId: 'TD-06',
+    side: 'back',
+    createdAt: '2026-10-12T20:57:08.000Z',
+    gradingReport: identityReport
+  }, identityBuilt.assist, '2026-10-13T13:54:36.000Z', { setSide: 'front' });
+  assert('saving an adjustment keeps deck id, side, and scan time',
+    identityBuilt.ok === true &&
+    identitySaved.deckId === 'TD-06' &&
+    identitySaved.side === 'back' &&
+    identitySaved.gradingReport.side === 'back' &&
+    identitySaved.createdAt === '2026-10-12T20:57:08.000Z' &&
+    identitySaved.gradingReport.centeringAssist.adjustedAt === '2026-10-13T13:54:36.000Z' &&
+    identitySaved.gradingReport.centeringAssist.side === 'back' &&
+    identitySaved.gradingReport.centeringAssist.centering === 10 &&
+    identitySaved.gradingReport.centeringAssist.centeringLabel === '10.0 assisted',
+    identitySaved.gradingReport.centeringAssist);
+  const missingReport = blankWidths(undefined);
+  const missingBuilt = assist.buildFromMillimetres(missingReport, { left: 5.6, right: 4.4, top: 5, bottom: 5 }, {
+    scanId: 'identity-missing-01',
+    confirmImplausible: true
+  });
+  const missingSaved = assist.applyStoredAssist({
+    scanId: 'identity-missing-01',
+    deckId: 'TD-04',
+    createdAt: '2026-10-11T00:00:00.000Z',
+    gradingReport: missingReport
+  }, missingBuilt.assist, '2026-10-13T13:54:36.000Z', {});
+  assert('a missing side does not default to front',
+    missingBuilt.ok === true &&
+    missingSaved.side == null &&
+    (missingSaved.gradingReport.side == null) &&
+    missingSaved.gradingReport.centeringAssist.side == null &&
+    missingSaved.gradingReport.centeringAssist.centering == null &&
+    missingSaved.gradingReport.centeringAssist.centeringLabel == null &&
+    missingSaved.deckId === 'TD-04' &&
+    missingSaved.createdAt === '2026-10-11T00:00:00.000Z',
+    missingSaved);
+  const missingBack = assist.applyStoredAssist(
+    missingSaved,
+    missingSaved.gradingReport.centeringAssist,
+    '2026-10-13T13:55:00.000Z',
+    { setSide: 'back' }
+  );
+  assert('an explicit back on a side-less record uses the back table',
+    missingBack.side === 'back' &&
+    missingBack.deckId === 'TD-04' &&
+    missingBack.createdAt === '2026-10-11T00:00:00.000Z' &&
+    missingBack.gradingReport.centeringAssist.centering === 10 &&
+    missingBack.gradingReport.centeringAssist.centeringLabel === '10.0 assisted' &&
+    missingBack.gradingReport.centeringAssist.adjustedAt === '2026-10-13T13:55:00.000Z');
+  const stillBack = assist.applyStoredAssist(
+    missingBack,
+    missingBack.gradingReport.centeringAssist,
+    '2026-10-13T13:56:00.000Z',
+    { setSide: 'front' }
+  );
+  assert('a later setSide does not replace a stored side',
+    stillBack.side === 'back' &&
+    stillBack.gradingReport.side === 'back' &&
+    stillBack.gradingReport.centeringAssist.centeringLabel === '10.0 assisted' &&
+    stillBack.createdAt === '2026-10-11T00:00:00.000Z' &&
+    stillBack.deckId === 'TD-04');
+
   assert('user mm stored', built.assist.sides.left.userWidthMm === 4 && built.assist.sides.left.kind === 'assisted');
   assert('unmoved measured sides stay engine', built.assist.sides.right.source === 'engine' && built.assist.sides.right.userWidthMm === null);
   assert('engine centering on the report object is unchanged',
@@ -248,12 +591,36 @@ async function main() {
     category: 'UNKNOWN',
     imagePath: '/uploads/none.jpg',
     engine: { version: '2026.10.01-border-band', commit: 'abc1234' },
-    gradingReport: reportWith(),
+    gradingReport: reportWith({ side: 'front' }),
+    side: 'front',
     createdAt: '2026-10-09T00:00:00.000Z'
   };
+  const backScanId = 'td06-back-0001';
+  const backStored = {
+    id: backScanId,
+    scanId: backScanId,
+    name: 'TD-06 back',
+    category: 'UNKNOWN',
+    deckId: 'TD-06',
+    side: 'back',
+    imagePath: '/uploads/none.jpg',
+    gradingReport: reportWith({ scanId: backScanId, side: 'back' }),
+    createdAt: '2026-10-12T20:57:08.000Z'
+  };
+  const unknownScanId = 'noside-scan-0001';
+  const unknownStored = {
+    id: unknownScanId,
+    scanId: unknownScanId,
+    name: 'Side missing',
+    category: 'UNKNOWN',
+    deckId: 'TD-04',
+    imagePath: '/uploads/none.jpg',
+    gradingReport: reportWith({ scanId: unknownScanId }),
+    createdAt: '2026-10-11T00:00:00.000Z'
+  };
   fs.writeFileSync(path.join(process.env.JUDGE_DATA_DIR, 'database.json'), JSON.stringify({
-    inventory: [stored],
-    categoryCounts: { SPORTS: 0, TCG: 0, UNKNOWN: 1 }
+    inventory: [stored, backStored, unknownStored],
+    categoryCounts: { SPORTS: 0, TCG: 0, UNKNOWN: 3 }
   }));
   const { app } = require('../server');
   const server = await new Promise(function (resolve) {
@@ -277,7 +644,13 @@ async function main() {
   const posted = await fetch(base + '/api/scans/' + scanId + '/centering-assist', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lines: { left: lineForMm('left', 4) }, confirmImplausible: true })
+    body: JSON.stringify({
+      lines: { left: lineForMm('left', 4) },
+      confirmImplausible: true,
+      deckId: 'TD-13',
+      side: 'back',
+      createdAt: '2026-10-13T13:54:36.000Z'
+    })
   }).then(function (r) { return r.json(); });
   assert('POST stores an assisted grade',
     posted.ok === true &&
@@ -286,6 +659,14 @@ async function main() {
     posted.item.gradingReport.subGrades.centering === null &&
     posted.item.gradingReport.centeringMetrics.borderWidthsMm.left === null &&
     posted.item.gradingReport.centeringAssist.sides.left.userWidthMm === 4, posted);
+  assert('POST ignores a deck id, side, and clock sent with the lines',
+    posted.item.deckId == null &&
+    posted.item.side === 'front' &&
+    posted.item.gradingReport.side === 'front' &&
+    posted.item.createdAt === '2026-10-09T00:00:00.000Z' &&
+    posted.assist.adjustedAt &&
+    posted.assist.adjustedAt !== posted.item.createdAt,
+    { deckId: posted.item.deckId, side: posted.item.side, createdAt: posted.item.createdAt, adjustedAt: posted.assist.adjustedAt });
 
   const onDisk = JSON.parse(fs.readFileSync(path.join(process.env.JUDGE_DATA_DIR, 'database.json'), 'utf8'));
   const diskReport = onDisk.inventory[0].gradingReport;
@@ -392,6 +773,85 @@ async function main() {
     copiedText.indexOf('9.876') === -1);
   assert('a report with no user line is unchanged',
     JSON.stringify(assist.redactReportForEgress(reportWith())) === JSON.stringify(reportWith()));
+
+  const backPosted = await fetch(base + '/api/scans/' + backScanId + '/centering-assist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lines: {
+        left: lineForMm('left', 5.6),
+        right: lineForMm('right', 4.4),
+        top: lineForMm('top', 5),
+        bottom: lineForMm('bottom', 5)
+      },
+      confirmImplausible: true,
+      deckId: 'TD-13',
+      side: 'front',
+      createdAt: '2026-10-13T13:54:36.000Z'
+    })
+  }).then(function (r) { return r.json(); });
+  assert('re-saving a back keeps TD-06, back, the capture time, and the back table',
+    backPosted.ok === true &&
+    backPosted.item.deckId === 'TD-06' &&
+    backPosted.item.side === 'back' &&
+    backPosted.item.gradingReport.side === 'back' &&
+    backPosted.item.createdAt === '2026-10-12T20:57:08.000Z' &&
+    backPosted.assist.side === 'back' &&
+    backPosted.assist.centeringLabel === '10.0 assisted' &&
+    backPosted.assist.centering === 10 &&
+    backPosted.assist.adjustedAt &&
+    backPosted.assist.adjustedAt !== '2026-10-12T20:57:08.000Z',
+    backPosted.assist && {
+      deckId: backPosted.item.deckId,
+      side: backPosted.item.side,
+      createdAt: backPosted.item.createdAt,
+      label: backPosted.assist.centeringLabel,
+      adjustedAt: backPosted.assist.adjustedAt
+    });
+  const backFlip = await fetch(base + '/api/scans/' + backScanId + '/centering-assist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ setSide: 'front' })
+  });
+  const backFlipBody = await backFlip.json();
+  assert('setSide is refused once a scan already has a side',
+    backFlip.status === 400 && backFlipBody.ok === false, backFlipBody);
+
+  const unknownPosted = await fetch(base + '/api/scans/' + unknownScanId + '/centering-assist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lines: { left: lineForMm('left', 4) },
+      confirmImplausible: true,
+      deckId: 'TD-13',
+      side: 'front',
+      createdAt: '2026-10-13T13:54:36.000Z'
+    })
+  }).then(function (r) { return r.json(); });
+  assert('POST on a side-less scan does not invent front',
+    unknownPosted.ok === true &&
+    unknownPosted.item.side == null &&
+    unknownPosted.item.gradingReport.side == null &&
+    unknownPosted.assist.side == null &&
+    unknownPosted.assist.centeringLabel == null &&
+    unknownPosted.assist.centering == null &&
+    unknownPosted.item.deckId === 'TD-04' &&
+    unknownPosted.item.createdAt === '2026-10-11T00:00:00.000Z',
+    unknownPosted.item && { side: unknownPosted.item.side, deckId: unknownPosted.item.deckId, label: unknownPosted.assist.centeringLabel });
+  const setBack = await fetch(base + '/api/scans/' + unknownScanId + '/centering-assist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ setSide: 'back', deckId: 'TD-13', createdAt: '2026-10-13T13:54:36.000Z' })
+  }).then(function (r) { return r.json(); });
+  assert('setSide back on a side-less scan scores the back table and keeps the deck and time',
+    setBack.ok === true &&
+    setBack.item.side === 'back' &&
+    setBack.item.gradingReport.side === 'back' &&
+    setBack.assist.side === 'back' &&
+    setBack.assist.centeringLabel === '10.0 assisted' &&
+    setBack.item.deckId === 'TD-04' &&
+    setBack.item.createdAt === '2026-10-11T00:00:00.000Z',
+    setBack.assist && { side: setBack.item.side, label: setBack.assist.centeringLabel, deckId: setBack.item.deckId });
 
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });

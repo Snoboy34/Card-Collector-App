@@ -707,14 +707,44 @@ app.post('/api/scans/:scanId/centering-assist', (req, res) => {
   if (!scanId) return res.status(400).json({ ok: false, error: 'invalid scan id' });
   const item = findGradedItem(scanId);
   if (!item || !item.gradingReport) return res.status(404).json({ ok: false, error: 'scan not found' });
-  const consent = req.body && req.body.consent === true;
+  const body = req.body || {};
+  // Deck id, side, and createdAt are the capture's. The body cannot change them.
+  const setSide = body.setSide === 'front' || body.setSide === 'back' ? body.setSide : null;
+  const storedFace = centeringAssist.knownFace(item.side) || centeringAssist.knownFace(item.gradingReport.side);
+  const now = new Date().toISOString();
+  const lines = body.lines;
+  const hasLines = lines && typeof lines === 'object' && Object.keys(lines).length > 0;
+  if (!hasLines) {
+    if (!setSide) return res.status(400).json({ ok: false, error: 'no lines' });
+    if (storedFace) return res.status(400).json({ ok: false, error: 'this scan already has a side' });
+    const existing = item.gradingReport.centeringAssist || {
+      source: 'assisted',
+      gradeSource: 'assisted',
+      adjustedCount: 0,
+      headline: null,
+      sides: {},
+      borderWidthsMm: {},
+      centering: null,
+      centeringLabel: null
+    };
+    const next = centeringAssist.applyStoredAssist(item, existing, now, { setSide: setSide });
+    if (next.side === 'back' || next.side === 'front') {
+      const labeled = deckStore.labelScan(scanId, { side: next.side }, 'assist');
+      if (!labeled.ok) console.warn('[deck] side not labeled for ' + scanId + ': ' + labeled.error);
+    }
+    persistGradedItem(next, next.category || 'UNKNOWN');
+    console.log('[centering-assist] scanId=' + scanId + ' setSide=' + setSide + ' adjustedAt=' + now);
+    return res.json({ ok: true, item: next, assist: next.gradingReport.centeringAssist, exampleCount: 0 });
+  }
+  const consent = body.consent === true;
   const engineStamp = item.engine || {};
-  const built = centeringAssist.buildFromLines(item.gradingReport, req.body && req.body.lines, {
+  const built = centeringAssist.buildFromLines(item.gradingReport, lines, {
     scanId: scanId,
     engineVersion: engineStamp.version || item.gradingReport.engineVersion || grading.ENGINE_VERSION,
     engineCommit: engineStamp.commit || ENGINE.commit || null,
     consent: consent,
-    confirmImplausible: req.body && req.body.confirmImplausible === true
+    confirmImplausible: body.confirmImplausible === true,
+    side: storedFace
   });
   if (!built.ok) {
     return res.status(400).json({
@@ -724,12 +754,17 @@ app.post('/api/scans/:scanId/centering-assist', (req, res) => {
     });
   }
   assistStore().append(built.examples);
-  const next = centeringAssist.attachAssist(item, built.assist);
+  const next = centeringAssist.applyStoredAssist(item, built.assist, now, { setSide: storedFace ? null : setSide });
+  if (!storedFace && next.side) {
+    const labeled = deckStore.labelScan(scanId, { side: next.side }, 'assist');
+    if (!labeled.ok) console.warn('[deck] side not labeled for ' + scanId + ': ' + labeled.error);
+  }
   persistGradedItem(next, next.category || 'UNKNOWN');
   console.log('[centering-assist] scanId=' + scanId +
     ' adjusted=' + built.assist.adjustedCount +
-    ' consent=' + (consent ? 'true' : 'false'));
-  return res.json({ ok: true, item: next, assist: built.assist, exampleCount: built.examples.length });
+    ' consent=' + (consent ? 'true' : 'false') +
+    ' adjustedAt=' + now);
+  return res.json({ ok: true, item: next, assist: next.gradingReport.centeringAssist, exampleCount: built.examples.length });
 });
 
 app.get('/api/debug/scan/:scanId', localNetworkOnly, (req, res) => {
@@ -1090,8 +1125,60 @@ function ensureDatabaseFile() {
   console.log('Created empty ' + DB_PATH);
 }
 
+function repairKnownLabels() {
+  const labels = deckStore.loadLabels();
+  const db = loadDatabase();
+  const seen = {};
+  (db.inventory || []).forEach(function (item) {
+    const id = String(item && (item.scanId || item.id) || '');
+    if (id.toUpperCase().indexOf('366A0E19') === 0) seen[id] = true;
+  });
+  Object.keys((labels && labels.scans) || {}).forEach(function (id) {
+    if (id.toUpperCase().indexOf('366A0E19') === 0) seen[id] = true;
+  });
+  Object.keys(seen).forEach(function (id) {
+    const label = (labels.scans || {})[id] || {};
+    if (label.deckId === 'TD-06' && label.side === 'back') return;
+    const beforeDeck = label.deckId || 'null';
+    const beforeSide = label.side || 'null';
+    const res = deckStore.labelScan(id, { deckId: 'TD-06', side: 'back' }, 'repair');
+    if (!res.ok) {
+      console.warn('[centering-assist] repair label failed scanId=' + id + ' ' + res.error);
+      return;
+    }
+    console.log('[centering-assist] repair label scanId=' + id +
+      ' deckId ' + beforeDeck + ' -> TD-06' +
+      ' side ' + beforeSide + ' -> back');
+  });
+}
+
+function loadRepairBackup() {
+  const backupPath = path.join(DATA_DIR, centeringAssist.BACKUP_366_NAME);
+  if (!fs.existsSync(backupPath)) return { missing: true, path: backupPath };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+    return { missing: false, path: backupPath, inventory: (parsed && parsed.inventory) || [] };
+  } catch (err) {
+    return { missing: true, unreadable: true, path: backupPath, error: err && err.message ? err.message : String(err) };
+  }
+}
+
+function refreshStoredAssists() {
+  const db = loadDatabase();
+  const backup = loadRepairBackup();
+  const repaired = centeringAssist.repairRecord366A0E19(db, console.log, backup);
+  repairKnownLabels();
+  const changed = centeringAssist.rescoreDatabase(db);
+  if (!repaired && !changed) return;
+  saveDatabase(db);
+  if (changed) {
+    console.log('[centering-assist] rescored ' + changed + ' stored assist' + (changed === 1 ? '' : 's'));
+  }
+}
+
 function startServer() {
   ensureDatabaseFile();
+  refreshStoredAssists();
   if (LAN_HTTPS) {
     let tls;
     try {
