@@ -30,6 +30,8 @@
  * other three sides. The line may be a segment; it does not have to run
  * the whole side. A piece that sits only in the corners does not hide that
  * stroke when the same profile already crosses the middle of the side.
+ * Two runs of that same stroke on one side are one line. A gap where the
+ * print breaks does not split them. The width stays the outermost points.
  * What qualifies it is the same profile on all four sides:
  * a thin silver line, a thicker black line, and a thin silver line inside
  * that. A thin line under half a millimetre counts. A logo, stamp, or
@@ -1590,9 +1592,22 @@ function lineAtBlackEdge(line) {
     };
   });
   if (points.length < 2) return null;
+  const readingPoints = (line.readingPoints || []).map(function (p) {
+    return {
+      i: p.i,
+      depth: p.black,
+      x: p.x,
+      y: p.y,
+      nx: p.nx,
+      ny: p.ny,
+      alongMm: p.alongMm,
+      black: p.black
+    };
+  }).filter(function (p) { return p && p.depth != null && isFinite(p.depth); });
   const depths = points.map(function (p) { return p.depth; });
   return {
     points: points,
+    readingPoints: readingPoints.length >= 2 ? readingPoints : null,
     median: median(depths),
     min: Math.min.apply(null, depths),
     max: Math.max.apply(null, depths),
@@ -1603,8 +1618,51 @@ function lineAtBlackEdge(line) {
   };
 }
 
+// The same silver-black stroke can break along a side and come back.
+// Those runs are one line. A deeper frame, or a different width, is not.
+function joinSameStroke(chosen, siblings) {
+  if (!chosen || !siblings || !siblings.length) return chosen;
+  const extra = siblings.filter(function (line) {
+    if (!line || line === chosen || !line.points || line.points.length < 2) return false;
+    if (Math.abs(line.width - chosen.width) > 0.16) return false;
+    if (line.blackWidth == null || chosen.blackWidth == null) return false;
+    if (Math.abs(line.blackWidth - chosen.blackWidth) > 0.45) return false;
+    if (Math.abs(line.median - chosen.median) > 0.45) return false;
+    return true;
+  });
+  if (!extra.length) return chosen;
+  const points = chosen.points.slice();
+  let cov = chosen.cov || 0;
+  extra.forEach(function (line) {
+    line.points.forEach(function (p) { points.push(p); });
+    cov += line.cov || 0;
+  });
+  const depths = points.map(function (p) { return p.depth; });
+  return {
+    points: points,
+    // The matched run is the outer edge the four sides agreed on. A speck
+    // on the other run does not move that width. The overlay still follows
+    // both runs, so the line is not the slope of one end stretched across
+    // the side.
+    readingPoints: chosen.points,
+    median: median(depths),
+    min: Math.min.apply(null, depths),
+    max: Math.max.apply(null, depths),
+    width: chosen.width,
+    black: chosen.black,
+    blackWidth: chosen.blackWidth,
+    innerWidth: chosen.innerWidth,
+    cov: Math.min(1, cov),
+    profile: true
+  };
+}
+
 function publishFrameLine(side, line, stations) {
-  const reading = outermostReading(line);
+  const reading = outermostReading(
+    line.readingPoints && line.readingPoints.length >= 2
+      ? { points: line.readingPoints }
+      : line
+  );
   if (!reading) return false;
   const source = (line.points && line.points.length >= 2) ? line.points : reading.points;
   const pts = source.map(function (p) {
@@ -1848,7 +1906,7 @@ function applyRectangularFrame(sides) {
       if (!side) return;
       side.marginPatterned = !!chromaticSide[name];
       side.sawProfile = segments[name].length > 0;
-      publishFrameLine(side, profileMatch[name], side.stations || []);
+      publishFrameLine(side, joinSameStroke(profileMatch[name], segments[name]), side.stations || []);
       delete side.stations;
       delete side.goldEnds;
     });
@@ -1870,7 +1928,7 @@ function applyRectangularFrame(sides) {
       const blackLines = {};
       let blackReady = true;
       names.forEach(function (name) {
-        blackLines[name] = lineAtBlackEdge(blackMatch[name]);
+        blackLines[name] = lineAtBlackEdge(joinSameStroke(blackMatch[name], segments[name]));
         if (!blackLines[name]) blackReady = false;
       });
       if (blackReady) {
@@ -2969,7 +3027,7 @@ function buildAnswerKey(measurements, dpi, previousApproved) {
     nominalCardMm: { width: NOMINAL_W_MM, height: NOMINAL_H_MM },
     biasAgreeMm: BIAS_AGREE_MM,
     borderRule: BORDER_RULE,
-    definition: 'Border is the perpendicular distance from the card edge to the outermost points of the design-block outline on that side. A patterned margin is margin, including chrome rays and angled shapes. The outline may be a segment: the same thin-silver, thicker-black, thin-silver profile has to appear on all four sides, parallel to the edges. A gold line with black immediately inside it is the outline when that same profile is on all four sides; the contacts are the outer corners, two per side. A logo, stamp, lettering, or ray on only one side is not the outline. On the HP ENVY 6400, image-top is the hinge and the shadow side. Top and bottom are each taken from the scan in which that edge faces image-bottom (rule 2026.10.13-shadow-free-v1). Left and right stay the mean of the upright scan and the swapped 180 degree scan, and that axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. Bias is reported and is not subtracted. No fixed band is subtracted. A side whose clear scan is withheld stays unmeasured. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. A design-referenced name edge or an anchor (a diamond tip, a letter descender) is not a centering measurement and is not a grade. Unapproved until a person checks the overlay.',
+    definition: 'Border is the perpendicular distance from the card edge to the outermost points of the design-block outline on that side. A patterned margin is margin, including chrome rays and angled shapes. The outline may be a segment: the same thin-silver, thicker-black, thin-silver profile has to appear on all four sides, parallel to the edges. Two runs of that stroke on one side are one line. A gold line with black immediately inside it is the outline when that same profile is on all four sides; the contacts are the outer corners, two per side. A logo, stamp, lettering, or ray on only one side is not the outline. On the HP ENVY 6400, image-top is the hinge and the shadow side. Top and bottom are each taken from the scan in which that edge faces image-bottom (rule 2026.10.13-shadow-free-v1). Left and right stay the mean of the upright scan and the swapped 180 degree scan, and that axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. Bias is reported and is not subtracted. No fixed band is subtracted. A side whose clear scan is withheld stays unmeasured. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. A design-referenced name edge or an anchor (a diamond tip, a letter descender) is not a centering measurement and is not a grade. Unapproved until a person checks the overlay.',
     cards: outCards
   };
 }

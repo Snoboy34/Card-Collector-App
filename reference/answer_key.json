@@ -6,7 +6,7 @@
     "height": 88.9
   },
   "biasAgreeMm": 0.02,
-  "definition": "Border is the perpendicular distance from the card edge to the outermost points of the design-block outline on that side. A patterned margin is margin, including chrome rays and angled shapes. The outline may be a segment: the same thin-silver, thicker-black, thin-silver profile has to appear on all four sides, parallel to the edges. A gold line with black immediately inside it is the outline when that same profile is on all four sides; the contacts are the outer corners, two per side. A logo, stamp, lettering, or ray on only one side is not the outline. On the HP ENVY 6400, image-top is the hinge and the shadow side. Top and bottom are each taken from the scan in which that edge faces image-bottom (rule 2026.10.13-shadow-free-v1). Left and right stay the mean of the upright scan and the swapped 180 degree scan, and that axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. Bias is reported and is not subtracted. No fixed band is subtracted. A side whose clear scan is withheld stays unmeasured. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. A design-referenced name edge or an anchor (a diamond tip, a letter descender) is not a centering measurement and is not a grade. Unapproved until a person checks the overlay.",
+  "definition": "Border is the perpendicular distance from the card edge to the outermost points of the design-block outline on that side. A patterned margin is margin, including chrome rays and angled shapes. The outline may be a segment: the same thin-silver, thicker-black, thin-silver profile has to appear on all four sides, parallel to the edges. Two runs of that stroke on one side are one line. A gold line with black immediately inside it is the outline when that same profile is on all four sides; the contacts are the outer corners, two per side. A logo, stamp, lettering, or ray on only one side is not the outline. On the HP ENVY 6400, image-top is the hinge and the shadow side. Top and bottom are each taken from the scan in which that edge faces image-bottom (rule 2026.10.13-shadow-free-v1). Left and right stay the mean of the upright scan and the swapped 180 degree scan, and that axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. Bias is reported and is not subtracted. No fixed band is subtracted. A side whose clear scan is withheld stays unmeasured. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. A design-referenced name edge or an anchor (a diamond tip, a letter descender) is not a centering measurement and is not a grade. Unapproved until a person checks the overlay.",
   "cards": {
     "TD-01": {
       "sides": {
@@ -32128,7 +32128,7 @@
         },
         "left": {
           "mm": null,
-          "confidence": 0.52,
+          "confidence": 0.551,
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
@@ -32140,7 +32140,7 @@
         },
         "right": {
           "mm": null,
-          "confidence": 0.52,
+          "confidence": 0.579,
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
@@ -33580,12 +33580,12 @@
             },
             "left": {
               "mm": 3.17,
-              "confidence": 0.52,
+              "confidence": 0.579,
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.184,
-              "tiltDeg": 0.386,
+              "coverage": 0.318,
+              "tiltDeg": 0.182,
               "frameOuterMm": 3.17,
               "blackOuterMm": 3.46,
               "frameDiffMm": 0.29,
@@ -33722,15 +33722,111 @@
                 {
                   "alongMm": 31.303,
                   "depthMm": 3.4
+                },
+                {
+                  "alongMm": 60.103,
+                  "depthMm": 3.52
+                },
+                {
+                  "alongMm": 62.103,
+                  "depthMm": 3.48
+                },
+                {
+                  "alongMm": 63.303,
+                  "depthMm": 3.34
+                },
+                {
+                  "alongMm": 64.103,
+                  "depthMm": 3.52
+                },
+                {
+                  "alongMm": 65.703,
+                  "depthMm": 3.52
+                },
+                {
+                  "alongMm": 67.303,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 67.703,
+                  "depthMm": 3.5
+                },
+                {
+                  "alongMm": 68.103,
+                  "depthMm": 3.5
+                },
+                {
+                  "alongMm": 68.503,
+                  "depthMm": 3.5
+                },
+                {
+                  "alongMm": 68.903,
+                  "depthMm": 3.48
+                },
+                {
+                  "alongMm": 69.703,
+                  "depthMm": 3.5
+                },
+                {
+                  "alongMm": 70.103,
+                  "depthMm": 3.5
+                },
+                {
+                  "alongMm": 70.903,
+                  "depthMm": 3.52
+                },
+                {
+                  "alongMm": 71.303,
+                  "depthMm": 3.54
+                },
+                {
+                  "alongMm": 73.303,
+                  "depthMm": 3.52
+                },
+                {
+                  "alongMm": 73.703,
+                  "depthMm": 3.52
+                },
+                {
+                  "alongMm": 74.503,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 75.703,
+                  "depthMm": 3.54
+                },
+                {
+                  "alongMm": 76.103,
+                  "depthMm": 3.52
+                },
+                {
+                  "alongMm": 76.903,
+                  "depthMm": 3.54
+                },
+                {
+                  "alongMm": 77.703,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 78.503,
+                  "depthMm": 3.54
+                },
+                {
+                  "alongMm": 78.903,
+                  "depthMm": 3.54
+                },
+                {
+                  "alongMm": 79.303,
+                  "depthMm": 3.56
                 }
               ],
               "elements": [
                 {
                   "depthMm": 3.17,
                   "fromMm": 9.303,
-                  "toMm": 31.303,
-                  "coverage": 0.184,
-                  "stations": 33,
+                  "toMm": 79.303,
+                  "coverage": 0.318,
+                  "stations": 57,
                   "runs": [
                     {
                       "fromMm": 9.303,
@@ -33761,9 +33857,39 @@
                       "fromMm": 30.103,
                       "toMm": 31.303,
                       "stations": 3
+                    },
+                    {
+                      "fromMm": 60.103,
+                      "toMm": 60.103,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 62.103,
+                      "toMm": 62.103,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 63.303,
+                      "toMm": 64.103,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 65.703,
+                      "toMm": 65.703,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 67.303,
+                      "toMm": 71.303,
+                      "stations": 9
+                    },
+                    {
+                      "fromMm": 73.303,
+                      "toMm": 74.503,
+                      "stations": 3
                     }
                   ],
-                  "runCount": 6,
+                  "runCount": 13,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -34330,12 +34456,12 @@
             },
             "right": {
               "mm": 3.74,
-              "confidence": 0.52,
+              "confidence": 0.551,
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.112,
-              "tiltDeg": -0.134,
+              "coverage": 0.263,
+              "tiltDeg": -0.073,
               "frameOuterMm": 3.74,
               "blackOuterMm": 4.2,
               "frameDiffMm": 0.46,
@@ -34420,16 +34546,134 @@
                 {
                   "alongMm": 80.108,
                   "depthMm": 3.88
+                },
+                {
+                  "alongMm": 11.708,
+                  "depthMm": 3.78
+                },
+                {
+                  "alongMm": 12.508,
+                  "depthMm": 3.84
+                },
+                {
+                  "alongMm": 13.308,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 14.108,
+                  "depthMm": 3.86
+                },
+                {
+                  "alongMm": 14.508,
+                  "depthMm": 3.94
+                },
+                {
+                  "alongMm": 14.908,
+                  "depthMm": 3.92
+                },
+                {
+                  "alongMm": 15.708,
+                  "depthMm": 3.88
+                },
+                {
+                  "alongMm": 16.108,
+                  "depthMm": 3.96
+                },
+                {
+                  "alongMm": 16.908,
+                  "depthMm": 3.88
+                },
+                {
+                  "alongMm": 17.308,
+                  "depthMm": 3.86
+                },
+                {
+                  "alongMm": 17.708,
+                  "depthMm": 3.88
+                },
+                {
+                  "alongMm": 18.508,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 18.908,
+                  "depthMm": 3.88
+                },
+                {
+                  "alongMm": 19.308,
+                  "depthMm": 3.88
+                },
+                {
+                  "alongMm": 20.108,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 20.908,
+                  "depthMm": 3.82
+                },
+                {
+                  "alongMm": 21.308,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 22.108,
+                  "depthMm": 3.82
+                },
+                {
+                  "alongMm": 22.908,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 23.708,
+                  "depthMm": 3.78
+                },
+                {
+                  "alongMm": 24.508,
+                  "depthMm": 3.86
+                },
+                {
+                  "alongMm": 26.508,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 27.308,
+                  "depthMm": 3.88
+                },
+                {
+                  "alongMm": 28.108,
+                  "depthMm": 3.96
+                },
+                {
+                  "alongMm": 28.908,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 29.708,
+                  "depthMm": 3.84
+                },
+                {
+                  "alongMm": 30.508,
+                  "depthMm": 3.9
                 }
               ],
               "elements": [
                 {
                   "depthMm": 3.74,
-                  "fromMm": 61.308,
+                  "fromMm": 11.708,
                   "toMm": 80.108,
-                  "coverage": 0.112,
-                  "stations": 20,
+                  "coverage": 0.263,
+                  "stations": 47,
                   "runs": [
+                    {
+                      "fromMm": 11.708,
+                      "toMm": 24.508,
+                      "stations": 21
+                    },
+                    {
+                      "fromMm": 26.508,
+                      "toMm": 30.508,
+                      "stations": 6
+                    },
                     {
                       "fromMm": 61.308,
                       "toMm": 61.308,
@@ -34461,7 +34705,7 @@
                       "stations": 1
                     }
                   ],
-                  "runCount": 6,
+                  "runCount": 8,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -36509,12 +36753,12 @@
             },
             "left": {
               "mm": 3.72,
-              "confidence": 0.52,
+              "confidence": 0.565,
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.168,
-              "tiltDeg": -0.064,
+              "coverage": 0.291,
+              "tiltDeg": 0.078,
               "frameOuterMm": 3.72,
               "blackOuterMm": 4.2,
               "frameDiffMm": 0.48,
@@ -36639,15 +36883,103 @@
                 {
                   "alongMm": 25.7,
                   "depthMm": 3.86
+                },
+                {
+                  "alongMm": 59.3,
+                  "depthMm": 3.84
+                },
+                {
+                  "alongMm": 59.7,
+                  "depthMm": 3.84
+                },
+                {
+                  "alongMm": 60.9,
+                  "depthMm": 3.82
+                },
+                {
+                  "alongMm": 63.7,
+                  "depthMm": 3.94
+                },
+                {
+                  "alongMm": 67.3,
+                  "depthMm": 3.78
+                },
+                {
+                  "alongMm": 68.1,
+                  "depthMm": 3.9
+                },
+                {
+                  "alongMm": 68.5,
+                  "depthMm": 3.84
+                },
+                {
+                  "alongMm": 68.9,
+                  "depthMm": 3.84
+                },
+                {
+                  "alongMm": 69.3,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 70.1,
+                  "depthMm": 3.88
+                },
+                {
+                  "alongMm": 70.5,
+                  "depthMm": 3.86
+                },
+                {
+                  "alongMm": 70.9,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 71.7,
+                  "depthMm": 3.88
+                },
+                {
+                  "alongMm": 72.1,
+                  "depthMm": 3.86
+                },
+                {
+                  "alongMm": 72.5,
+                  "depthMm": 3.88
+                },
+                {
+                  "alongMm": 73.7,
+                  "depthMm": 3.86
+                },
+                {
+                  "alongMm": 74.5,
+                  "depthMm": 3.9
+                },
+                {
+                  "alongMm": 75.3,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 75.7,
+                  "depthMm": 3.88
+                },
+                {
+                  "alongMm": 76.5,
+                  "depthMm": 3.8
+                },
+                {
+                  "alongMm": 76.9,
+                  "depthMm": 3.96
+                },
+                {
+                  "alongMm": 78.1,
+                  "depthMm": 3.78
                 }
               ],
               "elements": [
                 {
                   "depthMm": 3.72,
                   "fromMm": 9.3,
-                  "toMm": 25.7,
-                  "coverage": 0.168,
-                  "stations": 30,
+                  "toMm": 78.1,
+                  "coverage": 0.291,
+                  "stations": 52,
                   "runs": [
                     {
                       "fromMm": 9.3,
@@ -36658,9 +36990,39 @@
                       "fromMm": 22.1,
                       "toMm": 25.7,
                       "stations": 8
+                    },
+                    {
+                      "fromMm": 59.3,
+                      "toMm": 59.7,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 60.9,
+                      "toMm": 60.9,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 63.7,
+                      "toMm": 63.7,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 67.3,
+                      "toMm": 72.5,
+                      "stations": 11
+                    },
+                    {
+                      "fromMm": 73.7,
+                      "toMm": 76.9,
+                      "stations": 6
+                    },
+                    {
+                      "fromMm": 78.1,
+                      "toMm": 78.1,
+                      "stations": 1
                     }
                   ],
-                  "runCount": 2,
+                  "runCount": 8,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -37288,12 +37650,12 @@
             },
             "right": {
               "mm": 3.27,
-              "confidence": 0.52,
+              "confidence": 0.588,
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.173,
-              "tiltDeg": 0.045,
+              "coverage": 0.335,
+              "tiltDeg": -0.154,
               "frameOuterMm": 3.27,
               "blackOuterMm": 3.72,
               "frameDiffMm": 0.45,
@@ -37422,16 +37784,157 @@
                 {
                   "alongMm": 80.104,
                   "depthMm": 3.24
+                },
+                {
+                  "alongMm": 10.104,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 11.304,
+                  "depthMm": 3.62
+                },
+                {
+                  "alongMm": 11.704,
+                  "depthMm": 3.6
+                },
+                {
+                  "alongMm": 12.504,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 12.904,
+                  "depthMm": 3.46
+                },
+                {
+                  "alongMm": 13.304,
+                  "depthMm": 3.6
+                },
+                {
+                  "alongMm": 13.704,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 14.504,
+                  "depthMm": 3.6
+                },
+                {
+                  "alongMm": 14.904,
+                  "depthMm": 3.62
+                },
+                {
+                  "alongMm": 15.304,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 15.704,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 16.104,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 16.904,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 17.704,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 18.504,
+                  "depthMm": 3.48
+                },
+                {
+                  "alongMm": 19.304,
+                  "depthMm": 3.54
+                },
+                {
+                  "alongMm": 19.704,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 20.504,
+                  "depthMm": 3.52
+                },
+                {
+                  "alongMm": 20.904,
+                  "depthMm": 3.54
+                },
+                {
+                  "alongMm": 21.304,
+                  "depthMm": 3.54
+                },
+                {
+                  "alongMm": 21.704,
+                  "depthMm": 3.6
+                },
+                {
+                  "alongMm": 22.504,
+                  "depthMm": 3.32
+                },
+                {
+                  "alongMm": 23.704,
+                  "depthMm": 3.58
+                },
+                {
+                  "alongMm": 24.104,
+                  "depthMm": 3.52
+                },
+                {
+                  "alongMm": 24.504,
+                  "depthMm": 3.54
+                },
+                {
+                  "alongMm": 25.304,
+                  "depthMm": 3.56
+                },
+                {
+                  "alongMm": 26.504,
+                  "depthMm": 3.5
+                },
+                {
+                  "alongMm": 28.904,
+                  "depthMm": 3.52
+                },
+                {
+                  "alongMm": 29.304,
+                  "depthMm": 3.54
                 }
               ],
               "elements": [
                 {
                   "depthMm": 3.27,
-                  "fromMm": 58.904,
+                  "fromMm": 10.104,
                   "toMm": 80.104,
-                  "coverage": 0.173,
-                  "stations": 31,
+                  "coverage": 0.335,
+                  "stations": 60,
                   "runs": [
+                    {
+                      "fromMm": 10.104,
+                      "toMm": 10.104,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 11.304,
+                      "toMm": 22.504,
+                      "stations": 21
+                    },
+                    {
+                      "fromMm": 23.704,
+                      "toMm": 25.304,
+                      "stations": 4
+                    },
+                    {
+                      "fromMm": 26.504,
+                      "toMm": 26.504,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 28.904,
+                      "toMm": 29.304,
+                      "stations": 2
+                    },
                     {
                       "fromMm": 58.904,
                       "toMm": 58.904,
@@ -37458,7 +37961,7 @@
                       "stations": 22
                     }
                   ],
-                  "runCount": 5,
+                  "runCount": 10,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -39437,8 +39940,8 @@
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.061,
-              "tiltDeg": 0.188,
+              "coverage": 0.151,
+              "tiltDeg": -0.041,
               "frameOuterMm": 4.19,
               "blackOuterMm": 4.66,
               "frameDiffMm": 0.47,
@@ -39487,48 +39990,142 @@
                 {
                   "alongMm": 77.312,
                   "depthMm": 4.3
+                },
+                {
+                  "alongMm": 8.912,
+                  "depthMm": 4.26
+                },
+                {
+                  "alongMm": 9.312,
+                  "depthMm": 4.34
+                },
+                {
+                  "alongMm": 11.712,
+                  "depthMm": 4.32
+                },
+                {
+                  "alongMm": 13.312,
+                  "depthMm": 4.42
+                },
+                {
+                  "alongMm": 14.112,
+                  "depthMm": 4.42
+                },
+                {
+                  "alongMm": 16.912,
+                  "depthMm": 4.4
+                },
+                {
+                  "alongMm": 17.712,
+                  "depthMm": 4.32
+                },
+                {
+                  "alongMm": 19.312,
+                  "depthMm": 4.34
+                },
+                {
+                  "alongMm": 20.912,
+                  "depthMm": 4.4
+                },
+                {
+                  "alongMm": 21.712,
+                  "depthMm": 4.34
+                },
+                {
+                  "alongMm": 26.912,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 28.112,
+                  "depthMm": 4.28
+                },
+                {
+                  "alongMm": 29.312,
+                  "depthMm": 4.36
+                },
+                {
+                  "alongMm": 39.312,
+                  "depthMm": 4.06
+                },
+                {
+                  "alongMm": 41.312,
+                  "depthMm": 4.18
+                },
+                {
+                  "alongMm": 45.712,
+                  "depthMm": 4.32
                 }
               ],
               "elements": [
                 {
                   "depthMm": 4.19,
-                  "fromMm": 62.512,
+                  "fromMm": 8.912,
                   "toMm": 77.312,
-                  "coverage": 0.061,
-                  "stations": 11,
+                  "coverage": 0.151,
+                  "stations": 27,
                   "runs": [
                     {
-                      "fromMm": 62.512,
-                      "toMm": 63.312,
+                      "fromMm": 8.912,
+                      "toMm": 9.312,
                       "stations": 2
                     },
                     {
-                      "fromMm": 65.712,
-                      "toMm": 66.112,
+                      "fromMm": 11.712,
+                      "toMm": 11.712,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 13.312,
+                      "toMm": 14.112,
                       "stations": 2
                     },
                     {
-                      "fromMm": 70.112,
-                      "toMm": 70.112,
+                      "fromMm": 16.912,
+                      "toMm": 17.712,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 19.312,
+                      "toMm": 19.312,
                       "stations": 1
                     },
                     {
-                      "fromMm": 71.712,
-                      "toMm": 71.712,
+                      "fromMm": 20.912,
+                      "toMm": 21.712,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 26.912,
+                      "toMm": 26.912,
                       "stations": 1
                     },
                     {
-                      "fromMm": 73.712,
-                      "toMm": 73.712,
+                      "fromMm": 28.112,
+                      "toMm": 28.112,
                       "stations": 1
                     },
                     {
-                      "fromMm": 74.912,
-                      "toMm": 77.312,
-                      "stations": 4
+                      "fromMm": 29.312,
+                      "toMm": 29.312,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 39.312,
+                      "toMm": 39.312,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 41.312,
+                      "toMm": 41.312,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 45.712,
+                      "toMm": 45.712,
+                      "stations": 1
                     }
                   ],
-                  "runCount": 6,
+                  "runCount": 18,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -40515,8 +41112,8 @@
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.101,
-              "tiltDeg": -0.164,
+              "coverage": 0.184,
+              "tiltDeg": 0.07,
               "frameOuterMm": 4.12,
               "blackOuterMm": 4.5,
               "frameDiffMm": 0.38,
@@ -40593,15 +41190,75 @@
                 {
                   "alongMm": 30.507,
                   "depthMm": 4.18
+                },
+                {
+                  "alongMm": 60.907,
+                  "depthMm": 4.26
+                },
+                {
+                  "alongMm": 61.707,
+                  "depthMm": 4.36
+                },
+                {
+                  "alongMm": 64.107,
+                  "depthMm": 4.26
+                },
+                {
+                  "alongMm": 64.507,
+                  "depthMm": 4.26
+                },
+                {
+                  "alongMm": 68.107,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 68.907,
+                  "depthMm": 4.38
+                },
+                {
+                  "alongMm": 70.907,
+                  "depthMm": 4.38
+                },
+                {
+                  "alongMm": 71.707,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 74.507,
+                  "depthMm": 4.32
+                },
+                {
+                  "alongMm": 74.907,
+                  "depthMm": 4.28
+                },
+                {
+                  "alongMm": 75.707,
+                  "depthMm": 4.36
+                },
+                {
+                  "alongMm": 77.307,
+                  "depthMm": 4.24
+                },
+                {
+                  "alongMm": 77.707,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 78.107,
+                  "depthMm": 4.28
+                },
+                {
+                  "alongMm": 79.707,
+                  "depthMm": 4.34
                 }
               ],
               "elements": [
                 {
                   "depthMm": 4.12,
                   "fromMm": 8.907,
-                  "toMm": 30.507,
-                  "coverage": 0.101,
-                  "stations": 18,
+                  "toMm": 79.707,
+                  "coverage": 0.184,
+                  "stations": 33,
                   "runs": [
                     {
                       "fromMm": 8.907,
@@ -40642,9 +41299,29 @@
                       "fromMm": 30.107,
                       "toMm": 30.507,
                       "stations": 2
+                    },
+                    {
+                      "fromMm": 60.907,
+                      "toMm": 61.707,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 64.107,
+                      "toMm": 64.507,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 68.107,
+                      "toMm": 68.907,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 70.907,
+                      "toMm": 71.707,
+                      "stations": 2
                     }
                   ],
-                  "runCount": 8,
+                  "runCount": 15,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -41331,7 +42008,7 @@
         },
         "left": {
           "mm": 4.3,
-          "confidence": 0.52,
+          "confidence": 0.571,
           "withheld": false,
           "reason": null,
           "approved": false,
@@ -43703,12 +44380,12 @@
             },
             "right": {
               "mm": 4.3,
-              "confidence": 0.52,
+              "confidence": 0.571,
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.123,
-              "tiltDeg": -0.111,
+              "coverage": 0.302,
+              "tiltDeg": -0.028,
               "frameOuterMm": 4.3,
               "blackOuterMm": 4.76,
               "frameDiffMm": 0.46,
@@ -43801,16 +44478,159 @@
                 {
                   "alongMm": 78.503,
                   "depthMm": 4.28
+                },
+                {
+                  "alongMm": 8.903,
+                  "depthMm": 4.4
+                },
+                {
+                  "alongMm": 9.703,
+                  "depthMm": 4.42
+                },
+                {
+                  "alongMm": 10.103,
+                  "depthMm": 4.4
+                },
+                {
+                  "alongMm": 10.503,
+                  "depthMm": 4.52
+                },
+                {
+                  "alongMm": 10.903,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 11.703,
+                  "depthMm": 4.46
+                },
+                {
+                  "alongMm": 12.503,
+                  "depthMm": 4.42
+                },
+                {
+                  "alongMm": 12.903,
+                  "depthMm": 4.28
+                },
+                {
+                  "alongMm": 13.303,
+                  "depthMm": 4.28
+                },
+                {
+                  "alongMm": 13.703,
+                  "depthMm": 4.56
+                },
+                {
+                  "alongMm": 14.503,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 14.903,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 15.303,
+                  "depthMm": 4.32
+                },
+                {
+                  "alongMm": 16.103,
+                  "depthMm": 4.42
+                },
+                {
+                  "alongMm": 16.903,
+                  "depthMm": 4.38
+                },
+                {
+                  "alongMm": 17.703,
+                  "depthMm": 4.38
+                },
+                {
+                  "alongMm": 18.503,
+                  "depthMm": 4.32
+                },
+                {
+                  "alongMm": 18.903,
+                  "depthMm": 4.38
+                },
+                {
+                  "alongMm": 19.303,
+                  "depthMm": 4.4
+                },
+                {
+                  "alongMm": 19.703,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 20.903,
+                  "depthMm": 4.56
+                },
+                {
+                  "alongMm": 21.303,
+                  "depthMm": 4.36
+                },
+                {
+                  "alongMm": 22.903,
+                  "depthMm": 4.32
+                },
+                {
+                  "alongMm": 23.703,
+                  "depthMm": 4.42
+                },
+                {
+                  "alongMm": 24.103,
+                  "depthMm": 4.38
+                },
+                {
+                  "alongMm": 24.903,
+                  "depthMm": 4.32
+                },
+                {
+                  "alongMm": 25.703,
+                  "depthMm": 4.38
+                },
+                {
+                  "alongMm": 26.103,
+                  "depthMm": 4.38
+                },
+                {
+                  "alongMm": 26.503,
+                  "depthMm": 4.48
+                },
+                {
+                  "alongMm": 26.903,
+                  "depthMm": 4.5
+                },
+                {
+                  "alongMm": 27.303,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 27.703,
+                  "depthMm": 4.38
                 }
               ],
               "elements": [
                 {
                   "depthMm": 4.3,
-                  "fromMm": 60.103,
+                  "fromMm": 8.903,
                   "toMm": 78.503,
-                  "coverage": 0.123,
-                  "stations": 22,
+                  "coverage": 0.302,
+                  "stations": 54,
                   "runs": [
+                    {
+                      "fromMm": 8.903,
+                      "toMm": 19.703,
+                      "stations": 20
+                    },
+                    {
+                      "fromMm": 20.903,
+                      "toMm": 21.303,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 22.903,
+                      "toMm": 27.703,
+                      "stations": 10
+                    },
                     {
                       "fromMm": 60.103,
                       "toMm": 60.503,
@@ -43842,7 +44662,7 @@
                       "stations": 1
                     }
                   ],
-                  "runCount": 6,
+                  "runCount": 9,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -45962,12 +46782,12 @@
             },
             "left": {
               "mm": 4.3,
-              "confidence": 0.52,
+              "confidence": 0.571,
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.134,
-              "tiltDeg": -0.064,
+              "coverage": 0.302,
+              "tiltDeg": 0.035,
               "frameOuterMm": 4.3,
               "blackOuterMm": 4.76,
               "frameDiffMm": 0.46,
@@ -46068,15 +46888,135 @@
                 {
                   "alongMm": 28.508,
                   "depthMm": 4.28
+                },
+                {
+                  "alongMm": 60.508,
+                  "depthMm": 4.38
+                },
+                {
+                  "alongMm": 62.508,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 62.908,
+                  "depthMm": 4.36
+                },
+                {
+                  "alongMm": 63.708,
+                  "depthMm": 4.46
+                },
+                {
+                  "alongMm": 64.108,
+                  "depthMm": 4.28
+                },
+                {
+                  "alongMm": 64.908,
+                  "depthMm": 4.48
+                },
+                {
+                  "alongMm": 65.308,
+                  "depthMm": 4.26
+                },
+                {
+                  "alongMm": 65.708,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 66.908,
+                  "depthMm": 4.34
+                },
+                {
+                  "alongMm": 67.708,
+                  "depthMm": 4.46
+                },
+                {
+                  "alongMm": 68.108,
+                  "depthMm": 4.34
+                },
+                {
+                  "alongMm": 68.508,
+                  "depthMm": 4.54
+                },
+                {
+                  "alongMm": 69.708,
+                  "depthMm": 4.38
+                },
+                {
+                  "alongMm": 70.908,
+                  "depthMm": 4.28
+                },
+                {
+                  "alongMm": 71.308,
+                  "depthMm": 4.46
+                },
+                {
+                  "alongMm": 72.108,
+                  "depthMm": 4.54
+                },
+                {
+                  "alongMm": 72.508,
+                  "depthMm": 4.38
+                },
+                {
+                  "alongMm": 73.308,
+                  "depthMm": 4.56
+                },
+                {
+                  "alongMm": 73.708,
+                  "depthMm": 4.36
+                },
+                {
+                  "alongMm": 74.108,
+                  "depthMm": 4.34
+                },
+                {
+                  "alongMm": 74.508,
+                  "depthMm": 4.28
+                },
+                {
+                  "alongMm": 75.308,
+                  "depthMm": 4.32
+                },
+                {
+                  "alongMm": 75.708,
+                  "depthMm": 4.54
+                },
+                {
+                  "alongMm": 76.108,
+                  "depthMm": 4.42
+                },
+                {
+                  "alongMm": 76.908,
+                  "depthMm": 4.32
+                },
+                {
+                  "alongMm": 77.708,
+                  "depthMm": 4.46
+                },
+                {
+                  "alongMm": 78.508,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 78.908,
+                  "depthMm": 4.36
+                },
+                {
+                  "alongMm": 79.708,
+                  "depthMm": 4.3
+                },
+                {
+                  "alongMm": 80.108,
+                  "depthMm": 4.48
                 }
               ],
               "elements": [
                 {
                   "depthMm": 4.3,
                   "fromMm": 9.308,
-                  "toMm": 28.508,
-                  "coverage": 0.134,
-                  "stations": 24,
+                  "toMm": 80.108,
+                  "coverage": 0.302,
+                  "stations": 54,
                   "runs": [
                     {
                       "fromMm": 9.308,
@@ -46112,9 +47052,34 @@
                       "fromMm": 22.108,
                       "toMm": 28.508,
                       "stations": 12
+                    },
+                    {
+                      "fromMm": 60.508,
+                      "toMm": 60.508,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 62.508,
+                      "toMm": 65.708,
+                      "stations": 7
+                    },
+                    {
+                      "fromMm": 66.908,
+                      "toMm": 68.508,
+                      "stations": 4
+                    },
+                    {
+                      "fromMm": 69.708,
+                      "toMm": 69.708,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 70.908,
+                      "toMm": 80.108,
+                      "stations": 17
                     }
                   ],
-                  "runCount": 7,
+                  "runCount": 12,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -47538,7 +48503,7 @@
         },
         "left": {
           "mm": null,
-          "confidence": 0.52,
+          "confidence": 0.532,
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
@@ -47550,7 +48515,7 @@
         },
         "right": {
           "mm": null,
-          "confidence": 0.52,
+          "confidence": 0.546,
           "withheld": true,
           "reason": "bias-disagreement",
           "approved": false,
@@ -48391,8 +49356,8 @@
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.094,
-              "tiltDeg": -0.045,
+              "coverage": 0.188,
+              "tiltDeg": -0.069,
               "frameOuterMm": 2.66,
               "blackOuterMm": 3.14,
               "frameDiffMm": 0.48,
@@ -48445,16 +49410,69 @@
                 {
                   "alongMm": 46.756,
                   "depthMm": 2.66
+                },
+                {
+                  "alongMm": 17.956,
+                  "depthMm": 2.92
+                },
+                {
+                  "alongMm": 18.356,
+                  "depthMm": 2.76
+                },
+                {
+                  "alongMm": 18.756,
+                  "depthMm": 2.72
+                },
+                {
+                  "alongMm": 19.156,
+                  "depthMm": 2.74
+                },
+                {
+                  "alongMm": 19.556,
+                  "depthMm": 2.66
+                },
+                {
+                  "alongMm": 19.956,
+                  "depthMm": 2.66
+                },
+                {
+                  "alongMm": 20.356,
+                  "depthMm": 2.74
+                },
+                {
+                  "alongMm": 20.756,
+                  "depthMm": 2.7
+                },
+                {
+                  "alongMm": 21.156,
+                  "depthMm": 2.76
+                },
+                {
+                  "alongMm": 21.556,
+                  "depthMm": 2.66
+                },
+                {
+                  "alongMm": 21.956,
+                  "depthMm": 2.78
+                },
+                {
+                  "alongMm": 22.356,
+                  "depthMm": 2.76
                 }
               ],
               "elements": [
                 {
                   "depthMm": 2.66,
-                  "fromMm": 39.956,
+                  "fromMm": 17.956,
                   "toMm": 46.756,
-                  "coverage": 0.094,
-                  "stations": 12,
+                  "coverage": 0.188,
+                  "stations": 24,
                   "runs": [
+                    {
+                      "fromMm": 17.956,
+                      "toMm": 22.356,
+                      "stations": 12
+                    },
                     {
                       "fromMm": 39.956,
                       "toMm": 39.956,
@@ -48471,7 +49489,7 @@
                       "stations": 7
                     }
                   ],
-                  "runCount": 3,
+                  "runCount": 4,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -48993,12 +50011,12 @@
             },
             "left": {
               "mm": 4.35,
-              "confidence": 0.52,
+              "confidence": 0.554,
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.145,
-              "tiltDeg": -0.124,
+              "coverage": 0.268,
+              "tiltDeg": -0.084,
               "frameOuterMm": 4.35,
               "blackOuterMm": 4.82,
               "frameDiffMm": 0.47,
@@ -49107,16 +50125,154 @@
                 {
                   "alongMm": 80.102,
                   "depthMm": 4.44
+                },
+                {
+                  "alongMm": 8.902,
+                  "depthMm": 4.5
+                },
+                {
+                  "alongMm": 9.702,
+                  "depthMm": 4.54
+                },
+                {
+                  "alongMm": 10.902,
+                  "depthMm": 4.5
+                },
+                {
+                  "alongMm": 11.702,
+                  "depthMm": 4.42
+                },
+                {
+                  "alongMm": 14.102,
+                  "depthMm": 4.48
+                },
+                {
+                  "alongMm": 14.902,
+                  "depthMm": 4.44
+                },
+                {
+                  "alongMm": 15.702,
+                  "depthMm": 4.58
+                },
+                {
+                  "alongMm": 16.902,
+                  "depthMm": 4.6
+                },
+                {
+                  "alongMm": 18.902,
+                  "depthMm": 4.4
+                },
+                {
+                  "alongMm": 20.902,
+                  "depthMm": 4.5
+                },
+                {
+                  "alongMm": 21.302,
+                  "depthMm": 4.52
+                },
+                {
+                  "alongMm": 22.102,
+                  "depthMm": 4.4
+                },
+                {
+                  "alongMm": 23.702,
+                  "depthMm": 4.4
+                },
+                {
+                  "alongMm": 24.502,
+                  "depthMm": 4.5
+                },
+                {
+                  "alongMm": 25.302,
+                  "depthMm": 4.54
+                },
+                {
+                  "alongMm": 26.102,
+                  "depthMm": 4.4
+                },
+                {
+                  "alongMm": 27.302,
+                  "depthMm": 4.4
+                },
+                {
+                  "alongMm": 27.702,
+                  "depthMm": 4.42
+                },
+                {
+                  "alongMm": 28.902,
+                  "depthMm": 4.52
+                },
+                {
+                  "alongMm": 29.702,
+                  "depthMm": 4.48
+                },
+                {
+                  "alongMm": 30.102,
+                  "depthMm": 4.48
+                },
+                {
+                  "alongMm": 31.302,
+                  "depthMm": 4.56
                 }
               ],
               "elements": [
                 {
                   "depthMm": 4.35,
-                  "fromMm": 60.502,
+                  "fromMm": 8.902,
                   "toMm": 80.102,
-                  "coverage": 0.145,
-                  "stations": 26,
+                  "coverage": 0.268,
+                  "stations": 48,
                   "runs": [
+                    {
+                      "fromMm": 8.902,
+                      "toMm": 9.702,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 10.902,
+                      "toMm": 11.702,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 14.102,
+                      "toMm": 15.702,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 16.902,
+                      "toMm": 16.902,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 18.902,
+                      "toMm": 18.902,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 20.902,
+                      "toMm": 22.102,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 23.702,
+                      "toMm": 26.102,
+                      "stations": 4
+                    },
+                    {
+                      "fromMm": 27.302,
+                      "toMm": 27.702,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 28.902,
+                      "toMm": 30.102,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 31.302,
+                      "toMm": 31.302,
+                      "stations": 1
+                    },
                     {
                       "fromMm": 60.502,
                       "toMm": 61.302,
@@ -49126,34 +50282,9 @@
                       "fromMm": 63.302,
                       "toMm": 64.902,
                       "stations": 4
-                    },
-                    {
-                      "fromMm": 66.502,
-                      "toMm": 68.502,
-                      "stations": 5
-                    },
-                    {
-                      "fromMm": 70.102,
-                      "toMm": 70.502,
-                      "stations": 2
-                    },
-                    {
-                      "fromMm": 71.702,
-                      "toMm": 75.302,
-                      "stations": 7
-                    },
-                    {
-                      "fromMm": 77.302,
-                      "toMm": 77.302,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 78.502,
-                      "toMm": 80.102,
-                      "stations": 5
                     }
                   ],
-                  "runCount": 7,
+                  "runCount": 17,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -49824,12 +50955,12 @@
             },
             "right": {
               "mm": 2.58,
-              "confidence": 0.52,
+              "confidence": 0.532,
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.106,
-              "tiltDeg": 0,
+              "coverage": 0.223,
+              "tiltDeg": 0.092,
               "frameOuterMm": 2.58,
               "blackOuterMm": 3.04,
               "frameDiffMm": 0.46,
@@ -49910,15 +51041,99 @@
                 {
                   "alongMm": 31.313,
                   "depthMm": 2.6
+                },
+                {
+                  "alongMm": 60.913,
+                  "depthMm": 2.82
+                },
+                {
+                  "alongMm": 62.113,
+                  "depthMm": 2.72
+                },
+                {
+                  "alongMm": 62.913,
+                  "depthMm": 2.66
+                },
+                {
+                  "alongMm": 63.713,
+                  "depthMm": 2.74
+                },
+                {
+                  "alongMm": 64.113,
+                  "depthMm": 2.66
+                },
+                {
+                  "alongMm": 64.513,
+                  "depthMm": 2.64
+                },
+                {
+                  "alongMm": 66.113,
+                  "depthMm": 2.82
+                },
+                {
+                  "alongMm": 66.513,
+                  "depthMm": 2.68
+                },
+                {
+                  "alongMm": 70.513,
+                  "depthMm": 2.74
+                },
+                {
+                  "alongMm": 70.913,
+                  "depthMm": 2.74
+                },
+                {
+                  "alongMm": 71.313,
+                  "depthMm": 2.7
+                },
+                {
+                  "alongMm": 71.713,
+                  "depthMm": 2.68
+                },
+                {
+                  "alongMm": 72.913,
+                  "depthMm": 2.7
+                },
+                {
+                  "alongMm": 73.713,
+                  "depthMm": 2.7
+                },
+                {
+                  "alongMm": 74.513,
+                  "depthMm": 2.7
+                },
+                {
+                  "alongMm": 75.313,
+                  "depthMm": 2.68
+                },
+                {
+                  "alongMm": 76.513,
+                  "depthMm": 2.7
+                },
+                {
+                  "alongMm": 76.913,
+                  "depthMm": 2.86
+                },
+                {
+                  "alongMm": 77.313,
+                  "depthMm": 2.6
+                },
+                {
+                  "alongMm": 78.113,
+                  "depthMm": 2.68
+                },
+                {
+                  "alongMm": 79.713,
+                  "depthMm": 2.78
                 }
               ],
               "elements": [
                 {
                   "depthMm": 2.58,
                   "fromMm": 10.513,
-                  "toMm": 31.313,
-                  "coverage": 0.106,
-                  "stations": 19,
+                  "toMm": 79.713,
+                  "coverage": 0.223,
+                  "stations": 40,
                   "runs": [
                     {
                       "fromMm": 10.513,
@@ -49959,9 +51174,29 @@
                       "fromMm": 31.313,
                       "toMm": 31.313,
                       "stations": 1
+                    },
+                    {
+                      "fromMm": 60.913,
+                      "toMm": 60.913,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 62.113,
+                      "toMm": 64.513,
+                      "stations": 5
+                    },
+                    {
+                      "fromMm": 66.113,
+                      "toMm": 66.513,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 70.513,
+                      "toMm": 71.713,
+                      "stations": 4
                     }
                   ],
-                  "runCount": 8,
+                  "runCount": 15,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -50574,8 +51809,8 @@
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.094,
-              "tiltDeg": 0.18,
+              "coverage": 0.188,
+              "tiltDeg": -0.002,
               "frameOuterMm": 3.04,
               "blackOuterMm": 3.5,
               "frameDiffMm": 0.46,
@@ -50628,15 +51863,63 @@
                 {
                   "alongMm": 23.155,
                   "depthMm": 3.12
+                },
+                {
+                  "alongMm": 39.555,
+                  "depthMm": 3.1
+                },
+                {
+                  "alongMm": 40.355,
+                  "depthMm": 3.1
+                },
+                {
+                  "alongMm": 40.755,
+                  "depthMm": 3.26
+                },
+                {
+                  "alongMm": 41.155,
+                  "depthMm": 3.02
+                },
+                {
+                  "alongMm": 41.955,
+                  "depthMm": 3.1
+                },
+                {
+                  "alongMm": 42.355,
+                  "depthMm": 3.08
+                },
+                {
+                  "alongMm": 42.755,
+                  "depthMm": 3.1
+                },
+                {
+                  "alongMm": 43.155,
+                  "depthMm": 3
+                },
+                {
+                  "alongMm": 43.555,
+                  "depthMm": 2.98
+                },
+                {
+                  "alongMm": 43.955,
+                  "depthMm": 3.1
+                },
+                {
+                  "alongMm": 44.755,
+                  "depthMm": 3.06
+                },
+                {
+                  "alongMm": 45.155,
+                  "depthMm": 3
                 }
               ],
               "elements": [
                 {
                   "depthMm": 3.04,
                   "fromMm": 16.355,
-                  "toMm": 23.155,
-                  "coverage": 0.094,
-                  "stations": 12,
+                  "toMm": 45.155,
+                  "coverage": 0.188,
+                  "stations": 24,
                   "runs": [
                     {
                       "fromMm": 16.355,
@@ -50647,9 +51930,14 @@
                       "fromMm": 23.155,
                       "toMm": 23.155,
                       "stations": 1
+                    },
+                    {
+                      "fromMm": 39.555,
+                      "toMm": 45.155,
+                      "stations": 12
                     }
                   ],
-                  "runCount": 2,
+                  "runCount": 3,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -51890,12 +53178,12 @@
             },
             "left": {
               "mm": 2.42,
-              "confidence": 0.52,
+              "confidence": 0.543,
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.134,
-              "tiltDeg": -0.168,
+              "coverage": 0.246,
+              "tiltDeg": -0.077,
               "frameOuterMm": 2.42,
               "blackOuterMm": 2.72,
               "frameDiffMm": 0.3,
@@ -51996,16 +53284,131 @@
                 {
                   "alongMm": 79.318,
                   "depthMm": 2.6
+                },
+                {
+                  "alongMm": 8.918,
+                  "depthMm": 2.6
+                },
+                {
+                  "alongMm": 9.318,
+                  "depthMm": 2.72
+                },
+                {
+                  "alongMm": 10.118,
+                  "depthMm": 2.64
+                },
+                {
+                  "alongMm": 10.518,
+                  "depthMm": 2.64
+                },
+                {
+                  "alongMm": 10.918,
+                  "depthMm": 2.68
+                },
+                {
+                  "alongMm": 11.718,
+                  "depthMm": 2.66
+                },
+                {
+                  "alongMm": 12.118,
+                  "depthMm": 2.8
+                },
+                {
+                  "alongMm": 12.518,
+                  "depthMm": 2.6
+                },
+                {
+                  "alongMm": 13.718,
+                  "depthMm": 2.82
+                },
+                {
+                  "alongMm": 14.918,
+                  "depthMm": 2.62
+                },
+                {
+                  "alongMm": 16.118,
+                  "depthMm": 2.72
+                },
+                {
+                  "alongMm": 16.918,
+                  "depthMm": 2.6
+                },
+                {
+                  "alongMm": 17.718,
+                  "depthMm": 2.7
+                },
+                {
+                  "alongMm": 18.918,
+                  "depthMm": 2.62
+                },
+                {
+                  "alongMm": 22.918,
+                  "depthMm": 2.7
+                },
+                {
+                  "alongMm": 23.718,
+                  "depthMm": 2.62
+                },
+                {
+                  "alongMm": 24.118,
+                  "depthMm": 2.6
+                },
+                {
+                  "alongMm": 24.518,
+                  "depthMm": 2.7
+                },
+                {
+                  "alongMm": 25.318,
+                  "depthMm": 2.62
+                },
+                {
+                  "alongMm": 26.918,
+                  "depthMm": 2.7
                 }
               ],
               "elements": [
                 {
                   "depthMm": 2.42,
-                  "fromMm": 58.118,
+                  "fromMm": 8.918,
                   "toMm": 79.318,
-                  "coverage": 0.134,
-                  "stations": 24,
+                  "coverage": 0.246,
+                  "stations": 44,
                   "runs": [
+                    {
+                      "fromMm": 8.918,
+                      "toMm": 12.518,
+                      "stations": 8
+                    },
+                    {
+                      "fromMm": 13.718,
+                      "toMm": 13.718,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 14.918,
+                      "toMm": 14.918,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 16.118,
+                      "toMm": 17.718,
+                      "stations": 3
+                    },
+                    {
+                      "fromMm": 18.918,
+                      "toMm": 18.918,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 22.918,
+                      "toMm": 25.318,
+                      "stations": 5
+                    },
+                    {
+                      "fromMm": 26.918,
+                      "toMm": 26.918,
+                      "stations": 1
+                    },
                     {
                       "fromMm": 58.118,
                       "toMm": 58.118,
@@ -52030,19 +53433,9 @@
                       "fromMm": 75.718,
                       "toMm": 75.718,
                       "stations": 1
-                    },
-                    {
-                      "fromMm": 78.118,
-                      "toMm": 78.118,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 79.318,
-                      "toMm": 79.318,
-                      "stations": 1
                     }
                   ],
-                  "runCount": 7,
+                  "runCount": 14,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -52561,12 +53954,12 @@
             },
             "right": {
               "mm": 4.42,
-              "confidence": 0.52,
+              "confidence": 0.546,
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.123,
-              "tiltDeg": 0.023,
+              "coverage": 0.251,
+              "tiltDeg": 0.054,
               "frameOuterMm": 4.42,
               "blackOuterMm": 4.9,
               "frameDiffMm": 0.48,
@@ -52659,15 +54052,107 @@
                 {
                   "alongMm": 29.303,
                   "depthMm": 4.6
+                },
+                {
+                  "alongMm": 58.103,
+                  "depthMm": 4.6
+                },
+                {
+                  "alongMm": 58.903,
+                  "depthMm": 4.52
+                },
+                {
+                  "alongMm": 59.703,
+                  "depthMm": 4.46
+                },
+                {
+                  "alongMm": 60.503,
+                  "depthMm": 4.58
+                },
+                {
+                  "alongMm": 60.903,
+                  "depthMm": 4.5
+                },
+                {
+                  "alongMm": 62.503,
+                  "depthMm": 4.48
+                },
+                {
+                  "alongMm": 63.303,
+                  "depthMm": 4.46
+                },
+                {
+                  "alongMm": 65.303,
+                  "depthMm": 4.6
+                },
+                {
+                  "alongMm": 66.103,
+                  "depthMm": 4.56
+                },
+                {
+                  "alongMm": 66.903,
+                  "depthMm": 4.5
+                },
+                {
+                  "alongMm": 67.303,
+                  "depthMm": 4.6
+                },
+                {
+                  "alongMm": 67.703,
+                  "depthMm": 4.58
+                },
+                {
+                  "alongMm": 68.103,
+                  "depthMm": 4.48
+                },
+                {
+                  "alongMm": 68.503,
+                  "depthMm": 4.48
+                },
+                {
+                  "alongMm": 68.903,
+                  "depthMm": 4.6
+                },
+                {
+                  "alongMm": 69.703,
+                  "depthMm": 4.5
+                },
+                {
+                  "alongMm": 71.703,
+                  "depthMm": 4.66
+                },
+                {
+                  "alongMm": 74.903,
+                  "depthMm": 4.7
+                },
+                {
+                  "alongMm": 75.703,
+                  "depthMm": 4.58
+                },
+                {
+                  "alongMm": 76.503,
+                  "depthMm": 4.6
+                },
+                {
+                  "alongMm": 78.103,
+                  "depthMm": 4.6
+                },
+                {
+                  "alongMm": 78.903,
+                  "depthMm": 4.5
+                },
+                {
+                  "alongMm": 80.103,
+                  "depthMm": 4.5
                 }
               ],
               "elements": [
                 {
                   "depthMm": 4.42,
                   "fromMm": 8.903,
-                  "toMm": 29.303,
-                  "coverage": 0.123,
-                  "stations": 22,
+                  "toMm": 80.103,
+                  "coverage": 0.251,
+                  "stations": 45,
                   "runs": [
                     {
                       "fromMm": 8.903,
@@ -52703,9 +54188,34 @@
                       "fromMm": 28.903,
                       "toMm": 29.303,
                       "stations": 2
+                    },
+                    {
+                      "fromMm": 58.103,
+                      "toMm": 60.903,
+                      "stations": 5
+                    },
+                    {
+                      "fromMm": 62.503,
+                      "toMm": 63.303,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 65.303,
+                      "toMm": 69.703,
+                      "stations": 9
+                    },
+                    {
+                      "fromMm": 71.703,
+                      "toMm": 71.703,
+                      "stations": 1
+                    },
+                    {
+                      "fromMm": 74.903,
+                      "toMm": 76.503,
+                      "stations": 3
                     }
                   ],
-                  "runCount": 7,
+                  "runCount": 14,
                   "role": "outline",
                   "refused": false,
                   "why": null
@@ -54583,8 +56093,8 @@
               "withheld": false,
               "reason": null,
               "shape": "line",
-              "coverage": 0.067,
-              "tiltDeg": -0.074,
+              "coverage": 0.123,
+              "tiltDeg": -0.369,
               "frameOuterMm": 3.2,
               "blackOuterMm": 3.2,
               "frameDiffMm": 0,
@@ -54637,35 +56147,75 @@
                 {
                   "alongMm": 76.907,
                   "depthMm": 3.2
+                },
+                {
+                  "alongMm": 54.507,
+                  "depthMm": 3.7
+                },
+                {
+                  "alongMm": 55.307,
+                  "depthMm": 3.54
+                },
+                {
+                  "alongMm": 59.307,
+                  "depthMm": 3.46
+                },
+                {
+                  "alongMm": 62.507,
+                  "depthMm": 3.48
+                },
+                {
+                  "alongMm": 64.507,
+                  "depthMm": 3.48
+                },
+                {
+                  "alongMm": 64.907,
+                  "depthMm": 3.46
+                },
+                {
+                  "alongMm": 65.707,
+                  "depthMm": 3.46
+                },
+                {
+                  "alongMm": 71.307,
+                  "depthMm": 3.42
+                },
+                {
+                  "alongMm": 73.707,
+                  "depthMm": 3.46
+                },
+                {
+                  "alongMm": 75.307,
+                  "depthMm": 3.42
                 }
               ],
               "elements": [
                 {
                   "depthMm": 3.2,
-                  "fromMm": 56.107,
+                  "fromMm": 54.507,
                   "toMm": 76.907,
-                  "coverage": 0.067,
-                  "stations": 12,
+                  "coverage": 0.123,
+                  "stations": 22,
                   "runs": [
                     {
-                      "fromMm": 56.107,
+                      "fromMm": 54.507,
                       "toMm": 56.107,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 58.907,
-                      "toMm": 58.907,
-                      "stations": 1
-                    },
-                    {
-                      "fromMm": 60.507,
-                      "toMm": 61.707,
                       "stations": 3
                     },
                     {
-                      "fromMm": 65.307,
-                      "toMm": 65.307,
-                      "stations": 1
+                      "fromMm": 58.907,
+                      "toMm": 59.307,
+                      "stations": 2
+                    },
+                    {
+                      "fromMm": 60.507,
+                      "toMm": 62.507,
+                      "stations": 4
+                    },
+                    {
+                      "fromMm": 64.507,
+                      "toMm": 65.707,
+                      "stations": 4
                     },
                     {
                       "fromMm": 70.107,
@@ -54673,19 +56223,19 @@
                       "stations": 1
                     },
                     {
-                      "fromMm": 72.107,
+                      "fromMm": 71.307,
                       "toMm": 72.107,
-                      "stations": 1
+                      "stations": 2
                     },
                     {
                       "fromMm": 73.307,
                       "toMm": 74.107,
-                      "stations": 2
+                      "stations": 3
                     },
                     {
-                      "fromMm": 75.707,
+                      "fromMm": 75.307,
                       "toMm": 75.707,
-                      "stations": 1
+                      "stations": 2
                     },
                     {
                       "fromMm": 76.907,
