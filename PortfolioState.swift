@@ -106,45 +106,7 @@ public struct ScanLedger: Equatable {
             deckId: nonempty(existing.deckId) ?? nonempty(updated.deckId),
             side: keptSide
         )
-        return merged.applyingKnownCaptureRepair()
-    }
-
-    /// Scan 366A0E19 was re-saved as TD-13 · front with a new clock. Put the capture back.
-    public func applyingKnownCaptureRepair() -> ScanLedger {
-        guard scanId.uppercased().hasPrefix("366A0E19") else { return self }
-        let original = CenteringAssist.parseISO("2026-10-12T20:57:08.000Z") ?? committedAt
-        let time = (committedAt == .distantPast || committedAt > original) ? original : committedAt
-        var assist = centeringAssist
-        if var snap = assist {
-            snap.side = "back"
-            if snap.adjustedCount > 0, let widths = snap.placedWidthsMM() {
-                if let score = CenteringAssist.assistedScore(side: "back", widths: widths) {
-                    snap.centeringLabel = String(format: "%.1f assisted", score)
-                } else {
-                    snap.centeringLabel = nil
-                }
-            }
-            assist = snap
-        }
-        return ScanLedger(
-            scanId: scanId,
-            committedAt: time,
-            name: name,
-            setName: setName,
-            grade: grade,
-            lrCentering: lrCentering,
-            tbCentering: tbCentering,
-            value: value,
-            familyId: familyId,
-            subGradesLabel: subGradesLabel,
-            primaryFlaw: primaryFlaw,
-            incomplete: incomplete,
-            cornersGrade: cornersGrade,
-            debugPath: debugPath,
-            centeringAssist: assist,
-            deckId: "TD-06",
-            side: "back"
-        )
+        return merged
     }
 
     public var showsSideUnknown: Bool {
@@ -185,10 +147,17 @@ public struct ScanLedger: Equatable {
         UUID(uuidString: scanId) ?? UUID()
     }
 
+    /// Scan time is formatted in the phone's current time zone.
+    static var timestampUsesLocalTimeZone: Bool {
+        localTimestampFormatter.timeZone == TimeZone.current &&
+        ScanLedgerFields.timestampFormatter.timeZone == TimeZone.current
+    }
+
     private static let localTimestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .medium
+        formatter.timeZone = TimeZone.current
         return formatter
     }()
 }
@@ -393,6 +362,7 @@ enum ScanLedgerFields {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .medium
+        formatter.timeZone = TimeZone.current
         return formatter
     }()
 }
@@ -621,39 +591,7 @@ public class PortfolioState: ObservableObject {
         let jsonDecoder = JSONDecoder()
         if let cardsData = UserDefaults.standard.data(forKey: storageKeyCards),
            let parsedCards = try? jsonDecoder.decode([SavedCard].self, from: cardsData) {
-            var changed = false
-            self.savedCards = parsedCards.map { card in
-                guard card.scanId.uppercased().hasPrefix("366A0E19") else { return card }
-                let repaired = card.asLedger.applyingKnownCaptureRepair()
-                let sameDeck = repaired.deckId == card.deckId
-                let sameSide = repaired.side == card.side
-                let sameTime = repaired.committedAt == card.committedAt
-                let sameLabel = repaired.centeringAssist?.centeringLabel == card.centeringAssist?.centeringLabel
-                if sameDeck && sameSide && sameTime && sameLabel { return card }
-                changed = true
-                return SavedCard(
-                    id: card.id,
-                    scanId: card.scanId,
-                    committedAt: repaired.committedAt,
-                    name: card.name,
-                    set: card.setName,
-                    lrCentering: repaired.lrCentering,
-                    tbCentering: repaired.tbCentering,
-                    predictedGrade: repaired.grade,
-                    marketValue: card.calculatedValue,
-                    familyId: card.familyId,
-                    subGradesLabel: repaired.subGradesLabel,
-                    cornersGrade: repaired.cornersGrade,
-                    debugPath: repaired.debugPath,
-                    centeringAssist: repaired.centeringAssist,
-                    deckId: repaired.deckId,
-                    side: repaired.side,
-                    batchId: card.targetBatchId
-                )
-            }
-            if changed, let cardsData = try? JSONEncoder().encode(self.savedCards) {
-                UserDefaults.standard.set(cardsData, forKey: storageKeyCards)
-            }
+            self.savedCards = parsedCards
         }
         if let trendData = UserDefaults.standard.data(forKey: storageKeyTrend),
            let parsedSnapshots = try? jsonDecoder.decode([ValueSnapshot].self, from: trendData) {

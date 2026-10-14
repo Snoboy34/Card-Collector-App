@@ -586,6 +586,7 @@ public enum CenteringAssist {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "M/d HH:mm"
+        formatter.timeZone = TimeZone.current
         return formatter
     }()
 
@@ -839,7 +840,7 @@ public enum CenteringAssist {
 
         let clock = ISO8601DateFormatter()
         clock.formatOptions = [.withInternetDateTime]
-        guard let originalCapture = clock.date(from: "2026-10-12T20:57:08Z") else {
+        guard let originalCapture = clock.date(from: "2026-10-12T21:57:08Z") else {
             expect(false, "the 10/12 capture instant parses")
             return
         }
@@ -878,6 +879,8 @@ public enum CenteringAssist {
         expect(kept.centeringAssist?.side == "back", "the assist is scored on the capture side")
         expect(kept.centeringAssist?.adjustmentLine?.hasPrefix("adjusted ") == true, "the adjustment clock is stored apart from the scan time")
         expect(kept.centeringAssist?.adjustedAt == "2026-10-13T13:54:36.000Z", "the adjustment time is not the capture time")
+        expect(adjustmentFormatter.timeZone == TimeZone.current, "the adjustment line uses the phone's time zone")
+        expect(ScanLedger.timestampUsesLocalTimeZone, "the scan time uses the phone's time zone")
 
         let sideMissing = sampleLedger(scanId: "noside-scan-0001", at: originalCapture, deck: "TD-04", side: nil, assist: nil)
         let defaultedFront = sampleLedger(scanId: "noside-scan-0001", at: resaveClock, deck: "TD-13", side: "front", assist: stamped)
@@ -894,22 +897,16 @@ public enum CenteringAssist {
         expect(chosenBack.committedAt == originalCapture, "setting the side keeps the scan time")
         expect(chosenBack.centeringAssist?.side == "back")
 
-        var corruptAssist = backSnap
-        corruptAssist.centeringLabel = "9.0 assisted"
-        corruptAssist.side = "front"
-        let corrupt = sampleLedger(
+        let held = sampleLedger(
             scanId: "366A0E19-0000-4000-8000-000000000001",
             at: resaveClock,
             deck: "TD-13",
             side: "front",
-            assist: corruptAssist
+            assist: stamped
         )
-        let repaired = corrupt.applyingKnownCaptureRepair()
-        expect(repaired.deckId == "TD-06", "366A0E19 keeps deck TD-06")
-        expect(repaired.side == "back", "366A0E19 keeps side back")
-        expect(repaired.committedAt == originalCapture, "366A0E19 keeps the original scan time")
-        expect(repaired.centeringAssist?.side == "back")
-        expect(repaired.centeringAssist?.centeringLabel == "10.0 assisted", "366A0E19 scores on the back table")
+        let stillHeld = ScanLedger.keepingCaptureIdentity(existing: held, updated: resaved, explicitSide: nil)
+        expect(stillHeld.committedAt == resaveClock, "the phone does not invent a capture time for 366A0E19")
+        expect(stillHeld.deckId == "TD-13", "the phone does not invent a deck id for 366A0E19")
     }
     #endif
 }
