@@ -18,7 +18,7 @@ enum CardStillOCR {
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         try handler.perform([request])
 
-        let observations = (request.results as? [VNRecognizedTextObservation]) ?? []
+        let observations = request.results ?? []
         let sorted = observations.sorted { $0.boundingBox.origin.y > $1.boundingBox.origin.y }
         var lines: [String] = []
         for observation in sorted {
@@ -54,7 +54,7 @@ enum CardStillQuad {
         } catch {
             return nil
         }
-        guard let rect = (request.results as? [VNRectangleObservation])?.first else { return nil }
+        guard let rect = request.results?.first else { return nil }
 
         let width = Double(cgImage.width)
         let height = Double(cgImage.height)

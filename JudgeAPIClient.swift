@@ -91,6 +91,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var capturedBins: [String]
         var cornersGrade: Double?
         var debugPath: String?
+        var centeringAssist: CenteringAssist.Snapshot?
+        var deckId: String?
+        var side: String?
         var rawJSON: String
         var summaryText: String
     }
@@ -197,6 +200,72 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         return try Self.parseReport(data)
     }
 
+    func submitCenteringAssist(
+        baseURL: String,
+        scanId: String,
+        lines: [String: [String: Double]],
+        consent: Bool,
+        confirmImplausible: Bool = false,
+        setSide: String? = nil
+    ) async throws -> RemoteReport {
+        guard let root = Self.normalizedBaseURL(baseURL) else {
+            throw APIError.invalidServerURL
+        }
+        let endpoint = root
+            .appendingPathComponent("api")
+            .appendingPathComponent("scans")
+            .appendingPathComponent(scanId)
+            .appendingPathComponent("centering-assist")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: Any] = [
+            "consent": consent,
+            "confirmImplausible": confirmImplausible
+        ]
+        if !lines.isEmpty {
+            body["lines"] = lines
+        }
+        if setSide == "front" || setSide == "back" {
+            body["setSide"] = setSide
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            throw Self.transportError(error)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(status) else {
+            let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let message = (parsed?["error"] as? String) ?? (String(data: data, encoding: .utf8) ?? "HTTP \(status)")
+            if parsed?["implausible"] != nil {
+                throw APIError.implausible(message)
+            }
+            throw APIError.httpFailure(status, message)
+        }
+        return try Self.parseReport(data)
+    }
+
+    func fetch(_ url: URL) async throws -> Data {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            throw Self.transportError(error)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(status) else {
+            throw APIError.httpFailure(status, "warped card")
+        }
+        return data
+    }
+
     static func transportError(_ error: URLError) -> Error {
         switch error.code {
         case .timedOut, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
@@ -212,6 +281,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         case unreachable
         case cardNotFound(String)
         case httpFailure(Int, String)
+        case implausible(String)
         case undecodableResponse
 
         var errorDescription: String? {
@@ -224,6 +294,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 return "Card not found — retake. \(reason)"
             case .httpFailure(let code, let body):
                 return "Grade request failed (\(code)): \(body)"
+            case .implausible(let message):
+                return message
             case .undecodableResponse:
                 return "Server did not return JSON."
             }
@@ -404,9 +476,19 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let metrics = report?["centeringMetrics"] as? [String: Any]
         let leftRightRatio = ratioPair(metrics?["leftRightRatio"], first: "left", second: "right")
         let topBottomRatio = ratioPair(metrics?["topBottomRatio"], first: "top", second: "bottom")
+        let centeringAssist = CenteringAssist.parse(report: report, item: item)
+        let deckId = (item?["deckId"] as? String) ?? (report?["deckId"] as? String)
+        let side = (item?["side"] as? String) ?? (report?["side"] as? String)
 
         var lines: [String] = []
         if let scanId, !scanId.isEmpty { lines.append("scanId  \(scanId)") }
+        if let deckId {
+            let trimmed = deckId.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                let face = side == "back" ? "back" : (side == "front" ? "front" : "")
+                lines.append(face.isEmpty ? "deckId  \(trimmed)" : "deckId  \(trimmed)  \(face)")
+            }
+        }
         if let finalScore { lines.append(String(format: "finalScore  %.1f", finalScore)) }
         if incomplete { lines.append("incomplete  true") }
         if let sub { lines.append(sub) }
@@ -445,6 +527,14 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 lines.append(String(format: "upload %.0f×%.0f · graded on %.0f×%.0f warp", uw, uh, ww, wh))
             }
         }
+        if let headline = centeringAssist?.headline {
+            let knownSide = ScanLedger.knownFace(centeringAssist?.side) != nil
+            if knownSide, let label = centeringAssist?.centeringLabel, !label.isEmpty {
+                lines.append("\(label) — \(headline)")
+            } else {
+                lines.append(headline)
+            }
+        }
         if lines.isEmpty { lines.append(raw) }
 
         return RemoteReport(
@@ -472,6 +562,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             capturedBins: capturedBins,
             cornersGrade: cornersGrade,
             debugPath: debugPath,
+            centeringAssist: centeringAssist,
+            deckId: deckId,
+            side: side,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )
@@ -505,8 +598,16 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         } else {
             setName = ScanLedger.absent
         }
-        let lr = report.leftRightRatio.map { String(format: "%.1f%%/%.1f%%", $0.left, $0.right) } ?? ScanLedger.absent
-        let tb = report.topBottomRatio.map { String(format: "%.1f%%/%.1f%%", $0.top, $0.bottom) } ?? ScanLedger.absent
+        let assistedRatios = report.centeringAssist.flatMap { snap -> (lr: String, tb: String)? in
+            guard snap.adjustedCount > 0 else { return nil }
+            return CenteringAssist.assistedRatioText(widths: snap.placedWidthsMM())
+        }
+        let lr = assistedRatios?.lr
+            ?? report.leftRightRatio.map { String(format: "%.1f%%/%.1f%%", $0.left, $0.right) }
+            ?? ScanLedger.absent
+        let tb = assistedRatios?.tb
+            ?? report.topBottomRatio.map { String(format: "%.1f%%/%.1f%%", $0.top, $0.bottom) }
+            ?? ScanLedger.absent
         return ScanLedger(
             scanId: scanId,
             committedAt: timestamp,
@@ -521,7 +622,10 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             primaryFlaw: report.primaryFlaw ?? "",
             incomplete: report.incomplete ?? false,
             cornersGrade: report.cornersGrade,
-            debugPath: report.debugPath
+            debugPath: report.debugPath,
+            centeringAssist: report.centeringAssist,
+            deckId: report.deckId,
+            side: ScanLedger.knownFace(report.side) ?? ScanLedger.knownFace(report.centeringAssist?.side)
         )
     }
 
@@ -574,8 +678,14 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
     }
 
     #if DEBUG
-    static func runContractChecks() {
-        precondition(JudgeTestDeck.graders == ["PSA", "BGS", "SGC", "CGC", "TAG", "Other"])
+    /// Form fields only. No camera session is opened.
+    /// The body contains the raw JPEG, so a strict UTF-8 decode is nil and used to
+    /// fail the first field check with a signal trap. Lossy UTF-8 keeps the ASCII fields.
+    static func runContractChecks(_ check: ContractCheck) {
+        func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String, file: StaticString = #filePath, line: UInt = #line) {
+            check(condition(), message(), file, line)
+        }
+        expect(JudgeTestDeck.graders == ["PSA", "BGS", "SGC", "CGC", "TAG", "Other"], "grader list is PSA, BGS, SGC, CGC, TAG, Other")
         let jpeg = Data([0xFF, 0xD8, 0xFF])
         func text(grader: String?, side: String? = nil, pairId: String? = nil) -> String {
             let data = multipartBody(
@@ -584,23 +694,23 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 preSubmission: true, intendedGrader: grader, side: side, pairId: pairId,
                 captureMetadata: nil, scanId: "scan"
             )
-            return String(data: data, encoding: .utf8) ?? ""
+            return String(decoding: data, as: UTF8.self)
         }
         let sent = text(grader: "BGS")
-        precondition(sent.contains("name=\"deckId\""))
-        precondition(sent.contains("name=\"preSubmission\""))
-        precondition(sent.contains("name=\"intendedGrader\""))
-        precondition(sent.contains("\r\n\r\nBGS\r\n"))
-        precondition(!text(grader: nil).contains("intendedGrader"))
-        precondition(!text(grader: "").contains("intendedGrader"))
-        precondition(!text(grader: "Beckett").contains("intendedGrader"))
+        expect(sent.contains("name=\"deckId\""), "multipart form keeps deckId beside the JPEG bytes")
+        expect(sent.contains("name=\"preSubmission\""), "pre-submission flag is a form field")
+        expect(sent.contains("name=\"intendedGrader\""), "a known grader is a form field")
+        expect(sent.contains("\r\n\r\nBGS\r\n"), "intended grader value is BGS")
+        expect(!text(grader: nil).contains("intendedGrader"), "a missing grader is omitted")
+        expect(!text(grader: "").contains("intendedGrader"), "an empty grader is omitted")
+        expect(!text(grader: "Beckett").contains("intendedGrader"), "an unknown grader is omitted")
         let back = text(grader: nil, side: "back", pairId: "front-scan-1")
-        precondition(back.contains("name=\"side\""))
-        precondition(back.contains("\r\n\r\nback\r\n"))
-        precondition(back.contains("name=\"pairId\""))
-        precondition(back.contains("\r\n\r\nfront-scan-1\r\n"))
-        precondition(!text(grader: nil, side: "top", pairId: "").contains("name=\"side\""))
-        precondition(!text(grader: nil).contains("name=\"pairId\""))
+        expect(back.contains("name=\"side\""), "back capture sends side")
+        expect(back.contains("\r\n\r\nback\r\n"), "side value is back")
+        expect(back.contains("name=\"pairId\""), "back capture sends pairId")
+        expect(back.contains("\r\n\r\nfront-scan-1\r\n"), "pairId is the front scan id")
+        expect(!text(grader: nil, side: "top", pairId: "").contains("name=\"side\""), "side other than front or back is omitted")
+        expect(!text(grader: nil).contains("name=\"pairId\""), "a missing pairId is omitted")
     }
     #endif
 }

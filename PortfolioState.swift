@@ -22,15 +22,111 @@ public struct ScanLedger: Equatable {
     public let incomplete: Bool
     public let cornersGrade: Double?
     public let debugPath: String?
+    public let centeringAssist: CenteringAssist.Snapshot?
+    public let deckId: String?
+    public let side: String?
 
     public var displayCorners: String {
         guard let cornersGrade else { return Self.absent }
         return String(format: "%.1f", cornersGrade)
     }
 
-    public var displayGrade: String {
+    /// Engine final score is a prediction. Whole numbers drop the trailing .0.
+    public static func predictedGradeText(_ grade: Double) -> String {
+        let tenths = (grade * 10).rounded() / 10
+        let text = String(format: "%.1f", tenths)
+        if text.hasSuffix(".0") {
+            return "Predicted PSA " + String(text.dropLast(2))
+        }
+        return "Predicted PSA " + text
+    }
+
+    /// Engine final score only. An assisted centering is never formatted as PSA.
+    public var displayEngineGrade: String {
         guard let grade else { return Self.absent }
-        return String(format: "PSA %.1f", grade)
+        return Self.predictedGradeText(grade)
+    }
+
+    /// L/R from the dragged lines when an assist is saved. Otherwise the engine ratio.
+    public var displayLR: String {
+        if let text = centeringAssist?.assistedLRText { return text }
+        return lrCentering
+    }
+
+    /// T/B from the dragged lines when an assist is saved. Otherwise the engine ratio.
+    public var displayTB: String {
+        if let text = centeringAssist?.assistedTBText { return text }
+        return tbCentering
+    }
+
+    public static func knownFace(_ side: String?) -> String? {
+        if side == "front" || side == "back" { return side }
+        return nil
+    }
+
+    public static func deckLine(deckId: String?, side: String?) -> String? {
+        guard let deckId else { return nil }
+        let trimmed = deckId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+        if side == "back" { return trimmed + " · back" }
+        if side == "front" { return trimmed + " · front" }
+        return trimmed + " · side unknown"
+    }
+
+    /// Deck id and side come from the capture. A re-save must not replace them.
+    /// `explicitSide` is the front/back button on a record that has no side yet.
+    public static func keepingCaptureIdentity(existing: ScanLedger, updated: ScanLedger, explicitSide: String?) -> ScanLedger {
+        let keptSide = knownFace(existing.side) ?? knownFace(explicitSide)
+        var assist = updated.centeringAssist
+        if var snap = assist {
+            if let keptSide {
+                snap.side = keptSide
+            } else {
+                snap.side = nil
+                snap.centeringLabel = nil
+            }
+            assist = snap
+        }
+        let merged = ScanLedger(
+            scanId: existing.scanId,
+            committedAt: existing.committedAt,
+            name: existing.name,
+            setName: existing.setName,
+            grade: existing.grade ?? updated.grade,
+            lrCentering: updated.lrCentering,
+            tbCentering: updated.tbCentering,
+            value: existing.value,
+            familyId: existing.familyId,
+            subGradesLabel: updated.subGradesLabel,
+            primaryFlaw: existing.primaryFlaw,
+            incomplete: existing.incomplete,
+            cornersGrade: updated.cornersGrade,
+            debugPath: updated.debugPath,
+            centeringAssist: assist,
+            deckId: nonempty(existing.deckId) ?? nonempty(updated.deckId),
+            side: keptSide
+        )
+        return merged
+    }
+
+    public var showsSideUnknown: Bool {
+        Self.knownFace(side) == nil
+    }
+
+    private static func nonempty(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    public var deckLine: String? {
+        Self.deckLine(deckId: deckId, side: side)
+    }
+
+    /// Assisted line when the user moved a border. Otherwise the engine grade.
+    public var displayGrade: String {
+        if let line = centeringAssist?.displayLine { return line }
+        return displayEngineGrade
     }
 
     public var displayValue: String {
@@ -51,10 +147,17 @@ public struct ScanLedger: Equatable {
         UUID(uuidString: scanId) ?? UUID()
     }
 
+    /// Scan time is formatted in the phone's current time zone.
+    static var timestampUsesLocalTimeZone: Bool {
+        localTimestampFormatter.timeZone == TimeZone.current &&
+        ScanLedgerFields.timestampFormatter.timeZone == TimeZone.current
+    }
+
     private static let localTimestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .medium
+        formatter.timeZone = TimeZone.current
         return formatter
     }()
 }
@@ -73,6 +176,9 @@ public struct SavedCard: Identifiable, Codable {
     public let subGradesLabel: String
     public let cornersGrade: Double?
     public let debugPath: String?
+    public let centeringAssist: CenteringAssist.Snapshot?
+    public let deckId: String?
+    public let side: String?
     public var targetBatchId: UUID?
 
     public init(
@@ -89,6 +195,9 @@ public struct SavedCard: Identifiable, Codable {
         subGradesLabel: String = "",
         cornersGrade: Double? = nil,
         debugPath: String? = nil,
+        centeringAssist: CenteringAssist.Snapshot? = nil,
+        deckId: String? = nil,
+        side: String? = nil,
         batchId: UUID? = nil
     ) {
         self.id = id
@@ -104,6 +213,9 @@ public struct SavedCard: Identifiable, Codable {
         self.subGradesLabel = subGradesLabel
         self.cornersGrade = cornersGrade
         self.debugPath = debugPath
+        self.centeringAssist = centeringAssist
+        self.deckId = deckId
+        self.side = side
         self.targetBatchId = batchId
     }
 
@@ -122,13 +234,30 @@ public struct SavedCard: Identifiable, Codable {
             subGradesLabel: ledger.subGradesLabel,
             cornersGrade: ledger.cornersGrade,
             debugPath: ledger.debugPath,
+            centeringAssist: ledger.centeringAssist,
+            deckId: ledger.deckId,
+            side: ledger.side,
             batchId: batchId
         )
     }
 
-    public var displayGrade: String {
+    public var displayEngineGrade: String {
         guard let predictedGradePSA else { return ScanLedger.absent }
-        return String(format: "PSA %.1f", predictedGradePSA)
+        return ScanLedger.predictedGradeText(predictedGradePSA)
+    }
+
+    public var displayGrade: String {
+        if let line = centeringAssist?.displayLine { return line }
+        return displayEngineGrade
+    }
+
+    public var deckLine: String? {
+        ScanLedger.deckLine(deckId: deckId, side: side)
+    }
+
+    public var vaultSubtitle: String {
+        if let deckLine { return deckLine }
+        return setName
     }
 
     public var displayValue: String {
@@ -160,14 +289,23 @@ public struct SavedCard: Identifiable, Codable {
             primaryFlaw: "",
             incomplete: predictedGradePSA == nil,
             cornersGrade: cornersGrade,
-            debugPath: debugPath
+            debugPath: debugPath,
+            centeringAssist: centeringAssist,
+            deckId: deckId,
+            side: side
         )
+    }
+
+    public func assigned(to batchId: UUID) -> SavedCard {
+        var copy = self
+        copy.targetBatchId = batchId
+        return copy
     }
 
     enum CodingKeys: String, CodingKey {
         case id, scanId, committedAt, name, setName
         case lrCenteringResult, tbCenteringResult
-        case predictedGradePSA, calculatedValue, familyId, subGradesLabel, cornersGrade, debugPath, targetBatchId
+        case predictedGradePSA, calculatedValue, familyId, subGradesLabel, cornersGrade, debugPath, centeringAssist, deckId, side, targetBatchId
     }
 
     public init(from decoder: Decoder) throws {
@@ -191,6 +329,9 @@ public struct SavedCard: Identifiable, Codable {
         subGradesLabel = try container.decodeIfPresent(String.self, forKey: .subGradesLabel) ?? ""
         cornersGrade = try container.decodeIfPresent(Double.self, forKey: .cornersGrade)
         debugPath = try container.decodeIfPresent(String.self, forKey: .debugPath)
+        centeringAssist = try container.decodeIfPresent(CenteringAssist.Snapshot.self, forKey: .centeringAssist)
+        deckId = try container.decodeIfPresent(String.self, forKey: .deckId)
+        side = try container.decodeIfPresent(String.self, forKey: .side)
         targetBatchId = try container.decodeIfPresent(UUID.self, forKey: .targetBatchId)
     }
 
@@ -209,6 +350,9 @@ public struct SavedCard: Identifiable, Codable {
         try container.encode(subGradesLabel, forKey: .subGradesLabel)
         try container.encodeIfPresent(cornersGrade, forKey: .cornersGrade)
         try container.encodeIfPresent(debugPath, forKey: .debugPath)
+        try container.encodeIfPresent(centeringAssist, forKey: .centeringAssist)
+        try container.encodeIfPresent(deckId, forKey: .deckId)
+        try container.encodeIfPresent(side, forKey: .side)
         try container.encodeIfPresent(targetBatchId, forKey: .targetBatchId)
     }
 }
@@ -218,6 +362,7 @@ enum ScanLedgerFields {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .medium
+        formatter.timeZone = TimeZone.current
         return formatter
     }()
 }
@@ -353,6 +498,34 @@ public class PortfolioState: ObservableObject {
         saveDataToPersistentDisk()
     }
 
+    /// Keeps the capture's deck id, side, and scan time. The assisted snapshot is stored beside the engine grade.
+    public func replaceSavedCard(id: UUID, ledger: ScanLedger) {
+        guard let index = savedCards.firstIndex(where: { $0.id == id }) else { return }
+        let existing = savedCards[index]
+        let explicit = ScanLedger.knownFace(existing.side) == nil ? ledger.side : nil
+        let merged = ScanLedger.keepingCaptureIdentity(existing: existing.asLedger, updated: ledger, explicitSide: explicit)
+        savedCards[index] = SavedCard(
+            id: existing.id,
+            scanId: existing.scanId,
+            committedAt: merged.committedAt,
+            name: existing.name,
+            set: existing.setName,
+            lrCentering: merged.lrCentering,
+            tbCentering: merged.tbCentering,
+            predictedGrade: merged.grade,
+            marketValue: existing.calculatedValue,
+            familyId: existing.familyId,
+            subGradesLabel: merged.subGradesLabel,
+            cornersGrade: merged.cornersGrade,
+            debugPath: merged.debugPath,
+            centeringAssist: merged.centeringAssist,
+            deckId: merged.deckId,
+            side: merged.side,
+            batchId: existing.targetBatchId
+        )
+        saveDataToPersistentDisk()
+    }
+
     public func deleteCard(at offsets: IndexSet) {
         savedCards.remove(atOffsets: offsets)
         appendLiveTrendSnapshotRecord(with: totalPortfolioValue)
@@ -368,22 +541,7 @@ public class PortfolioState: ObservableObject {
     public func assignCardToBatch(cardId: UUID, batchId: UUID) {
         if let cardIndex = savedCards.firstIndex(where: { $0.id == cardId }) {
             let oldCard = savedCards[cardIndex]
-            savedCards[cardIndex] = SavedCard(
-                id: oldCard.id,
-                scanId: oldCard.scanId,
-                committedAt: oldCard.committedAt,
-                name: oldCard.name,
-                set: oldCard.setName,
-                lrCentering: oldCard.lrCenteringResult,
-                tbCentering: oldCard.tbCenteringResult,
-                predictedGrade: oldCard.predictedGradePSA,
-                marketValue: oldCard.calculatedValue,
-                familyId: oldCard.familyId,
-                subGradesLabel: oldCard.subGradesLabel,
-                cornersGrade: oldCard.cornersGrade,
-                debugPath: oldCard.debugPath,
-                batchId: batchId
-            )
+            savedCards[cardIndex] = oldCard.assigned(to: batchId)
             saveDataToPersistentDisk()
         }
     }
@@ -398,11 +556,13 @@ public class PortfolioState: ObservableObject {
         guard let deviceCacheDirectoryPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
 
         let outputTargetURL = deviceCacheDirectoryPath.appendingPathComponent(manifestDocumentFileName)
-        var csvStringDocumentPayload = "Scan ID,Committed At,Card Name,Expansion Set,L/R Centering,T/B Centering,Predicted PSA Grade,Market Valuation,Family ID,Assigned Batch Folder\n"
+        var csvStringDocumentPayload = "Scan ID,Committed At,Card Name,Expansion Set,L/R Centering,T/B Centering,Predicted PSA Grade,Assisted centering,Market Valuation,Family ID,Assigned Batch Folder,Deck ID\n"
 
         for asset in savedCards {
             let assignedFolderName = activeSubmissionBatches.first(where: { $0.id == asset.targetBatchId })?.batchName ?? "Unassigned Vault"
-            let layoutRowString = "\"\(asset.scanId)\",\"\(asset.displayTimestamp)\",\"\(asset.name)\",\"\(asset.setName)\",\"\(asset.lrCenteringResult)\",\"\(asset.tbCenteringResult)\",\"\(asset.displayGrade)\",\"\(asset.displayValue)\",\"\(asset.familyId ?? ScanLedger.absent)\",\"\(assignedFolderName)\"\n"
+            let assisted = asset.centeringAssist?.headline ?? ScanLedger.absent
+            let deck = asset.deckLine ?? ScanLedger.absent
+            let layoutRowString = "\"\(asset.scanId)\",\"\(asset.displayTimestamp)\",\"\(asset.name)\",\"\(asset.setName)\",\"\(asset.lrCenteringResult)\",\"\(asset.tbCenteringResult)\",\"\(asset.displayEngineGrade)\",\"\(assisted)\",\"\(asset.displayValue)\",\"\(asset.familyId ?? ScanLedger.absent)\",\"\(assignedFolderName)\",\"\(deck)\"\n"
             csvStringDocumentPayload.append(layoutRowString)
         }
 
