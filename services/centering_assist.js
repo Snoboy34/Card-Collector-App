@@ -445,73 +445,123 @@ function attachAssist(item, assist) {
   return Object.assign({}, item, { gradingReport: report });
 }
 
-/**
- * The instant recorded for scan 366A0E19 before a re-save replaced it:
- * 10/12/26 16:57:08 in US Eastern, the zone that showed 10/13/26 09:54:36
- * for 13:54:36Z. Used only when that scan has no earlier metadata timestamp.
- */
-const SCAN_366A0E19_CAPTURED_AT = '2026-10-12T20:57:08.000Z';
+const BACKUP_366_NAME = 'database.backup-2026-10-13.json';
 
-function sameInstant(a, b) {
-  if (a == null && b == null) return true;
-  const left = Date.parse(a);
-  const right = Date.parse(b);
-  if (!isNaN(left) && !isNaN(right)) return left === right;
-  return a === b;
+function sameJson(a, b) {
+  try { return JSON.stringify(a) === JSON.stringify(b); }
+  catch (err) { return a === b; }
 }
 
-function metadataInstants(item) {
-  const out = [];
-  const capture = item && item.captureMetadata && item.captureMetadata.capture;
-  const server = item && item.serverMetadata;
-  [capture && capture.capturedAt, server && server.receivedAt].forEach(function (value) {
-    const time = Date.parse(value);
-    if (!isNaN(time)) out.push(time);
+/** Exact scan id, or the single backup row whose id is a prefix of this one. */
+function backupItemFor(inventory, liveId) {
+  const want = String(liveId || '').toUpperCase();
+  const items = inventory || [];
+  let prefix = null;
+  let prefixCount = 0;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!item) continue;
+    const id = String(item.scanId || item.id || '');
+    const upper = id.toUpperCase();
+    if (!upper || upper.indexOf('366A0E19') !== 0) continue;
+    if (upper === want) return { item: item };
+    if (want.indexOf(upper) === 0 || upper.indexOf(want) === 0) {
+      prefix = item;
+      prefixCount += 1;
+    }
+  }
+  if (prefixCount === 1) return { item: prefix };
+  if (prefixCount > 1) return { ambiguous: true };
+  return { item: null };
+}
+
+/**
+ * Copy capture fields from the pre-resave backup. Deck id and side are not
+ * copied; the caller sets those. The live centering assist stays, so the
+ * adjustment made after the backup is kept.
+ */
+function restoreOriginalFields(live, backupItem) {
+  const restored = [];
+  const assist = live.gradingReport && live.gradingReport.centeringAssist;
+  Object.keys(backupItem).forEach(function (key) {
+    if (key === 'deckId' || key === 'side' || key === 'gradingReport') return;
+    if (sameJson(live[key], backupItem[key])) return;
+    live[key] = backupItem[key];
+    restored.push(key);
   });
-  return out;
-}
-
-/** Earliest stored capture clock, else the recorded 366A0E19 instant when the saved clock is later. */
-function originalCaptureTime(item) {
-  const found = metadataInstants(item);
-  if (found.length) return new Date(Math.min.apply(null, found)).toISOString();
-  const created = Date.parse(item && item.createdAt);
-  const recorded = Date.parse(SCAN_366A0E19_CAPTURED_AT);
-  if (!isNaN(created) && created > recorded) return SCAN_366A0E19_CAPTURED_AT;
-  return item && item.createdAt ? item.createdAt : null;
+  if (backupItem.gradingReport && typeof backupItem.gradingReport === 'object') {
+    const report = Object.assign({}, backupItem.gradingReport);
+    if (assist) report.centeringAssist = assist;
+    if (!sameJson(live.gradingReport, report)) {
+      live.gradingReport = report;
+      restored.push('gradingReport');
+    }
+  }
+  return restored;
 }
 
 /**
- * Put TD-06 / back / the original capture time back on scan 366A0E19.
- * A second pass finds nothing to change and logs nothing.
+ * One-time repair for scan 366A0E19. Deck TD-06 and side back are the owner's
+ * instruction. createdAt and every other original field come from
+ * data/database.backup-2026-10-13.json. A missing backup, or a backup that
+ * does not contain the scan, is logged and createdAt is left as it is.
+ * No capture time is invented. A second pass that finds the backup fields
+ * already restored logs nothing.
  */
-function repairRecord366A0E19(db, emit) {
+function repairRecord366A0E19(db, emit, backup) {
   const log = typeof emit === 'function' ? emit : console.log;
+  const source = backup || { missing: true };
+  const backupMissing = source.missing === true || source.unreadable === true;
   let changed = 0;
+  let saw = false;
   ((db && db.inventory) || []).forEach(function (item) {
     if (!item) return;
     const id = String(item.scanId || item.id || '');
     if (id.toUpperCase().indexOf('366A0E19') !== 0) return;
-    const report = item.gradingReport || {};
-    const nextTime = originalCaptureTime(item);
+    saw = true;
     const beforeDeck = item.deckId ? String(item.deckId) : 'null';
-    const beforeSide = knownFace(item.side) || knownFace(report.side) || 'null';
+    const beforeSide = knownFace(item.side) || knownFace(item.gradingReport && item.gradingReport.side) || 'null';
     const beforeTime = item.createdAt ? String(item.createdAt) : 'null';
-    const afterTime = nextTime ? String(nextTime) : beforeTime;
-    if (beforeDeck === 'TD-06' && beforeSide === 'back' && knownFace(report.side) === 'back' && sameInstant(beforeTime, afterTime)) {
-      return;
+    const match = backupMissing ? { item: null } : backupItemFor(source.inventory, id);
+    let restored = [];
+    let timeNote = 'createdAt ' + beforeTime + ' left unchanged';
+    if (backupMissing) {
+      timeNote = 'backup missing ' + (source.path || BACKUP_366_NAME) +
+        (source.error ? ' ' + source.error : '') +
+        ' createdAt ' + beforeTime + ' left unchanged';
+    } else if (match.ambiguous) {
+      timeNote = 'backup has more than one ' + id + ' createdAt ' + beforeTime + ' left unchanged';
+    } else if (!match.item) {
+      timeNote = 'not in backup createdAt ' + beforeTime + ' left unchanged';
+    } else {
+      restored = restoreOriginalFields(item, match.item);
+      const afterTime = item.createdAt ? String(item.createdAt) : 'null';
+      timeNote = 'createdAt ' + beforeTime + ' -> ' + afterTime;
+      if (restored.length) timeNote += ' restored ' + restored.join(',');
     }
+    const deckChanged = item.deckId !== 'TD-06';
+    const sideChanged = item.side !== 'back' || knownFace(item.gradingReport && item.gradingReport.side) !== 'back';
     item.deckId = 'TD-06';
     item.side = 'back';
-    if (!item.gradingReport) item.gradingReport = {};
+    if (!item.gradingReport || typeof item.gradingReport !== 'object') item.gradingReport = {};
     item.gradingReport.side = 'back';
-    if (nextTime) item.createdAt = nextTime;
+    const backupProblem = backupMissing || match.ambiguous || !match.item;
+    if (!deckChanged && !sideChanged && !restored.length && !backupProblem) return;
+    if (!deckChanged && !sideChanged && !restored.length && backupProblem) {
+      log('[centering-assist] repair scanId=' + id + ' ' + timeNote);
+      return;
+    }
     changed += 1;
     log('[centering-assist] repair scanId=' + id +
       ' deckId ' + beforeDeck + ' -> TD-06' +
       ' side ' + beforeSide + ' -> back' +
-      ' createdAt ' + beforeTime + ' -> ' + (item.createdAt || 'null'));
+      ' ' + timeNote);
   });
+  if (!saw && backupMissing) {
+    log('[centering-assist] repair backup missing ' + (source.path || BACKUP_366_NAME) +
+      (source.error ? ' ' + source.error : '') +
+      ' no 366A0E19 row createdAt left unchanged');
+  }
   return changed;
 }
 
@@ -568,6 +618,7 @@ module.exports = {
   knownFace: knownFace,
   assistedSide: assistedSide,
   applyStoredAssist: applyStoredAssist,
+  BACKUP_366_NAME: BACKUP_366_NAME,
   repairRecord366A0E19: repairRecord366A0E19,
   rescoreStoredAssist: rescoreStoredAssist,
   rescoreDatabase: rescoreDatabase

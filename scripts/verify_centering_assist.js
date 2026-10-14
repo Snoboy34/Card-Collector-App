@@ -258,7 +258,58 @@ async function main() {
   }
 
   const repairLog = [];
+  const captureInstant = '2026-10-12T21:57:08.000Z';
   const corrupt = {
+    inventory: [{
+      scanId: '366A0E19-0000-4000-8000-000000000001',
+      deckId: 'TD-13',
+      side: 'front',
+      name: 'replaced',
+      createdAt: '2026-10-13T13:54:36.000Z',
+      gradingReport: {
+        side: 'front',
+        centeringAssist: { adjustedCount: 1, centeringLabel: '9.0 assisted', borderWidthsMm: { left: 5.6, right: 4.4, top: 5, bottom: 5 } }
+      }
+    }]
+  };
+  const backup = {
+    missing: false,
+    path: 'data/' + assist.BACKUP_366_NAME,
+    inventory: [{
+      scanId: '366A0E19-0000-4000-8000-000000000001',
+      deckId: 'TD-06',
+      side: 'back',
+      name: 'Dana Evans',
+      pairId: 'front-pair-1',
+      createdAt: captureInstant,
+      gradingReport: { side: 'back', finalScore: null, centeringAssist: { centeringLabel: 'old' } }
+    }]
+  };
+  assert('366A0E19 copies createdAt and other original fields from the backup',
+    assist.repairRecord366A0E19(corrupt, function (line) { repairLog.push(line); }, backup) === 1 &&
+    corrupt.inventory[0].deckId === 'TD-06' &&
+    corrupt.inventory[0].side === 'back' &&
+    corrupt.inventory[0].gradingReport.side === 'back' &&
+    corrupt.inventory[0].createdAt === captureInstant &&
+    corrupt.inventory[0].name === 'Dana Evans' &&
+    corrupt.inventory[0].pairId === 'front-pair-1' &&
+    corrupt.inventory[0].gradingReport.centeringAssist.centeringLabel === '9.0 assisted' &&
+    corrupt.inventory[0].createdAt !== '2026-10-12T20:57:08.000Z');
+  assert('the repair log names the scan, the deck, the side, and the backup time',
+    repairLog.length === 1 &&
+    repairLog[0].indexOf('scanId=366A0E19-0000-4000-8000-000000000001') !== -1 &&
+    repairLog[0].indexOf('deckId TD-13 -> TD-06') !== -1 &&
+    repairLog[0].indexOf('side front -> back') !== -1 &&
+    repairLog[0].indexOf('2026-10-13T13:54:36.000Z') !== -1 &&
+    repairLog[0].indexOf(captureInstant) !== -1 &&
+    repairLog[0].indexOf('restored') !== -1 &&
+    repairLog[0].indexOf('2026-10-12T20:57:08') === -1,
+    repairLog);
+  assert('a second repair from the same backup logs nothing',
+    assist.repairRecord366A0E19(corrupt, function (line) { repairLog.push(line); }, backup) === 0 &&
+    repairLog.length === 1, repairLog);
+  const missingBackupLog = [];
+  const missingClock = {
     inventory: [{
       scanId: '366A0E19-0000-4000-8000-000000000001',
       deckId: 'TD-13',
@@ -267,38 +318,74 @@ async function main() {
       gradingReport: { side: 'front' }
     }]
   };
-  assert('366A0E19 is repaired to TD-06, back, and the original capture time',
-    assist.repairRecord366A0E19(corrupt, function (line) { repairLog.push(line); }) === 1 &&
-    corrupt.inventory[0].deckId === 'TD-06' &&
-    corrupt.inventory[0].side === 'back' &&
-    corrupt.inventory[0].gradingReport.side === 'back' &&
-    corrupt.inventory[0].createdAt === '2026-10-12T20:57:08.000Z');
-  assert('the repair log names the scan and the old and new deck, side, and time',
-    repairLog.length === 1 &&
-    repairLog[0].indexOf('scanId=366A0E19-0000-4000-8000-000000000001') !== -1 &&
-    repairLog[0].indexOf('deckId TD-13 -> TD-06') !== -1 &&
-    repairLog[0].indexOf('side front -> back') !== -1 &&
-    repairLog[0].indexOf('2026-10-13T13:54:36.000Z') !== -1 &&
-    repairLog[0].indexOf('2026-10-12T20:57:08.000Z') !== -1,
-    repairLog);
-  assert('a second repair of 366A0E19 logs nothing',
-    assist.repairRecord366A0E19(corrupt, function (line) { repairLog.push(line); }) === 0 &&
-    repairLog.length === 1, repairLog);
-  const earlierClock = {
+  assert('a missing backup leaves createdAt unchanged and still sets TD-06 back',
+    assist.repairRecord366A0E19(missingClock, function (line) { missingBackupLog.push(line); }, {
+      missing: true,
+      path: 'data/' + assist.BACKUP_366_NAME
+    }) === 1 &&
+    missingClock.inventory[0].createdAt === '2026-10-13T13:54:36.000Z' &&
+    missingClock.inventory[0].deckId === 'TD-06' &&
+    missingClock.inventory[0].side === 'back' &&
+    missingBackupLog.length === 1 &&
+    missingBackupLog[0].indexOf('backup missing') !== -1 &&
+    missingBackupLog[0].indexOf('createdAt 2026-10-13T13:54:36.000Z left unchanged') !== -1 &&
+    missingBackupLog[0].indexOf('2026-10-12T21:57:08') === -1 &&
+    missingBackupLog[0].indexOf('2026-10-12T20:57:08') === -1,
+    missingBackupLog);
+  const absentLog = [];
+  const absentClock = {
     inventory: [{
-      scanId: '366A0E19-earlier-clock',
-      deckId: 'TD-13',
+      scanId: '366A0E19-0000-4000-8000-000000000001',
+      deckId: 'TD-02',
       side: 'front',
       createdAt: '2026-10-13T13:54:36.000Z',
-      serverMetadata: { receivedAt: '2026-10-12T18:00:00.000Z' },
       gradingReport: { side: 'front' }
     }]
   };
-  assist.repairRecord366A0E19(earlierClock, function () {});
-  assert('an earlier receivedAt stays the capture time',
-    earlierClock.inventory[0].createdAt === '2026-10-12T18:00:00.000Z' &&
-    earlierClock.inventory[0].deckId === 'TD-06' &&
-    earlierClock.inventory[0].side === 'back');
+  assert('a backup without that scan leaves createdAt unchanged',
+    assist.repairRecord366A0E19(absentClock, function (line) { absentLog.push(line); }, {
+      missing: false,
+      inventory: [{ scanId: 'other-scan-0001', createdAt: captureInstant, deckId: 'TD-06', side: 'back' }]
+    }) === 1 &&
+    absentClock.inventory[0].createdAt === '2026-10-13T13:54:36.000Z' &&
+    absentClock.inventory[0].deckId === 'TD-06' &&
+    absentClock.inventory[0].side === 'back' &&
+    absentLog[0].indexOf('not in backup') !== -1 &&
+    absentLog[0].indexOf('createdAt 2026-10-13T13:54:36.000Z left unchanged') !== -1,
+    absentLog);
+  const twoLog = [];
+  const twoDb = {
+    inventory: [
+      {
+        id: 'rescore-a',
+        side: 'back',
+        gradingReport: {
+          side: 'back',
+          centeringAssist: {
+            adjustedCount: 1, side: 'front', centering: 9, centeringLabel: '9.0 assisted',
+            borderWidthsMm: { left: 6, right: 4, top: 5, bottom: 5 }
+          }
+        }
+      },
+      {
+        id: 'rescore-b',
+        side: 'back',
+        gradingReport: {
+          side: 'back',
+          centeringAssist: {
+            adjustedCount: 1, side: 'front', centering: 1, centeringLabel: '1.0 assisted',
+            borderWidthsMm: { left: 9.1, right: 0.9, top: 5, bottom: 5 }
+          }
+        }
+      }
+    ]
+  };
+  assert('startup rescore logs each record with the scan id and the old and new labels',
+    assist.rescoreDatabase(twoDb, function (line) { twoLog.push(line); }) === 2 &&
+    twoLog.length === 2 &&
+    twoLog[0] === '[centering-assist] rescore scanId=rescore-a old=9.0 assisted new=10.0 assisted' &&
+    twoLog[1] === '[centering-assist] rescore scanId=rescore-b old=1.0 assisted new=null',
+    twoLog);
 
   const identityReport = blankWidths('back');
   const identityBuilt = assist.buildFromMillimetres(identityReport, { left: 5.6, right: 4.4, top: 5, bottom: 5 }, {

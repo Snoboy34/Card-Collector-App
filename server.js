@@ -1152,9 +1152,21 @@ function repairKnownLabels() {
   });
 }
 
+function loadRepairBackup() {
+  const backupPath = path.join(DATA_DIR, centeringAssist.BACKUP_366_NAME);
+  if (!fs.existsSync(backupPath)) return { missing: true, path: backupPath };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+    return { missing: false, path: backupPath, inventory: (parsed && parsed.inventory) || [] };
+  } catch (err) {
+    return { missing: true, unreadable: true, path: backupPath, error: err && err.message ? err.message : String(err) };
+  }
+}
+
 function refreshStoredAssists() {
   const db = loadDatabase();
-  const repaired = centeringAssist.repairRecord366A0E19(db);
+  const backup = loadRepairBackup();
+  const repaired = centeringAssist.repairRecord366A0E19(db, console.log, backup);
   repairKnownLabels();
   const changed = centeringAssist.rescoreDatabase(db);
   if (!repaired && !changed) return;
