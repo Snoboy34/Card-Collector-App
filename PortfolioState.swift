@@ -73,7 +73,10 @@ public struct ScanLedger: Equatable {
         return trimmed + " · side unknown"
     }
 
-    /// Deck id and side come from the capture. A re-save must not replace them.
+    public static let offlineCopyLabel = "offline copy"
+
+    /// Local merge used when a save has no server record to apply.
+    /// Deck, side, and scan time stay on the existing ledger.
     /// `explicitSide` is the front/back button on a record that has no side yet.
     public static func keepingCaptureIdentity(existing: ScanLedger, updated: ScanLedger, explicitSide: String?) -> ScanLedger {
         let keptSide = knownFace(existing.side) ?? knownFace(explicitSide)
@@ -107,6 +110,49 @@ public struct ScanLedger: Equatable {
             side: keptSide
         )
         return merged
+    }
+
+    /// The server record replaces deck, side, assisted label, ratios, and the
+    /// scan clock. The scan clock is the server's createdAt. A later local
+    /// ledger time is not copied onto that clock. Name, set, and value stay
+    /// on the local card.
+    public static func applyingServerRecord(local: ScanLedger, server: ScanLedger) -> ScanLedger {
+        let face = knownFace(server.side) ?? knownFace(server.centeringAssist?.side)
+        var assist = server.centeringAssist
+        if var snap = assist {
+            snap.side = face
+            if face == nil {
+                snap.centeringLabel = nil
+            }
+            assist = snap
+        }
+        let scanTime = server.committedAt == .distantPast ? local.committedAt : server.committedAt
+        return ScanLedger(
+            scanId: nonempty(server.scanId) ?? local.scanId,
+            committedAt: scanTime,
+            name: local.name,
+            setName: local.setName,
+            grade: server.grade ?? local.grade,
+            lrCentering: server.lrCentering,
+            tbCentering: server.tbCentering,
+            value: local.value,
+            familyId: local.familyId,
+            subGradesLabel: server.subGradesLabel.isEmpty ? local.subGradesLabel : server.subGradesLabel,
+            primaryFlaw: local.primaryFlaw,
+            incomplete: server.grade == nil ? local.incomplete : server.incomplete,
+            cornersGrade: server.cornersGrade ?? local.cornersGrade,
+            debugPath: server.debugPath ?? local.debugPath,
+            centeringAssist: assist,
+            deckId: nonempty(server.deckId) ?? nonempty(local.deckId),
+            side: face
+        )
+    }
+
+    /// A reachable server replaces the local copy. No server record leaves
+    /// the local copy and marks it an offline copy.
+    public static func refreshedFromServer(local: ScanLedger, server: ScanLedger?) -> (ledger: ScanLedger, offlineCopy: Bool) {
+        guard let server else { return (local, true) }
+        return (applyingServerRecord(local: local, server: server), false)
     }
 
     public var showsSideUnknown: Bool {
@@ -179,6 +225,7 @@ public struct SavedCard: Identifiable, Codable {
     public let centeringAssist: CenteringAssist.Snapshot?
     public let deckId: String?
     public let side: String?
+    public var offlineCopy: Bool
     public var targetBatchId: UUID?
 
     public init(
@@ -198,6 +245,7 @@ public struct SavedCard: Identifiable, Codable {
         centeringAssist: CenteringAssist.Snapshot? = nil,
         deckId: String? = nil,
         side: String? = nil,
+        offlineCopy: Bool = false,
         batchId: UUID? = nil
     ) {
         self.id = id
@@ -216,6 +264,7 @@ public struct SavedCard: Identifiable, Codable {
         self.centeringAssist = centeringAssist
         self.deckId = deckId
         self.side = side
+        self.offlineCopy = offlineCopy
         self.targetBatchId = batchId
     }
 
@@ -305,7 +354,7 @@ public struct SavedCard: Identifiable, Codable {
     enum CodingKeys: String, CodingKey {
         case id, scanId, committedAt, name, setName
         case lrCenteringResult, tbCenteringResult
-        case predictedGradePSA, calculatedValue, familyId, subGradesLabel, cornersGrade, debugPath, centeringAssist, deckId, side, targetBatchId
+        case predictedGradePSA, calculatedValue, familyId, subGradesLabel, cornersGrade, debugPath, centeringAssist, deckId, side, offlineCopy, targetBatchId
     }
 
     public init(from decoder: Decoder) throws {
@@ -332,6 +381,7 @@ public struct SavedCard: Identifiable, Codable {
         centeringAssist = try container.decodeIfPresent(CenteringAssist.Snapshot.self, forKey: .centeringAssist)
         deckId = try container.decodeIfPresent(String.self, forKey: .deckId)
         side = try container.decodeIfPresent(String.self, forKey: .side)
+        offlineCopy = try container.decodeIfPresent(Bool.self, forKey: .offlineCopy) ?? false
         targetBatchId = try container.decodeIfPresent(UUID.self, forKey: .targetBatchId)
     }
 
@@ -353,6 +403,7 @@ public struct SavedCard: Identifiable, Codable {
         try container.encodeIfPresent(centeringAssist, forKey: .centeringAssist)
         try container.encodeIfPresent(deckId, forKey: .deckId)
         try container.encodeIfPresent(side, forKey: .side)
+        try container.encode(offlineCopy, forKey: .offlineCopy)
         try container.encodeIfPresent(targetBatchId, forKey: .targetBatchId)
     }
 }
@@ -498,12 +549,18 @@ public class PortfolioState: ObservableObject {
         saveDataToPersistentDisk()
     }
 
-    /// Keeps the capture's deck id, side, and scan time. The assisted snapshot is stored beside the engine grade.
-    public func replaceSavedCard(id: UUID, ledger: ScanLedger) {
+    /// A server record replaces deck, side, label, ratios, and the scan clock.
+    /// Without one, the existing capture identity stays.
+    public func replaceSavedCard(id: UUID, ledger: ScanLedger, adoptServerRecord: Bool = false) {
         guard let index = savedCards.firstIndex(where: { $0.id == id }) else { return }
         let existing = savedCards[index]
-        let explicit = ScanLedger.knownFace(existing.side) == nil ? ledger.side : nil
-        let merged = ScanLedger.keepingCaptureIdentity(existing: existing.asLedger, updated: ledger, explicitSide: explicit)
+        let merged: ScanLedger
+        if adoptServerRecord {
+            merged = ScanLedger.applyingServerRecord(local: existing.asLedger, server: ledger)
+        } else {
+            let explicit = ScanLedger.knownFace(existing.side) == nil ? ledger.side : nil
+            merged = ScanLedger.keepingCaptureIdentity(existing: existing.asLedger, updated: ledger, explicitSide: explicit)
+        }
         savedCards[index] = SavedCard(
             id: existing.id,
             scanId: existing.scanId,
@@ -521,8 +578,15 @@ public class PortfolioState: ObservableObject {
             centeringAssist: merged.centeringAssist,
             deckId: merged.deckId,
             side: merged.side,
+            offlineCopy: adoptServerRecord ? false : existing.offlineCopy,
             batchId: existing.targetBatchId
         )
+        saveDataToPersistentDisk()
+    }
+
+    public func markOfflineCopy(id: UUID) {
+        guard let index = savedCards.firstIndex(where: { $0.id == id }) else { return }
+        savedCards[index].offlineCopy = true
         saveDataToPersistentDisk()
     }
 

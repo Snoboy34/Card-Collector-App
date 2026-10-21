@@ -557,7 +557,13 @@ struct CardScannerView: View {
                         ForEach(filteredVaultRecords) { card in
                             Button(action: { selectedVaultCard = card }) {
                                 HStack {
-                                    VStack(alignment: .leading) { Text(card.name).font(.subheadline).bold().foregroundColor(.primary); Text(card.vaultSubtitle).font(.caption).foregroundColor(.secondary) }
+                                    VStack(alignment: .leading) {
+                                        Text(card.name).font(.subheadline).bold().foregroundColor(.primary)
+                                        Text(card.vaultSubtitle).font(.caption).foregroundColor(.secondary)
+                                        if card.offlineCopy {
+                                            Text(ScanLedger.offlineCopyLabel).font(.caption2).foregroundColor(.secondary)
+                                        }
+                                    }
                                     Spacer()
                                     VStack(alignment: .trailing) { Text(card.displayValue).bold().foregroundColor(.green); Text(card.displayGrade).font(.caption2).padding(4).background(Color.blue.opacity(0.1)).cornerRadius(4) }
                                 }
@@ -568,9 +574,11 @@ struct CardScannerView: View {
                 }
             }
             .sheet(item: $selectedVaultCard) { vaultCard in
-                VaultDetailSheet(card: vaultCard) { updated in
-                    portfolio.replaceSavedCard(id: vaultCard.id, ledger: updated)
-                }
+                VaultDetailSheet(card: vaultCard, onSaved: { updated in
+                    portfolio.replaceSavedCard(id: vaultCard.id, ledger: updated, adoptServerRecord: true)
+                }, onOffline: {
+                    portfolio.markOfflineCopy(id: vaultCard.id)
+                })
             }
         }
     }
@@ -1083,6 +1091,7 @@ struct CardScannerView: View {
 // MARK: - Shared ledger fields (report sheet and vault must match)
 struct ScanLedgerRows: View {
     let ledger: ScanLedger
+    var offlineCopy = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1096,6 +1105,9 @@ struct ScanLedgerRows: View {
             Text("scan \(ledger.displayScanIdShort) · \(ledger.displayTimestamp)")
                 .font(.system(.caption2, design: .monospaced))
                 .foregroundColor(.secondary)
+            if offlineCopy {
+                Text(ScanLedger.offlineCopyLabel).font(.caption).foregroundColor(.secondary)
+            }
             if ledger.showsSideUnknown && ledger.deckLine == nil {
                 Text("side unknown").font(.caption).foregroundColor(.secondary)
             }
@@ -1186,14 +1198,19 @@ struct ScanLedgerRows: View {
 struct VaultDetailSheet: View {
     let card: SavedCard
     let onSaved: (ScanLedger) -> Void
+    let onOffline: () -> Void
     @Environment(\.dismiss) var dismiss
     @State private var ledger: ScanLedger
+    @State private var offlineCopy: Bool
+    @State private var refreshGeneration = 0
     private let serverURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
 
-    init(card: SavedCard, onSaved: @escaping (ScanLedger) -> Void) {
+    init(card: SavedCard, onSaved: @escaping (ScanLedger) -> Void, onOffline: @escaping () -> Void) {
         self.card = card
         self.onSaved = onSaved
+        self.onOffline = onOffline
         _ledger = State(initialValue: card.asLedger)
+        _offlineCopy = State(initialValue: card.offlineCopy)
     }
 
     var body: some View {
@@ -1201,22 +1218,49 @@ struct VaultDetailSheet: View {
             VStack(spacing: 20) {
                 Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
                 Text("VAULT RECORD AUDIT").font(.headline).bold().foregroundColor(.purple)
-                ScanLedgerRows(ledger: ledger)
+                ScanLedgerRows(ledger: ledger, offlineCopy: offlineCopy)
                 centeringEditor(ledger)
                 Button("Dismiss Audit Ledger") { dismiss() }
                     .font(.subheadline).bold().foregroundColor(.secondary).padding()
             }
         }
+        .task { await refreshFromServer() }
     }
 
     @ViewBuilder
     private func centeringEditor(_ ledger: ScanLedger) -> some View {
         if let snapshot = ledger.centeringAssist {
-            CenteringAssistEditor(scanId: ledger.scanId, serverURL: serverURL, snapshot: snapshot) { updated, explicitSide in
-                let merged = ScanLedger.keepingCaptureIdentity(existing: self.ledger, updated: updated, explicitSide: explicitSide)
-                self.ledger = merged
-                onSaved(merged)
+            CenteringAssistEditor(scanId: ledger.scanId, serverURL: serverURL, snapshot: snapshot) { updated, _ in
+                adoptServer(updated)
             }
+            .id(editorIdentity(ledger))
+        }
+    }
+
+    private func editorIdentity(_ ledger: ScanLedger) -> String {
+        let label = ledger.centeringAssist?.centeringLabel ?? ""
+        let adjusted = ledger.centeringAssist?.adjustedAt ?? ""
+        return "\(ledger.deckId ?? "")|\(ledger.side ?? "")|\(label)|\(adjusted)|\(ledger.committedAt.timeIntervalSince1970)"
+    }
+
+    private func adoptServer(_ updated: ScanLedger) {
+        refreshGeneration += 1
+        let merged = ScanLedger.applyingServerRecord(local: ledger, server: updated)
+        ledger = merged
+        offlineCopy = false
+        onSaved(merged)
+    }
+
+    private func refreshFromServer() async {
+        let generation = refreshGeneration
+        do {
+            let report = try await JudgeAPIClient.shared.fetchScan(baseURL: serverURL, scanId: card.scanId)
+            if generation != refreshGeneration { return }
+            adoptServer(JudgeAPIClient.ledger(from: report, clientScanId: card.scanId))
+        } catch {
+            if generation != refreshGeneration { return }
+            offlineCopy = true
+            onOffline()
         }
     }
 }
@@ -1242,8 +1286,8 @@ struct ActiveScanReportSheet: View {
                 Text("SERVER GRADE REPORT").font(.headline).bold().foregroundColor(.blue)
                 ScanLedgerRows(ledger: ledger)
                 if let snapshot = ledger.centeringAssist {
-                    CenteringAssistEditor(scanId: ledger.scanId, serverURL: serverURL, snapshot: snapshot) { updated, explicitSide in
-                        let merged = ScanLedger.keepingCaptureIdentity(existing: self.ledger, updated: updated, explicitSide: explicitSide)
+                    CenteringAssistEditor(scanId: ledger.scanId, serverURL: serverURL, snapshot: snapshot) { updated, _ in
+                        let merged = ScanLedger.applyingServerRecord(local: self.ledger, server: updated)
                         ledger = merged
                         onLedger(merged)
                     }

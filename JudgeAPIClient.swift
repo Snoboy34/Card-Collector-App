@@ -94,6 +94,10 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var centeringAssist: CenteringAssist.Snapshot?
         var deckId: String?
         var side: String?
+        /// Server clock when the graded item was persisted. This is the
+        /// capture/upload time. It is not the phone's later ledger Date, and
+        /// it is not centeringAssist.adjustedAt.
+        var createdAt: Date?
         var rawJSON: String
         var summaryText: String
     }
@@ -219,16 +223,12 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        var body: [String: Any] = [
-            "consent": consent,
-            "confirmImplausible": confirmImplausible
-        ]
-        if !lines.isEmpty {
-            body["lines"] = lines
-        }
-        if setSide == "front" || setSide == "back" {
-            body["setSide"] = setSide
-        }
+        let body = Self.centeringAssistRequestBody(
+            lines: lines,
+            consent: consent,
+            confirmImplausible: confirmImplausible,
+            setSide: setSide
+        )
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let data: Data
         let response: URLResponse
@@ -245,6 +245,53 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 throw APIError.implausible(message)
             }
             throw APIError.httpFailure(status, message)
+        }
+        return try Self.parseReport(data)
+    }
+
+    /// Line positions only. Deck id, side, and createdAt stay on the server.
+    /// `setSide` is sent only for the explicit front/back button.
+    static func centeringAssistRequestBody(
+        lines: [String: [String: Double]],
+        consent: Bool,
+        confirmImplausible: Bool,
+        setSide: String?
+    ) -> [String: Any] {
+        var body: [String: Any] = [
+            "consent": consent,
+            "confirmImplausible": confirmImplausible
+        ]
+        if !lines.isEmpty {
+            body["lines"] = lines
+        }
+        if setSide == "front" || setSide == "back" {
+            body["setSide"] = setSide
+        }
+        return body
+    }
+
+    /// One persisted scan, including a record that is on disk after a restart.
+    func fetchScan(baseURL: String, scanId: String) async throws -> RemoteReport {
+        guard let root = Self.normalizedBaseURL(baseURL) else {
+            throw APIError.invalidServerURL
+        }
+        let endpoint = root
+            .appendingPathComponent("api")
+            .appendingPathComponent("scans")
+            .appendingPathComponent(scanId)
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            throw Self.transportError(error)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(status) else {
+            let snippet = String(data: data, encoding: .utf8) ?? "HTTP \(status)"
+            throw APIError.httpFailure(status, snippet)
         }
         return try Self.parseReport(data)
     }
@@ -479,6 +526,11 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let centeringAssist = CenteringAssist.parse(report: report, item: item)
         let deckId = (item?["deckId"] as? String) ?? (report?["deckId"] as? String)
         let side = (item?["side"] as? String) ?? (report?["side"] as? String)
+        // createdAt is written when POST /api/grade persists the item, after
+        // grading. receivedAt (handler start) and the phone's shutter time
+        // live in metadata and are not this field. adjustedAt is the assist
+        // save and is parsed with the assist block.
+        let createdAt = (item?["createdAt"] as? String).flatMap { CenteringAssist.parseISO($0) }
 
         var lines: [String] = []
         if let scanId, !scanId.isEmpty { lines.append("scanId  \(scanId)") }
@@ -565,6 +617,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             centeringAssist: centeringAssist,
             deckId: deckId,
             side: side,
+            createdAt: createdAt,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )
@@ -572,7 +625,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
 
     /// Vault/report fields from a server grade. Name/set/grade/value stay
     /// Unidentified / — unless the server actually produced them.
-    static func ledger(from report: RemoteReport, clientScanId: String, timestamp: Date = Date()) -> ScanLedger {
+    /// The scan clock is item.createdAt. `timestamp` is used only when the
+    /// server record has no createdAt, so a later local Date is not the scan time.
+    static func ledger(from report: RemoteReport, clientScanId: String, timestamp: Date? = nil) -> ScanLedger {
         let scanId = {
             if let remote = report.scanId, !remote.isEmpty { return remote }
             return clientScanId
@@ -610,7 +665,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             ?? ScanLedger.absent
         return ScanLedger(
             scanId: scanId,
-            committedAt: timestamp,
+            committedAt: report.createdAt ?? timestamp ?? .distantPast,
             name: name,
             setName: setName,
             grade: report.finalScore,
@@ -711,6 +766,48 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         expect(back.contains("\r\n\r\nfront-scan-1\r\n"), "pairId is the front scan id")
         expect(!text(grader: nil, side: "top", pairId: "").contains("name=\"side\""), "side other than front or back is omitted")
         expect(!text(grader: nil).contains("name=\"pairId\""), "a missing pairId is omitted")
+
+        let linePositions: [String: [String: Double]] = [
+            "left": ["positionPx": 40, "warpWidth": 643, "warpHeight": 900]
+        ]
+        let saveBody = centeringAssistRequestBody(
+            lines: linePositions, consent: false, confirmImplausible: false, setSide: nil
+        )
+        expect(saveBody["deckId"] == nil, "a line save does not send a deck id")
+        expect(saveBody["side"] == nil, "a line save does not send a side")
+        expect(saveBody["createdAt"] == nil, "a line save does not send a clock")
+        expect(saveBody["setSide"] == nil, "a line save does not send setSide")
+        let sentLines = saveBody["lines"] as? [String: [String: Double]]
+        expect(sentLines?["left"]?["positionPx"] == 40, "a line save sends the line position")
+        let faceBody = centeringAssistRequestBody(
+            lines: [:], consent: false, confirmImplausible: false, setSide: "back"
+        )
+        expect(faceBody["setSide"] as? String == "back", "an explicit face sends setSide")
+        expect(faceBody["deckId"] == nil && faceBody["side"] == nil, "setting the face does not send a deck id or side")
+        let ignoredFace = centeringAssistRequestBody(
+            lines: linePositions, consent: false, confirmImplausible: false, setSide: "top"
+        )
+        expect(ignoredFace["setSide"] == nil, "a side other than front or back is not sent")
+
+        let serverJSON = """
+        {"ok":true,"item":{"scanId":"366A0E19-0000-4000-8000-000000000001","deckId":"TD-06","side":"back","createdAt":"2026-10-12T21:50:37.000Z","gradingReport":{"side":"back","centeringDiagnostics":{"box":{"width":643,"height":900}},"centeringMetrics":{"borderWidthsMm":{"left":6.0,"right":4.0,"top":5.0,"bottom":5.0}},"centeringAssist":{"headline":"Centering (you adjusted 1 side)","centeringLabel":"10.0 assisted","adjustedCount":1,"adjustedAt":"2026-10-13T14:54:36.000Z","sides":{"left":{"userWidthMm":6.0,"engineWidthMm":5.0},"right":{"engineWidthMm":4.0},"top":{"engineWidthMm":5.0},"bottom":{"engineWidthMm":5.0}}}}}}
+        """
+        guard let payload = serverJSON.data(using: .utf8),
+              let parsed = try? parseReport(payload),
+              let captureUpload = CenteringAssist.parseISO("2026-10-12T21:50:37.000Z") else {
+            expect(false, "the server record parses")
+            return
+        }
+        let laterLocalSave = captureUpload.addingTimeInterval((6 * 60) + 31)
+        let fromServer = ledger(from: parsed, clientScanId: "local-scan", timestamp: laterLocalSave)
+        expect(parsed.createdAt == captureUpload, "createdAt is the server persist time")
+        expect(fromServer.committedAt == captureUpload, "the scan clock is createdAt, not a later local save")
+        expect(fromServer.committedAt != laterLocalSave, "a local save 6 minutes later is not the scan time")
+        expect(fromServer.deckId == "TD-06" && fromServer.side == "back", "the parsed record keeps the server deck and side")
+        expect(fromServer.centeringAssist?.centeringLabel == "10.0 assisted", "the parsed record keeps the server label")
+        expect(fromServer.displayLR == "60.0%/40.0% assisted", "the parsed record keeps the server ratios")
+        expect(fromServer.centeringAssist?.adjustedAt == "2026-10-13T14:54:36.000Z", "the adjustment clock stays off the scan clock")
+        expect(fromServer.centeringAssist?.adjustmentLine?.hasPrefix("adjusted ") == true, "the adjustment is its own line")
     }
     #endif
 }
