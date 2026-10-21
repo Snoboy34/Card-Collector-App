@@ -266,9 +266,17 @@ assertHint('undetected hint', undetectedHint.hint, 'undetected');
 
 assertEq('spread threshold is 12px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 12);
 assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
-assertEq('min median width is 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
-assertEq('thin border floor is 8px', g.BORDER_THIN_MIN_PX, 8);
-assertEq('anchored thin floor is the 6px inward guard', g.BORDER_THIN_ANCHORED_MIN_PX, 6);
+assertEq('min median width is 1.185mm', Math.round(g.BORDER_MIN_MEDIAN_MM * 1000) / 1000, 1.185);
+assertEq('thin border floor is 0.790mm', Math.round(g.BORDER_THIN_MIN_MM * 1000) / 1000, 0.790);
+assertEq('anchored thin floor is 0.593mm', Math.round(g.BORDER_THIN_ANCHORED_MIN_MM * 1000) / 1000, 0.593);
+assertEq('short-side floor is still 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
+assertEq('short-side thin floor is still 8px', g.BORDER_THIN_MIN_PX, 8);
+assertEq('short-side anchored floor is still 6px', g.BORDER_THIN_ANCHORED_MIN_PX, 6);
+assertEq('left floor converts 1.185mm to 12px', g.borderMmToPx(g.BORDER_MIN_MEDIAN_MM, 'left'), 12);
+assertEq('right floor converts 1.185mm to 12px', g.borderMmToPx(g.BORDER_MIN_MEDIAN_MM, 'right'), 12);
+const longFloorPx = 12 * (63.5 / 643) * (900 / 88.9);
+assert('top floor is 1.185mm on the long side', Math.abs(g.borderMmToPx(g.BORDER_MIN_MEDIAN_MM, 'top') - longFloorPx) < 1e-9);
+assert('bottom floor is 1.185mm on the long side', Math.abs(g.borderMmToPx(g.BORDER_MIN_MEDIAN_MM, 'bottom') - longFloorPx) < 1e-9);
 assertEq('thin border needs 12 agreeing lines', g.BORDER_THIN_MIN_HITS, 12);
 assertEq('grey-versus-pink color gap is 40', g.BORDER_BAND_DISTINCT_RGB, 40);
 assert('color is not a grey floor', g.WHITE_BAND_MIN_GREY === undefined);
@@ -373,6 +381,26 @@ const anchoredThin = g.assessPrintBorderReliability(bandBox, 643, 900, {
   paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
 }, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
 assert('one 6px edge on an otherwise full frame is accepted', anchoredThin.accepted === true, anchoredThin.reasons);
+
+const fiveTop = [11.99, 11.992, 11.994, 11.996, 11.998];
+function topAt(width) {
+  return g.assessPrintBorderReliability(bandBox, 643, 900, {
+    detected: true,
+    widths: { left: 30, right: 30, top: width, bottom: 30 },
+    samples: {
+      left: tightSamples.left,
+      right: tightSamples.right,
+      top: fiveTop,
+      bottom: tightSamples.bottom
+    },
+    paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
+  }, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
+}
+const topJustOver = topAt(11.998);
+assert('top at 11.998px is past 1.185mm on the long side', topJustOver.accepted === true, topJustOver.reasons);
+const topJustUnder = topAt(11.99);
+assert('top at 11.990px is under 1.185mm when the thin exception does not apply', topJustUnder.accepted === false, topJustUnder.reasons);
+assert('the floor reason is in millimetres', topJustUnder.reasons.join(' ').indexOf('1.185mm') !== -1);
 
 const allThin = g.assessPrintBorderReliability(bandBox, 643, 900, {
   detected: true,
