@@ -908,10 +908,10 @@ public enum CenteringAssist {
         expect(stillHeld.committedAt == resaveClock, "the phone does not invent a capture time for 366A0E19")
         expect(stillHeld.deckId == "TD-13", "the phone does not invent a deck id for 366A0E19")
 
-        guard let serverCapture = clock.date(from: "2026-10-12T21:50:37Z"),
-              let localSave = clock.date(from: "2026-10-12T21:57:08Z"),
+        guard let phoneCapture = clock.date(from: "2026-10-12T21:57:08Z"),
+              let earlierPersist = clock.date(from: "2026-10-12T21:50:37Z"),
               var serverSnap = agreeSnap else {
-            expect(false, "the server capture instant and assisted snapshot parse")
+            expect(false, "the phone capture instant and assisted snapshot parse")
             return
         }
         serverSnap.adjustedAt = "2026-10-13T14:54:36.000Z"
@@ -931,14 +931,14 @@ public enum CenteringAssist {
         }
         let staleLocal = sampleLedger(
             scanId: "366A0E19-0000-4000-8000-000000000001",
-            at: localSave,
+            at: phoneCapture,
             deck: "TD-13",
             side: "front",
             assist: staleAssist
         )
         let serverRecord = sampleLedger(
             scanId: "366A0E19-0000-4000-8000-000000000001",
-            at: serverCapture,
+            at: phoneCapture,
             deck: "TD-06",
             side: "back",
             assist: serverSnap
@@ -947,7 +947,7 @@ public enum CenteringAssist {
         expect(offline.offlineCopy, "an unreachable server leaves the local copy")
         expect(ScanLedger.offlineCopyLabel == "offline copy", "the local copy is marked offline copy")
         expect(offline.ledger.deckId == "TD-13" && offline.ledger.side == "front", "the offline copy keeps the phone's deck and side")
-        expect(offline.ledger.committedAt == localSave, "the offline copy keeps the phone's clock")
+        expect(offline.ledger.committedAt == phoneCapture, "the offline copy keeps the phone's capture")
         expect(offline.ledger.centeringAssist?.centeringLabel == "9.0 assisted", "the offline copy keeps the phone's label")
         expect(offline.ledger.displayLR == "56.0%/44.0% assisted", "the offline copy keeps the phone's ratio")
         expect(offline.ledger.centeringAssist?.adjustmentLine == nil, "the offline copy has no adjustment line")
@@ -955,8 +955,19 @@ public enum CenteringAssist {
         expect(live.offlineCopy == false, "a server record clears the offline mark")
         expect(live.ledger.deckId == "TD-06" && live.ledger.side == "back", "the server deck and side replace the phone's copy")
         expect(live.ledger.deckLine == "TD-06 · back")
-        expect(live.ledger.committedAt == serverCapture, "the scan clock is the server capture time")
-        expect(live.ledger.committedAt != localSave, "the later local save is not the scan clock")
+        expect(live.ledger.committedAt == phoneCapture, "the scan clock is the phone capture stored on the server")
+        expect(live.ledger.committedAt != earlierPersist, "the earlier server persist time is not the scan clock")
+        let persistOnly = sampleLedger(
+            scanId: "366A0E19-0000-4000-8000-000000000001",
+            at: .distantPast,
+            deck: "TD-06",
+            side: "back",
+            assist: serverSnap
+        )
+        let keptCapture = ScanLedger.refreshedFromServer(local: staleLocal, server: persistOnly)
+        expect(keptCapture.ledger.deckId == "TD-06" && keptCapture.ledger.side == "back", "a record with no stored capture still replaces deck and side")
+        expect(keptCapture.ledger.committedAt == phoneCapture, "a record with no stored capture keeps the phone capture")
+        expect(keptCapture.ledger.committedAt != earlierPersist, "createdAt does not replace the phone capture")
         expect(live.ledger.displayGrade.contains("10.0 assisted"), "the server label replaces the phone's label")
         expect(live.ledger.displayLR == "60.0%/40.0% assisted", "the server L/R replaces the phone's ratio")
         expect(live.ledger.displayTB == "50.0%/50.0% assisted", "the server T/B replaces the phone's ratio")

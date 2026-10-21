@@ -1013,13 +1013,13 @@ struct CardScannerView: View {
                     if !report.ok {
                         lastRemoteError = "Server returned ok=false"
                     } else if side == "back" {
-                        let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId)
+                        let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId, timestamp: pendingLevelCapturedAt)
                         pendingServerLedger = ledger
                         showingActiveScanReport = true
                         sweepStatus = "Uploaded the back."
                         finishPair()
                     } else {
-                        let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId)
+                        let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId, timestamp: pendingLevelCapturedAt)
                         pendingServerLedger = ledger
                         showingActiveScanReport = true
                         frontPairId = pendingScanId

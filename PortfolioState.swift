@@ -113,9 +113,9 @@ public struct ScanLedger: Equatable {
     }
 
     /// The server record replaces deck, side, assisted label, ratios, and the
-    /// scan clock. The scan clock is the server's createdAt. A later local
-    /// ledger time is not copied onto that clock. Name, set, and value stay
-    /// on the local card.
+    /// scan clock. The scan clock is the phone capture stored on the server.
+    /// A server record with no capture time leaves the phone's capture in place.
+    /// Name, set, and value stay on the local card.
     public static func applyingServerRecord(local: ScanLedger, server: ScanLedger) -> ScanLedger {
         let face = knownFace(server.side) ?? knownFace(server.centeringAssist?.side)
         var assist = server.centeringAssist
