@@ -618,15 +618,64 @@ async function main() {
     gradingReport: reportWith({ scanId: unknownScanId }),
     createdAt: '2026-10-11T00:00:00.000Z'
   };
+  const vaultScanId = '366A0E19-0000-4000-8000-000000000001';
+  const captureUploadAt = '2026-10-12T21:50:37.000Z';
+  const adjustmentAt = '2026-10-13T14:54:36.000Z';
+  const vaultStored = {
+    id: vaultScanId,
+    scanId: vaultScanId,
+    name: 'Vault record',
+    category: 'UNKNOWN',
+    deckId: 'TD-06',
+    side: 'back',
+    imagePath: '/uploads/none.jpg',
+    gradingReport: reportWith({
+      scanId: vaultScanId,
+      side: 'back',
+      centeringAssist: {
+        source: 'assisted',
+        gradeSource: 'assisted',
+        adjustedCount: 1,
+        headline: 'Centering (you adjusted 1 side)',
+        centeringLabel: '10.0 assisted',
+        adjustedAt: adjustmentAt,
+        sides: {
+          left: { userWidthMm: 5.6, engineWidthMm: 5, kind: 'disagreement' },
+          right: { userWidthMm: 4.4, engineWidthMm: 4.4, kind: 'agreement' },
+          top: { userWidthMm: 5, engineWidthMm: 5, kind: 'agreement' },
+          bottom: { userWidthMm: 5, engineWidthMm: 5, kind: 'agreement' }
+        },
+        borderWidthsMm: { left: 5.6, right: 4.4, top: 5, bottom: 5 }
+      }
+    }),
+    createdAt: captureUploadAt
+  };
   fs.writeFileSync(path.join(process.env.JUDGE_DATA_DIR, 'database.json'), JSON.stringify({
-    inventory: [stored, backStored, unknownStored],
-    categoryCounts: { SPORTS: 0, TCG: 0, UNKNOWN: 3 }
+    inventory: [stored, backStored, unknownStored, vaultStored],
+    categoryCounts: { SPORTS: 0, TCG: 0, UNKNOWN: 4 }
   }));
   const { app } = require('../server');
   const server = await new Promise(function (resolve) {
     const s = app.listen(0, '127.0.0.1', function () { resolve(s); });
   });
   const base = 'http://127.0.0.1:' + server.address().port;
+
+  const memoryList = await fetch(base + '/api/inventory').then(function (r) { return r.json(); });
+  assert('the memory inventory list does not hold the database records',
+    memoryList.ok === true && memoryList.inventory.length === 0, memoryList);
+  const vaultRead = await fetch(base + '/api/scans/' + vaultScanId).then(function (r) { return r.json(); });
+  assert('GET scan returns the database record the phone vault replaces its copy with',
+    vaultRead.ok === true &&
+    vaultRead.item.deckId === 'TD-06' &&
+    vaultRead.item.side === 'back' &&
+    vaultRead.item.createdAt === captureUploadAt &&
+    vaultRead.item.gradingReport.centeringAssist.centeringLabel === '10.0 assisted' &&
+    vaultRead.item.gradingReport.centeringAssist.borderWidthsMm.left === 5.6 &&
+    vaultRead.item.gradingReport.centeringAssist.adjustedAt === adjustmentAt &&
+    vaultRead.item.gradingReport.centeringAssist.adjustedAt !== vaultRead.item.createdAt,
+    vaultRead.item && { deckId: vaultRead.item.deckId, side: vaultRead.item.side, createdAt: vaultRead.item.createdAt });
+  const missingScan = await fetch(base + '/api/scans/missing-scan-0001');
+  assert('GET of an unknown scan is 404', missingScan.status === 404);
 
   const pref = await fetch(base + '/api/settings/assist-consent').then(function (r) { return r.json(); });
   assert('consent preference defaults to false', pref.ok === true && pref.consent === false, pref);
@@ -701,6 +750,35 @@ async function main() {
     .trim().split('\n').map(function (line) { return JSON.parse(line); });
   assert('older example stays consent false', rows[0].consent === false && rows[1].consent === true && rows[1].userWidthMm === 5);
   assert('egress list stays empty after consent is on', assist.examplesClearedToLeave().length === 0);
+  const vaultSaved = await fetch(base + '/api/scans/' + vaultScanId + '/centering-assist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lines: { left: lineForMm('left', 4) },
+      confirmImplausible: true,
+      deckId: 'TD-13',
+      side: 'front',
+      createdAt: '2026-10-12T21:57:08.000Z'
+    })
+  }).then(function (r) { return r.json(); });
+  const vaultAfter = await fetch(base + '/api/scans/' + vaultScanId).then(function (r) { return r.json(); });
+  assert('a line save does not replace the stored deck, side, or capture time',
+    vaultSaved.ok === true &&
+    vaultSaved.item.deckId === 'TD-06' &&
+    vaultSaved.item.side === 'back' &&
+    vaultSaved.item.createdAt === captureUploadAt &&
+    vaultAfter.item.deckId === 'TD-06' &&
+    vaultAfter.item.side === 'back' &&
+    vaultAfter.item.createdAt === captureUploadAt &&
+    vaultAfter.item.createdAt !== '2026-10-12T21:57:08.000Z' &&
+    vaultAfter.item.gradingReport.centeringAssist.adjustedAt &&
+    vaultAfter.item.gradingReport.centeringAssist.adjustedAt !== captureUploadAt,
+    vaultAfter.item && {
+      deckId: vaultAfter.item.deckId,
+      side: vaultAfter.item.side,
+      createdAt: vaultAfter.item.createdAt,
+      adjustedAt: vaultAfter.item.gradingReport && vaultAfter.item.gradingReport.centeringAssist && vaultAfter.item.gradingReport.centeringAssist.adjustedAt
+    });
 
   const badWarp = await fetch(base + '/api/scans/' + scanId + '/centering-assist', {
     method: 'POST',

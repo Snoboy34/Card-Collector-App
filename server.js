@@ -702,6 +702,17 @@ app.put('/api/settings/assist-consent', (req, res) => {
   res.json({ ok: true, consent: consent });
 });
 
+// The phone vault reads this. /api/inventory is the in-memory list, which is
+// empty after a restart, so a vault open must not use it. findGradedItem
+// reads that list and then the database file.
+app.get('/api/scans/:scanId', (req, res) => {
+  const scanId = grading.normalizeScanId(req.params.scanId);
+  if (!scanId) return res.status(400).json({ ok: false, error: 'invalid scan id' });
+  const item = findGradedItem(scanId);
+  if (!item) return res.status(404).json({ ok: false, error: 'scan not found' });
+  return res.json({ ok: true, item: item });
+});
+
 app.post('/api/scans/:scanId/centering-assist', (req, res) => {
   const scanId = grading.normalizeScanId(req.params.scanId);
   if (!scanId) return res.status(400).json({ ok: false, error: 'invalid scan id' });
