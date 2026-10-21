@@ -566,13 +566,14 @@ function repairRecord366A0E19(db, emit, backup) {
 }
 
 /**
- * Save an assist onto an existing record. Deck id, side, and createdAt stay
- * the capture's values. A missing side is not filled with front. setSide is
+ * Save an assist onto an existing record. Deck id, side, createdAt, and the
+ * phone's capturedAt stay as stored. A missing side is not filled with front. setSide is
  * applied only while the record has no side. adjustedAt is the save, not the capture.
  */
 function applyStoredAssist(item, assist, now, options) {
   options = options || {};
   const createdAt = item && item.createdAt;
+  const capturedAt = item && item.capturedAt;
   const deckId = item && item.deckId;
   const stored = knownFace(item && item.side) || knownFace(item && item.gradingReport && item.gradingReport.side);
   const side = stored || (!stored && knownFace(options.setSide)) || null;
@@ -590,6 +591,8 @@ function applyStoredAssist(item, assist, now, options) {
   }
   const next = attachAssist(item, block);
   next.createdAt = createdAt;
+  if (capturedAt) next.capturedAt = capturedAt;
+  else delete next.capturedAt;
   if (deckId == null || deckId === '') delete next.deckId;
   else next.deckId = deckId;
   if (side) {

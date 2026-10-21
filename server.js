@@ -571,6 +571,7 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
       pairId: pair.pairId,
       createdAt: new Date().toISOString()
     };
+    scanMetadata.stampCaptureTime(item);
 
     console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
     const label = labelFromCapture(scanId, req.body);
@@ -637,6 +638,7 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
       pairId: pair.pairId,
       createdAt: new Date().toISOString()
     };
+    scanMetadata.stampCaptureTime(item);
 
     console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
     const label = labelFromCapture(scanId, req.body);
@@ -1179,8 +1181,9 @@ function refreshStoredAssists() {
   const backup = loadRepairBackup();
   const repaired = centeringAssist.repairRecord366A0E19(db, console.log, backup);
   repairKnownLabels();
+  const stamped = scanMetadata.stampStoredCaptureTimes(db, console.log);
   const changed = centeringAssist.rescoreDatabase(db);
-  if (!repaired && !changed) return;
+  if (!repaired && !changed && !stamped) return;
   saveDatabase(db);
   if (changed) {
     console.log('[centering-assist] rescored ' + changed + ' stored assist' + (changed === 1 ? '' : 's'));

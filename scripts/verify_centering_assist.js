@@ -13,6 +13,7 @@ const path = require('path');
 const geo = require('../public/centering_assist');
 const assist = require('../services/centering_assist');
 const wallet = require('../services/wallet_engine');
+const scanMetadata = require('../services/scan_metadata');
 
 let failures = 0;
 function assert(label, cond, detail) {
@@ -387,6 +388,28 @@ async function main() {
     twoLog[1] === '[centering-assist] rescore scanId=rescore-b old=1.0 assisted new=null',
     twoLog);
 
+  const phoneCapture = '2026-10-12T21:57:08.000Z';
+  const earlierPersist = '2026-10-12T21:50:37.000Z';
+  const captureRow = {
+    scanId: 'capture-clock-0001',
+    createdAt: earlierPersist,
+    captureMetadata: { capture: { capturedAt: phoneCapture, mode: 'native-still' } }
+  };
+  const captureLog = [];
+  assert('a stored upload keeps the phone capture and does not copy the earlier server clock',
+    scanMetadata.stampStoredCaptureTimes({ inventory: [captureRow] }, function (line) { captureLog.push(line); }) === 1 &&
+    captureRow.capturedAt === phoneCapture &&
+    captureRow.createdAt === earlierPersist &&
+    captureLog[0] === '[centering-assist] capture scanId=capture-clock-0001 capturedAt ' + phoneCapture);
+  const captureLogAgain = [];
+  assert('a second capture stamp logs nothing',
+    scanMetadata.stampStoredCaptureTimes({ inventory: [captureRow] }, function (line) { captureLogAgain.push(line); }) === 0 &&
+    captureLogAgain.length === 0);
+  const bareClock = { scanId: 'capture-clock-0002', createdAt: earlierPersist };
+  assert('a row with only createdAt does not become a capture time',
+    scanMetadata.stampStoredCaptureTimes({ inventory: [bareClock] }, function () {}) === 0 &&
+    bareClock.capturedAt == null);
+
   const identityReport = blankWidths('back');
   const identityBuilt = assist.buildFromMillimetres(identityReport, { left: 5.6, right: 4.4, top: 5, bottom: 5 }, {
     scanId: 'identity-back-0001',
@@ -397,7 +420,8 @@ async function main() {
     scanId: 'identity-back-0001',
     deckId: 'TD-06',
     side: 'back',
-    createdAt: '2026-10-12T20:57:08.000Z',
+    createdAt: '2026-10-12T21:50:37.000Z',
+    capturedAt: '2026-10-12T21:57:08.000Z',
     gradingReport: identityReport
   }, identityBuilt.assist, '2026-10-13T13:54:36.000Z', { setSide: 'front' });
   assert('saving an adjustment keeps deck id, side, and scan time',
@@ -405,7 +429,8 @@ async function main() {
     identitySaved.deckId === 'TD-06' &&
     identitySaved.side === 'back' &&
     identitySaved.gradingReport.side === 'back' &&
-    identitySaved.createdAt === '2026-10-12T20:57:08.000Z' &&
+    identitySaved.createdAt === '2026-10-12T21:50:37.000Z' &&
+    identitySaved.capturedAt === '2026-10-12T21:57:08.000Z' &&
     identitySaved.gradingReport.centeringAssist.adjustedAt === '2026-10-13T13:54:36.000Z' &&
     identitySaved.gradingReport.centeringAssist.side === 'back' &&
     identitySaved.gradingReport.centeringAssist.centering === 10 &&
@@ -620,6 +645,7 @@ async function main() {
   };
   const vaultScanId = '366A0E19-0000-4000-8000-000000000001';
   const captureUploadAt = '2026-10-12T21:50:37.000Z';
+  const phoneCaptureAt = '2026-10-12T21:57:08.000Z';
   const adjustmentAt = '2026-10-13T14:54:36.000Z';
   const vaultStored = {
     id: vaultScanId,
@@ -648,7 +674,9 @@ async function main() {
         borderWidthsMm: { left: 5.6, right: 4.4, top: 5, bottom: 5 }
       }
     }),
-    createdAt: captureUploadAt
+    createdAt: captureUploadAt,
+    capturedAt: phoneCaptureAt,
+    captureMetadata: { capture: { capturedAt: phoneCaptureAt, mode: 'native-still' } }
   };
   fs.writeFileSync(path.join(process.env.JUDGE_DATA_DIR, 'database.json'), JSON.stringify({
     inventory: [stored, backStored, unknownStored, vaultStored],
@@ -669,6 +697,8 @@ async function main() {
     vaultRead.item.deckId === 'TD-06' &&
     vaultRead.item.side === 'back' &&
     vaultRead.item.createdAt === captureUploadAt &&
+    vaultRead.item.capturedAt === phoneCaptureAt &&
+    vaultRead.item.capturedAt !== vaultRead.item.createdAt &&
     vaultRead.item.gradingReport.centeringAssist.centeringLabel === '10.0 assisted' &&
     vaultRead.item.gradingReport.centeringAssist.borderWidthsMm.left === 5.6 &&
     vaultRead.item.gradingReport.centeringAssist.adjustedAt === adjustmentAt &&
@@ -758,7 +788,8 @@ async function main() {
       confirmImplausible: true,
       deckId: 'TD-13',
       side: 'front',
-      createdAt: '2026-10-12T21:57:08.000Z'
+      createdAt: '2026-10-12T21:57:08.000Z',
+      capturedAt: '1999-01-01T00:00:00.000Z'
     })
   }).then(function (r) { return r.json(); });
   const vaultAfter = await fetch(base + '/api/scans/' + vaultScanId).then(function (r) { return r.json(); });
@@ -770,7 +801,9 @@ async function main() {
     vaultAfter.item.deckId === 'TD-06' &&
     vaultAfter.item.side === 'back' &&
     vaultAfter.item.createdAt === captureUploadAt &&
-    vaultAfter.item.createdAt !== '2026-10-12T21:57:08.000Z' &&
+    vaultAfter.item.capturedAt === phoneCaptureAt &&
+    vaultAfter.item.capturedAt !== '1999-01-01T00:00:00.000Z' &&
+    vaultAfter.item.createdAt !== phoneCaptureAt &&
     vaultAfter.item.gradingReport.centeringAssist.adjustedAt &&
     vaultAfter.item.gradingReport.centeringAssist.adjustedAt !== captureUploadAt,
     vaultAfter.item && {
