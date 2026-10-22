@@ -309,6 +309,64 @@ async function main() {
   assert('a second repair from the same backup logs nothing',
     assist.repairRecord366A0E19(corrupt, function (line) { repairLog.push(line); }, backup) === 0 &&
     repairLog.length === 1, repairLog);
+  const matchedAssist = {
+    centering: 10,
+    centeringLabel: '10.0 assisted',
+    side: 'back',
+    leftRightRatio: '56.0/44.0',
+    topBottomRatio: '46.8/53.2'
+  };
+  const matchedCreatedAt = '2026-10-12T21:50:37.000Z';
+  const already = {
+    inventory: [{
+      scanId: '366A0E19-0000-4000-8000-000000000001',
+      deckId: 'TD-06',
+      side: 'back',
+      name: 'Dana Evans',
+      createdAt: matchedCreatedAt,
+      gradingReport: {
+        side: 'back',
+        centeringAssist: matchedAssist,
+        finalScore: null,
+        copyrightYear: 2024
+      }
+    }]
+  };
+  const alreadyBackup = {
+    missing: false,
+    path: 'data/' + assist.BACKUP_366_NAME,
+    inventory: [{
+      scanId: '366A0E19-0000-4000-8000-000000000001',
+      deckId: 'TD-06',
+      side: 'back',
+      name: 'Dana Evans',
+      createdAt: matchedCreatedAt,
+      gradingReport: {
+        finalScore: null,
+        copyrightYear: 2024,
+        centeringAssist: { centeringLabel: 'old' }
+      }
+    }]
+  };
+  const alreadyBefore = JSON.stringify(already);
+  const alreadyLog = [];
+  const alreadyFirst = assist.repairRecord366A0E19(already, function (line) { alreadyLog.push(line); }, alreadyBackup);
+  const alreadyMid = JSON.stringify(already);
+  const alreadySecond = assist.repairRecord366A0E19(already, function (line) { alreadyLog.push(line); }, alreadyBackup);
+  assert('two restarts of an already matching 366A0E19 change nothing and log nothing',
+    alreadyFirst === 0 &&
+    alreadySecond === 0 &&
+    alreadyLog.length === 0 &&
+    alreadyMid === alreadyBefore &&
+    JSON.stringify(already) === alreadyBefore &&
+    already.inventory[0].deckId === 'TD-06' &&
+    already.inventory[0].side === 'back' &&
+    already.inventory[0].createdAt === matchedCreatedAt &&
+    already.inventory[0].gradingReport.centeringAssist.centeringLabel === '10.0 assisted' &&
+    already.inventory[0].gradingReport.centeringAssist.leftRightRatio === '56.0/44.0' &&
+    already.inventory[0].gradingReport.centeringAssist.topBottomRatio === '46.8/53.2' &&
+    already.inventory[0].gradingReport.side === 'back',
+    { alreadyFirst: alreadyFirst, alreadySecond: alreadySecond, alreadyLog: alreadyLog });
   const missingBackupLog = [];
   const missingClock = {
     inventory: [{

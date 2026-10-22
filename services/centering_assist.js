@@ -447,8 +447,27 @@ function attachAssist(item, assist) {
 
 const BACKUP_366_NAME = 'database.backup-2026-10-13.json';
 
+/** Key order is not a difference. Undefined object entries are ignored, as JSON omits them. */
+function stableStringify(value) {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Object.getPrototypeOf(value) !== Object.prototype && !Array.isArray(value)) return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return '[' + value.map(function (item) {
+      const rendered = stableStringify(item);
+      return rendered === undefined ? 'null' : rendered;
+    }).join(',') + ']';
+  }
+  const keys = Object.keys(value).filter(function (key) {
+    return value[key] !== undefined;
+  }).sort();
+  return '{' + keys.map(function (key) {
+    return JSON.stringify(key) + ':' + stableStringify(value[key]);
+  }).join(',') + '}';
+}
+
 function sameJson(a, b) {
-  try { return JSON.stringify(a) === JSON.stringify(b); }
+  try { return stableStringify(a) === stableStringify(b); }
   catch (err) { return a === b; }
 }
 
@@ -476,9 +495,10 @@ function backupItemFor(inventory, liveId) {
 }
 
 /**
- * Copy capture fields from the pre-resave backup. Deck id and side are not
- * copied; the caller sets those. The live centering assist stays, so the
- * adjustment made after the backup is kept.
+ * Copy capture fields from the pre-resave backup. Deck id is not copied.
+ * The report side compared here is back, because that is what the caller
+ * stores, and the live centering assist stays. A report that already has
+ * those values is left as it is, including its key order.
  */
 function restoreOriginalFields(live, backupItem) {
   const restored = [];
@@ -490,7 +510,7 @@ function restoreOriginalFields(live, backupItem) {
     restored.push(key);
   });
   if (backupItem.gradingReport && typeof backupItem.gradingReport === 'object') {
-    const report = Object.assign({}, backupItem.gradingReport);
+    const report = Object.assign({}, backupItem.gradingReport, { side: 'back' });
     if (assist) report.centeringAssist = assist;
     if (!sameJson(live.gradingReport, report)) {
       live.gradingReport = report;
@@ -505,8 +525,8 @@ function restoreOriginalFields(live, backupItem) {
  * instruction. createdAt and every other original field come from
  * data/database.backup-2026-10-13.json. A missing backup, or a backup that
  * does not contain the scan, is logged and createdAt is left as it is.
- * No capture time is invented. A second pass that finds the backup fields
- * already restored logs nothing.
+ * No capture time is invented. A record that already has those fields, and
+ * a second pass over one that did not, changes nothing and logs nothing.
  */
 function repairRecord366A0E19(db, emit, backup) {
   const log = typeof emit === 'function' ? emit : console.log;
