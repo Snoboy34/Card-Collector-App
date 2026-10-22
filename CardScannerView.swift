@@ -581,6 +581,30 @@ struct CardScannerView: View {
                 })
             }
         }
+        .task(id: "\(selectedTab)-\(securityVault.isVaultUnlocked)") {
+            guard selectedTab == 1, securityVault.isVaultUnlocked else { return }
+            await refreshVaultList()
+        }
+    }
+
+    /// Each list row is replaced from its server record when the vault is open.
+    /// A failed read leaves that row as the local copy and marks it offline.
+    private func refreshVaultList() async {
+        let serverURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
+        let rows = portfolio.savedCards.map { (id: $0.id, scanId: $0.scanId, committedAt: $0.committedAt) }
+        for row in rows {
+            do {
+                let report = try await JudgeAPIClient.shared.fetchScan(baseURL: serverURL, scanId: row.scanId)
+                let serverLedger = JudgeAPIClient.ledger(
+                    from: report,
+                    clientScanId: row.scanId,
+                    timestamp: row.committedAt
+                )
+                portfolio.replaceSavedCard(id: row.id, ledger: serverLedger, adoptServerRecord: true)
+            } catch {
+                portfolio.markOfflineCopy(id: row.id)
+            }
+        }
     }
     private var bulkBatchManifestView: some View {
         NavigationView {
