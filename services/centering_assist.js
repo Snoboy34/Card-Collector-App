@@ -21,6 +21,7 @@ const path = require('path');
 const crypto = require('crypto');
 const geometry = require('../public/centering_assist');
 const grading = require('./grading_engine');
+const backScan = require('./back_scan');
 
 const EXAMPLES_FILE = 'centering_examples.jsonl';
 const SETTINGS_FILE = 'assist_settings.json';
@@ -180,6 +181,93 @@ function redactDatabaseForScanRepo(db) {
   return copy;
 }
 
+/** "front" or "back" only. Anything else, including a missing side, is unknown. */
+function knownFace(value) {
+  if (value === 'front' || value === 'back') return value;
+  return null;
+}
+
+/**
+ * The capture's side, then the report's side. A missing side is null.
+ * It is not treated as the front.
+ */
+function assistedSide(report, meta) {
+  const fromMeta = knownFace(meta && meta.side);
+  if (fromMeta) return fromMeta;
+  return knownFace(report && report.side);
+}
+
+function assistScanId(item) {
+  const report = item && item.gradingReport;
+  const id = (item && (item.scanId || item.id)) || (report && report.scanId);
+  return id ? String(id) : 'unknown';
+}
+
+function labelText(value) {
+  if (value == null || value === '') return 'null';
+  return String(value);
+}
+
+/**
+ * Rewrite a stored assisted label from the scan side and the placed widths.
+ * Engine fields on the report are not touched. Returns null when nothing
+ * changed, otherwise the scan id and the old and new labels.
+ */
+function rescoreStoredAssist(item) {
+  const report = item && item.gradingReport;
+  const assist = report && report.centeringAssist;
+  if (!assist || !(assist.adjustedCount > 0)) return null;
+  const ratios = geometry.ratiosFromWidthsMm(assist.borderWidthsMm);
+  if (!ratios) return null;
+  const side = assistedSide(report, { side: item.side });
+  const scored = scoreAssistedCentering(side, ratios);
+  const oldLabel = assist.centeringLabel;
+  if (assist.side === side && assist.centering === scored.score && oldLabel === scored.label) {
+    return null;
+  }
+  assist.side = side;
+  assist.centering = scored.score;
+  assist.centeringLabel = scored.label;
+  return {
+    scanId: assistScanId(item),
+    oldLabel: labelText(oldLabel),
+    newLabel: labelText(scored.label)
+  };
+}
+
+function rescoreDatabase(db, emit) {
+  const log = typeof emit === 'function' ? emit : console.log;
+  let changed = 0;
+  ((db && db.inventory) || []).forEach(function (item) {
+    const row = rescoreStoredAssist(item);
+    if (!row) return;
+    changed += 1;
+    log('[centering-assist] rescore scanId=' + row.scanId + ' old=' + row.oldLabel + ' new=' + row.newLabel);
+  });
+  return changed;
+}
+
+/**
+ * Assisted centering from the placed widths. Fronts use the engine's front
+ * table (scoreCenteringPhase). Backs use the published back table in
+ * back_scan.js: 10 = 75/25, 9 = 90/10. A back share past 90/10 matches no
+ * row, so the score and the label stay null. This never writes
+ * subGrades.centering.
+ */
+function scoreAssistedCentering(side, ratios) {
+  if (side !== 'front' && side !== 'back') return { score: null, label: null };
+  if (side === 'back') {
+    const lr = ratios.leftRightRatio;
+    const tb = ratios.topBottomRatio;
+    const worst = 50 + Math.max(Math.abs(lr.left - lr.right), Math.abs(tb.top - tb.bottom)) / 2;
+    const judged = backScan.bestPsaBackGrade(worst);
+    if (!judged.judged || judged.grade == null) return { score: null, label: null };
+    return { score: judged.grade, label: Number(judged.grade).toFixed(1) + ' assisted' };
+  }
+  const phase = grading.scoreCenteringPhase(ratios.leftRightRatio, ratios.topBottomRatio);
+  return { score: phase.score, label: phase.score.toFixed(1) + ' assisted' };
+}
+
 function sameMm(a, b) {
   return geometry.isFiniteNumber(a) && geometry.isFiniteNumber(b) && Math.abs(a - b) < 0.0005;
 }
@@ -337,13 +425,15 @@ function buildFromMillimetres(report, userMm, meta) {
     centeringLabel: null
   };
 
+  const side = assistedSide(report, meta);
+  assist.side = side;
   const ratios = geometry.ratiosFromWidthsMm(combined);
   if (ratios) {
-    const phase = grading.scoreCenteringPhase(ratios.leftRightRatio, ratios.topBottomRatio);
+    const scored = scoreAssistedCentering(side, ratios);
     assist.leftRightRatio = ratios.leftRightRatio;
     assist.topBottomRatio = ratios.topBottomRatio;
-    assist.centering = phase.score;
-    assist.centeringLabel = phase.score.toFixed(1) + ' assisted';
+    assist.centering = scored.score;
+    assist.centeringLabel = scored.label;
   }
 
   return { ok: true, assist: assist, examples: examples };
@@ -353,6 +443,166 @@ function buildFromMillimetres(report, userMm, meta) {
 function attachAssist(item, assist) {
   const report = Object.assign({}, item.gradingReport, { centeringAssist: assist });
   return Object.assign({}, item, { gradingReport: report });
+}
+
+const BACKUP_366_NAME = 'database.backup-2026-10-13.json';
+
+function sameJson(a, b) {
+  try { return JSON.stringify(a) === JSON.stringify(b); }
+  catch (err) { return a === b; }
+}
+
+/** Exact scan id, or the single backup row whose id is a prefix of this one. */
+function backupItemFor(inventory, liveId) {
+  const want = String(liveId || '').toUpperCase();
+  const items = inventory || [];
+  let prefix = null;
+  let prefixCount = 0;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!item) continue;
+    const id = String(item.scanId || item.id || '');
+    const upper = id.toUpperCase();
+    if (!upper || upper.indexOf('366A0E19') !== 0) continue;
+    if (upper === want) return { item: item };
+    if (want.indexOf(upper) === 0 || upper.indexOf(want) === 0) {
+      prefix = item;
+      prefixCount += 1;
+    }
+  }
+  if (prefixCount === 1) return { item: prefix };
+  if (prefixCount > 1) return { ambiguous: true };
+  return { item: null };
+}
+
+/**
+ * Copy capture fields from the pre-resave backup. Deck id and side are not
+ * copied; the caller sets those. The live centering assist stays, so the
+ * adjustment made after the backup is kept.
+ */
+function restoreOriginalFields(live, backupItem) {
+  const restored = [];
+  const assist = live.gradingReport && live.gradingReport.centeringAssist;
+  Object.keys(backupItem).forEach(function (key) {
+    if (key === 'deckId' || key === 'side' || key === 'gradingReport') return;
+    if (sameJson(live[key], backupItem[key])) return;
+    live[key] = backupItem[key];
+    restored.push(key);
+  });
+  if (backupItem.gradingReport && typeof backupItem.gradingReport === 'object') {
+    const report = Object.assign({}, backupItem.gradingReport);
+    if (assist) report.centeringAssist = assist;
+    if (!sameJson(live.gradingReport, report)) {
+      live.gradingReport = report;
+      restored.push('gradingReport');
+    }
+  }
+  return restored;
+}
+
+/**
+ * One-time repair for scan 366A0E19. Deck TD-06 and side back are the owner's
+ * instruction. createdAt and every other original field come from
+ * data/database.backup-2026-10-13.json. A missing backup, or a backup that
+ * does not contain the scan, is logged and createdAt is left as it is.
+ * No capture time is invented. A second pass that finds the backup fields
+ * already restored logs nothing.
+ */
+function repairRecord366A0E19(db, emit, backup) {
+  const log = typeof emit === 'function' ? emit : console.log;
+  const source = backup || { missing: true };
+  const backupMissing = source.missing === true || source.unreadable === true;
+  let changed = 0;
+  let saw = false;
+  ((db && db.inventory) || []).forEach(function (item) {
+    if (!item) return;
+    const id = String(item.scanId || item.id || '');
+    if (id.toUpperCase().indexOf('366A0E19') !== 0) return;
+    saw = true;
+    const beforeDeck = item.deckId ? String(item.deckId) : 'null';
+    const beforeSide = knownFace(item.side) || knownFace(item.gradingReport && item.gradingReport.side) || 'null';
+    const beforeTime = item.createdAt ? String(item.createdAt) : 'null';
+    const match = backupMissing ? { item: null } : backupItemFor(source.inventory, id);
+    let restored = [];
+    let timeNote = 'createdAt ' + beforeTime + ' left unchanged';
+    if (backupMissing) {
+      timeNote = 'backup missing ' + (source.path || BACKUP_366_NAME) +
+        (source.error ? ' ' + source.error : '') +
+        ' createdAt ' + beforeTime + ' left unchanged';
+    } else if (match.ambiguous) {
+      timeNote = 'backup has more than one ' + id + ' createdAt ' + beforeTime + ' left unchanged';
+    } else if (!match.item) {
+      timeNote = 'not in backup createdAt ' + beforeTime + ' left unchanged';
+    } else {
+      restored = restoreOriginalFields(item, match.item);
+      const afterTime = item.createdAt ? String(item.createdAt) : 'null';
+      timeNote = 'createdAt ' + beforeTime + ' -> ' + afterTime;
+      if (restored.length) timeNote += ' restored ' + restored.join(',');
+    }
+    const deckChanged = item.deckId !== 'TD-06';
+    const sideChanged = item.side !== 'back' || knownFace(item.gradingReport && item.gradingReport.side) !== 'back';
+    item.deckId = 'TD-06';
+    item.side = 'back';
+    if (!item.gradingReport || typeof item.gradingReport !== 'object') item.gradingReport = {};
+    item.gradingReport.side = 'back';
+    const backupProblem = backupMissing || match.ambiguous || !match.item;
+    if (!deckChanged && !sideChanged && !restored.length && !backupProblem) return;
+    if (!deckChanged && !sideChanged && !restored.length && backupProblem) {
+      log('[centering-assist] repair scanId=' + id + ' ' + timeNote);
+      return;
+    }
+    changed += 1;
+    log('[centering-assist] repair scanId=' + id +
+      ' deckId ' + beforeDeck + ' -> TD-06' +
+      ' side ' + beforeSide + ' -> back' +
+      ' ' + timeNote);
+  });
+  if (!saw && backupMissing) {
+    log('[centering-assist] repair backup missing ' + (source.path || BACKUP_366_NAME) +
+      (source.error ? ' ' + source.error : '') +
+      ' no 366A0E19 row createdAt left unchanged');
+  }
+  return changed;
+}
+
+/**
+ * Save an assist onto an existing record. Deck id, side, createdAt, and the
+ * phone's capturedAt stay as stored. A missing side is not filled with front. setSide is
+ * applied only while the record has no side. adjustedAt is the save, not the capture.
+ */
+function applyStoredAssist(item, assist, now, options) {
+  options = options || {};
+  const createdAt = item && item.createdAt;
+  const capturedAt = item && item.capturedAt;
+  const deckId = item && item.deckId;
+  const stored = knownFace(item && item.side) || knownFace(item && item.gradingReport && item.gradingReport.side);
+  const side = stored || (!stored && knownFace(options.setSide)) || null;
+  const block = Object.assign({}, assist || {}, { adjustedAt: now || new Date().toISOString(), side: side });
+  const ratios = geometry.ratiosFromWidthsMm(block.borderWidthsMm);
+  if (side && ratios) {
+    const scored = scoreAssistedCentering(side, ratios);
+    block.centering = scored.score;
+    block.centeringLabel = scored.label;
+    block.leftRightRatio = ratios.leftRightRatio;
+    block.topBottomRatio = ratios.topBottomRatio;
+  } else if (!side) {
+    block.centering = null;
+    block.centeringLabel = null;
+  }
+  const next = attachAssist(item, block);
+  next.createdAt = createdAt;
+  if (capturedAt) next.capturedAt = capturedAt;
+  else delete next.capturedAt;
+  if (deckId == null || deckId === '') delete next.deckId;
+  else next.deckId = deckId;
+  if (side) {
+    next.side = side;
+    if (next.gradingReport) next.gradingReport.side = side;
+  } else if (next.gradingReport) {
+    delete next.side;
+    delete next.gradingReport.side;
+  }
+  return next;
 }
 
 module.exports = {
@@ -366,5 +616,13 @@ module.exports = {
   redactDatabaseForScanRepo: redactDatabaseForScanRepo,
   buildFromLines: buildFromLines,
   buildFromMillimetres: buildFromMillimetres,
-  attachAssist: attachAssist
+  attachAssist: attachAssist,
+  scoreAssistedCentering: scoreAssistedCentering,
+  knownFace: knownFace,
+  assistedSide: assistedSide,
+  applyStoredAssist: applyStoredAssist,
+  BACKUP_366_NAME: BACKUP_366_NAME,
+  repairRecord366A0E19: repairRecord366A0E19,
+  rescoreStoredAssist: rescoreStoredAssist,
+  rescoreDatabase: rescoreDatabase
 };

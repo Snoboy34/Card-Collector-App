@@ -134,7 +134,55 @@ async function buildServerMetadata(args) {
   };
 }
 
+/** Phone shutter time, UTC ISO-8601. Not the server's persist clock. */
+function isCaptureInstant(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value);
+}
+
+/**
+ * The phone's capture instant. A stored capturedAt wins. Otherwise the
+ * instant the upload carried in captureMetadata.capture.capturedAt.
+ * createdAt is the server clock and is not a capture time.
+ */
+function captureInstantFrom(source) {
+  if (!source || typeof source !== 'object') return null;
+  if (isCaptureInstant(source.capturedAt)) return source.capturedAt;
+  const nested = source.captureMetadata && source.captureMetadata.capture && source.captureMetadata.capture.capturedAt;
+  if (isCaptureInstant(nested)) return nested;
+  const group = source.capture && source.capture.capturedAt;
+  if (isCaptureInstant(group)) return group;
+  return null;
+}
+
+/** Copy the phone capture onto the item once. An existing capturedAt stays. */
+function stampCaptureTime(item) {
+  if (!item || typeof item !== 'object') return null;
+  if (isCaptureInstant(item.capturedAt)) return item.capturedAt;
+  const at = captureInstantFrom(item);
+  if (at) item.capturedAt = at;
+  return at;
+}
+
+/**
+ * Fill capturedAt on stored rows that already have the phone instant in
+ * capture metadata. Does not copy createdAt. A second pass logs nothing.
+ */
+function stampStoredCaptureTimes(db, emit) {
+  const log = typeof emit === 'function' ? emit : function () {};
+  let count = 0;
+  ((db && db.inventory) || []).forEach(function (item) {
+    if (!item || isCaptureInstant(item.capturedAt)) return;
+    const at = captureInstantFrom(item);
+    if (!at) return;
+    item.capturedAt = at;
+    count += 1;
+    log('[centering-assist] capture scanId=' + (item.scanId || item.id || '') + ' capturedAt ' + at);
+  });
+  return count;
+}
+
 module.exports = {
   parseCaptureMetadata, buildServerMetadata, normalizeBackground,
+  isCaptureInstant, captureInstantFrom, stampCaptureTime, stampStoredCaptureTimes,
   CAPTURE_GROUPS, BACKGROUNDS, MAX_JSON_BYTES
 };

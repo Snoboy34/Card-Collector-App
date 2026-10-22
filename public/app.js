@@ -97,11 +97,28 @@ function predictedGradeText(score) {
   return 'Predicted PSA ' + (text.slice(-2) === '.0' ? text.slice(0, -2) : text);
 }
 
-/** Assisted centering is never presented as the engine grade. */
+function knownFace(value) {
+  return value === 'front' || value === 'back' ? value : null;
+}
+
+/** "adjusted 10/13 09:54" from the save, separate from the capture clock. */
+function adjustmentStamp(assist) {
+  const raw = assist && assist.adjustedAt;
+  if (!raw) return '';
+  const date = new Date(raw);
+  if (isNaN(date.getTime())) return '';
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return 'adjusted ' + (date.getMonth() + 1) + '/' + date.getDate() + ' ' + hh + ':' + mm;
+}
+
+/** Assisted centering is never presented as the engine grade. A missing side withholds the number. */
 function assistedGradeLine(report) {
   const assist = report && report.centeringAssist;
   if (!assist || !(assist.adjustedCount > 0) || !assist.headline) return '';
   if (assist.gradeSource && assist.gradeSource !== 'assisted') return '';
+  const face = knownFace(report && report.side) || knownFace(assist.side);
+  if (!face) return assist.headline;
   if (typeof assist.centering === 'number') {
     return assist.centering.toFixed(1) + ' assisted — ' + assist.headline;
   }
@@ -958,6 +975,13 @@ function openReportModal(item) {
   const scanStamp = item.createdAt
     ? new Date(item.createdAt).toLocaleString()
     : '—';
+  const face = knownFace(item && item.side) || knownFace(report && report.side) || knownFace(report && report.centeringAssist && report.centeringAssist.side);
+  const sideNote = face ? '' : '<p class="muted">side unknown</p>';
+  const adjustedText = adjustmentStamp(report && report.centeringAssist);
+  const adjustedNote = adjustedText ? '<p class="muted">' + escapeHtml(adjustedText) + '</p>' : '';
+  const sideButtons = !face && scanId
+    ? '<p><button type="button" id="setSideFront" class="small">This is the front</button> <button type="button" id="setSideBack" class="small">This is the back</button></p>'
+    : '';
   const sub = report && report.subGrades ? report.subGrades : null;
   const ceiling = report && report.conditionCeilingApplied
     ? '<p class="ceiling-flag">0.5-point condition ceiling applied (final cannot exceed worst sub-grade + 0.5).</p>'
@@ -1037,6 +1061,9 @@ function openReportModal(item) {
       <button id="closeModal" style="float:right" class="small">Close</button>
       <h3>${escapeHtml(item.name || 'Unidentified')}</h3>
       <p class="muted">scan ${escapeHtml(String(scanId).slice(0, 8) || '—')} · ${escapeHtml(scanStamp)}</p>
+      ${sideNote}
+      ${adjustedNote}
+      ${sideButtons}
       ${report && report.debugArtifacts && report.debugArtifacts.dir
         ? '<p class="muted">Debug: ' + escapeHtml(report.debugArtifacts.dir) + '/ (debug.json, oriented.jpg)</p>'
         : ''}
@@ -1114,6 +1141,31 @@ function openReportModal(item) {
       openAssistEditor();
     });
   }
+  function chooseSide(face) {
+    if (!scanId) return;
+    fetch('/api/scans/' + encodeURIComponent(scanId) + '/centering-assist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setSide: face })
+    }).then(function (res) {
+      return res.json().then(function (body) { return { ok: res.ok, body: body }; });
+    }).then(function (result) {
+      const updated = result.body && result.body.item;
+      if (!result.ok || !updated) return;
+      const idx = state.inventory.findIndex(function (row) {
+        return row && (row.scanId === updated.scanId || row.id === updated.id);
+      });
+      if (idx >= 0) state.inventory[idx] = updated;
+      modal.remove();
+      if (activeRoute === 'dashboard') renderDashboard();
+      else if (activeRoute === 'inventory') renderInventory();
+      openReportModal(updated);
+    }).catch(function () {});
+  }
+  const frontBtn = modal.querySelector('#setSideFront');
+  const backBtn = modal.querySelector('#setSideBack');
+  if (frontBtn) frontBtn.addEventListener('click', function () { chooseSide('front'); });
+  if (backBtn) backBtn.addEventListener('click', function () { chooseSide('back'); });
 }
 
 /* For inline onclick in inventory HTML */
