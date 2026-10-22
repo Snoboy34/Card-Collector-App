@@ -968,6 +968,28 @@ public enum CenteringAssist {
         expect(keptCapture.ledger.deckId == "TD-06" && keptCapture.ledger.side == "back", "a record with no stored capture still replaces deck and side")
         expect(keptCapture.ledger.committedAt == phoneCapture, "a record with no stored capture keeps the phone capture")
         expect(keptCapture.ledger.committedAt != earlierPersist, "createdAt does not replace the phone capture")
+        var localAdjusted = staleAssist
+        localAdjusted.adjustedAt = "2026-10-13T14:54:36.000Z"
+        let localWithAdjustment = sampleLedger(
+            scanId: "366A0E19-0000-4000-8000-000000000001",
+            at: phoneCapture,
+            deck: "TD-13",
+            side: "front",
+            assist: localAdjusted
+        )
+        var serverWithoutAdjustment = serverSnap
+        serverWithoutAdjustment.adjustedAt = nil
+        let unrestored = sampleLedger(
+            scanId: "366A0E19-0000-4000-8000-000000000001",
+            at: phoneCapture,
+            deck: "TD-06",
+            side: "back",
+            assist: serverWithoutAdjustment
+        )
+        let noAdjustment = ScanLedger.applyingServerRecord(local: localWithAdjustment, server: unrestored)
+        expect(noAdjustment.centeringAssist?.adjustedAt == nil, "a server record without adjustedAt does not keep a local adjustment time")
+        expect(noAdjustment.centeringAssist?.adjustmentLine == nil, "a server record without adjustedAt shows no adjusted line")
+        expect(noAdjustment.committedAt == phoneCapture, "a missing adjustment time is not used as the scan time")
         expect(live.ledger.displayGrade.contains("10.0 assisted"), "the server label replaces the phone's label")
         expect(live.ledger.displayLR == "60.0%/40.0% assisted", "the server L/R replaces the phone's ratio")
         expect(live.ledger.displayTB == "50.0%/50.0% assisted", "the server T/B replaces the phone's ratio")
