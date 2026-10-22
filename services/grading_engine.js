@@ -75,7 +75,7 @@ const backScan = require('./back_scan');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.21-profile-group';
+const ENGINE_VERSION = '2026.10.22-border-order';
 
 let sharp = null;
 try {
@@ -940,13 +940,14 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
       start = i;
     }
   }
-  // Outermost cluster. A deeper one is used only later, and only when it
-  // matches the frame profile on the other sides. This finder does not
-  // measure that profile, so the published width stays this cluster.
+  // Outermost cluster. A deeper cluster is not a border in this finder.
+  // The order below keeps this cluster when it is past 1.185 mm, or when
+  // it is the one thin side of a frame whose other three sides are past
+  // that floor. Every other under-floor side is withheld.
   const group = clusters.length ? clusters[0] : null;
   const groupSummaries = clusters.map(function (cluster) {
     const w = cluster.map(function (h) { return h.width; });
-    return { width: median(w), profile: null, hits: cluster.length };
+    return { width: median(w), hits: cluster.length };
   });
 
   const base = {
@@ -1020,50 +1021,14 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
 }
 
 /**
- * Agreed outline profile, from the flatbed frame matcher. Silver width
- * within 0.12 mm of the set's median and the set's width range at most
- * 0.16 mm. Black width within 0.36 mm, range at most 0.52 mm, and thicker
- * than the silver by more than 0.05 mm. At least 2 points.
- */
-const FRAME_WIDTH_ABS_MM = 0.12;
-const FRAME_WIDTH_RANGE_MM = 0.16;
-const FRAME_BLACK_ABS_MM = 0.36;
-const FRAME_BLACK_RANGE_MM = 0.52;
-const FRAME_BLACK_OVER_SILVER_MM = 0.05;
-const FRAME_MIN_POINTS = 2;
-
-function sharedFrameProfile(profiles) {
-  if (!profiles || !profiles.length) return null;
-  const widths = [];
-  const blacks = [];
-  for (let i = 0; i < profiles.length; i++) {
-    const p = profiles[i];
-    if (!p || p.width == null || !isFinite(p.width) || p.blackWidth == null || !isFinite(p.blackWidth)) return null;
-    if (p.points != null && p.points < FRAME_MIN_POINTS) return null;
-    if (!(p.blackWidth > p.width + FRAME_BLACK_OVER_SILVER_MM)) return null;
-    widths.push(p.width);
-    blacks.push(p.blackWidth);
-  }
-  const wSorted = widths.slice().sort(function (a, b) { return a - b; });
-  const bSorted = blacks.slice().sort(function (a, b) { return a - b; });
-  const wMed = median(wSorted);
-  const bMed = median(bSorted);
-  if ((wSorted[wSorted.length - 1] - wSorted[0]) > FRAME_WIDTH_RANGE_MM) return null;
-  if ((bSorted[bSorted.length - 1] - bSorted[0]) > FRAME_BLACK_RANGE_MM) return null;
-  for (let i = 0; i < widths.length; i++) {
-    if (Math.abs(widths[i] - wMed) > FRAME_WIDTH_ABS_MM) return null;
-    if (Math.abs(blacks[i] - bMed) > FRAME_BLACK_ABS_MM) return null;
-  }
-  return { width: wMed, blackWidth: bMed };
-}
-
-/**
- * Groups are outermost first, in millimetres. A deeper group replaces the
- * outermost only when the outermost is under 1.185 mm, the other three
- * sides are not already a full frame, and the deeper group is the same
- * frame profile as those other sides. One thin side of a full frame keeps
- * the outermost width so the anchored exception can accept a real off-center
- * card instead of an inner line.
+ * Groups are outermost first, in millimetres.
+ *   1. An outermost group at or above 1.185 mm is the border. A deeper
+ *      group is not used.
+ *   2. An outermost group under 1.185 mm stays when the other three sides
+ *      are already past 1.185 mm. That anchored thin side beats a jump
+ *      inward, so an off-center card is not pushed onto an inner line.
+ *   3. Otherwise the edge is withheld. A deeper group is not a substitute.
+ *      Comparing frame profiles belongs to the outline matcher.
  */
 function selectBorderGroup(groups, options) {
   const list = (groups || []).filter(function (g) {
@@ -1072,19 +1037,11 @@ function selectBorderGroup(groups, options) {
   if (!list.length) return null;
   const outer = list[0];
   if (outer.widthMm >= BORDER_MIN_MEDIAN_MM) return outer;
-  const opts = options || {};
-  if (opts.anchoredThin) return outer;
-  const siblings = opts.siblingProfiles || [];
-  if (!sharedFrameProfile(siblings)) return outer;
-  for (let i = 1; i < list.length; i++) {
-    const g = list[i];
-    if (g.widthMm < BORDER_MIN_MEDIAN_MM || !g.profile) continue;
-    if (sharedFrameProfile(siblings.concat([g.profile]))) return g;
-  }
-  return outer;
+  if (options && options.anchoredThin) return outer;
+  return null;
 }
 
-function applySharedProfileChoice(scans) {
+function applyBorderGroupOrder(scans) {
   const names = ['left', 'right', 'top', 'bottom'];
   const outerMm = {};
   names.forEach(function (edge) {
@@ -1097,23 +1054,17 @@ function applySharedProfileChoice(scans) {
     const groups = (scan.groups || []).map(function (g) {
       return {
         widthPx: g.width,
-        widthMm: g.width == null ? null : g.width / borderPxPerMm(edge),
-        profile: g.profile || null
+        widthMm: g.width == null ? null : g.width / borderPxPerMm(edge)
       };
     });
-    const others = names.filter(function (n) { return n !== edge; });
-    const anchoredThin = others.every(function (n) {
+    const anchoredThin = names.every(function (n) {
+      if (n === edge) return true;
       return outerMm[n] != null && outerMm[n] >= BORDER_MIN_MEDIAN_MM;
     });
-    const siblingProfiles = [];
-    others.forEach(function (n) {
-      const g0 = (scans[n].groups || [])[0];
-      if (g0 && g0.profile) siblingProfiles.push(g0.profile);
-    });
-    const chosen = selectBorderGroup(groups, { anchoredThin: anchoredThin, siblingProfiles: siblingProfiles });
-    if (chosen && scan.width != null && Math.abs(chosen.widthPx - scan.width) > 1e-6) {
-      scan.width = chosen.widthPx;
-      scan.profileChoice = 'deeper-matching-profile';
+    const chosen = selectBorderGroup(groups, { anchoredThin: anchoredThin });
+    if (!chosen) {
+      scan.width = null;
+      scan.borderWithheld = true;
     }
   });
 }
@@ -1136,7 +1087,7 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel, o
   const rightScan = findBorderWidth(getPixel, 'right', cardWidth, cardHeight, getPaperPixel, scale);
   const topScan = findBorderWidth(getPixel, 'top', cardWidth, cardHeight, getPaperPixel, scale);
   const bottomScan = findBorderWidth(getPixel, 'bottom', cardWidth, cardHeight, getPaperPixel, scale);
-  applySharedProfileChoice({ left: leftScan, right: rightScan, top: topScan, bottom: bottomScan });
+  applyBorderGroupOrder({ left: leftScan, right: rightScan, top: topScan, bottom: bottomScan });
 
   const leftW = leftScan.width;
   const rightW = rightScan.width;
@@ -3217,14 +3168,7 @@ module.exports = {
   BORDER_THIN_ANCHORED_MIN_PX,
   borderPxPerMm,
   borderMmToPx,
-  sharedFrameProfile,
   selectBorderGroup,
-  FRAME_WIDTH_ABS_MM,
-  FRAME_WIDTH_RANGE_MM,
-  FRAME_BLACK_ABS_MM,
-  FRAME_BLACK_RANGE_MM,
-  FRAME_BLACK_OVER_SILVER_MM,
-  FRAME_MIN_POINTS,
   BORDER_THIN_MIN_HITS,
   BORDER_THIN_MAX_SPREAD_PX,
   BORDER_BAND_UNIFORM_MAX,

@@ -1,7 +1,8 @@
 /**
  * scripts/verify_border_group.js
- * Deeper border groups follow the agreed frame profile, and a single thin
- * side of a full frame is not replaced by an inner line.
+ * Border group order: an outermost side at or above 1.185 mm wins, the
+ * anchored thin exception beats a deeper jump, and every other under-floor
+ * side is withheld. Frame-profile comparison is not this test.
  * Run: node scripts/verify_border_group.js
  */
 'use strict';
@@ -17,51 +18,29 @@ function assert(label, cond, detail) {
   }
 }
 
-const frame = { width: 0.40, blackWidth: 1.20, points: 8 };
-const frameB = { width: 0.42, blackWidth: 1.24, points: 10 };
-const inner = { width: 0.40, blackWidth: 2.40, points: 8 };
-const shortRun = { width: 0.40, blackWidth: 1.20, points: 1 };
-
-assert('profile width tolerance is 0.12mm', g.FRAME_WIDTH_ABS_MM === 0.12);
-assert('profile width range is 0.16mm', g.FRAME_WIDTH_RANGE_MM === 0.16);
-assert('profile black tolerance is 0.36mm', g.FRAME_BLACK_ABS_MM === 0.36);
-assert('profile black range is 0.52mm', g.FRAME_BLACK_RANGE_MM === 0.52);
-assert('black band is thicker than the silver', g.FRAME_BLACK_OVER_SILVER_MM === 0.05);
-assert('a profile needs at least 2 points', g.FRAME_MIN_POINTS === 2);
-assert('two matching sides share a profile', g.sharedFrameProfile([frame, frameB]) != null);
-assert('an inner line does not share that profile', g.sharedFrameProfile([frame, inner]) == null);
-assert('one point is not a profile', g.sharedFrameProfile([shortRun]) == null);
-
-const siblings = [frame, frameB, frame];
-const thinThenFrame = [
-  { widthMm: 0.93, widthPx: 9.44, profile: null },
-  { widthMm: 2.80, widthPx: 28.3, profile: frame }
+const thinThenDeeper = [
+  { widthMm: 0.93, widthPx: 9.44 },
+  { widthMm: 2.80, widthPx: 28.3 }
 ];
-const anchored = g.selectBorderGroup(thinThenFrame, { anchoredThin: true, siblingProfiles: siblings });
+const anchored = g.selectBorderGroup(thinThenDeeper, { anchoredThin: true });
 assert('anchored thin exception keeps the outer side', anchored && anchored.widthMm === 0.93, anchored);
 
-const jumped = g.selectBorderGroup(thinThenFrame, { anchoredThin: false, siblingProfiles: siblings });
-assert('a deeper group is taken when it matches the other sides', jumped && jumped.widthMm === 2.80, jumped);
-
-const wrongDeeper = [
-  { widthMm: 0.93, widthPx: 9.44, profile: null },
-  { widthMm: 2.80, widthPx: 28.3, profile: inner }
-];
-const stayed = g.selectBorderGroup(wrongDeeper, { anchoredThin: false, siblingProfiles: siblings });
-assert('a deeper group with a different profile stays unused', stayed && stayed.widthMm === 0.93, stayed);
+const withheld = g.selectBorderGroup(thinThenDeeper, { anchoredThin: false });
+assert('an under-floor side is withheld instead of jumping deeper', withheld == null, withheld);
 
 const alreadyFull = [
-  { widthMm: 2.50, widthPx: 25.3, profile: frame },
-  { widthMm: 4.10, widthPx: 41.5, profile: frame }
+  { widthMm: 2.50, widthPx: 25.3 },
+  { widthMm: 4.10, widthPx: 41.5 }
 ];
-const outerWins = g.selectBorderGroup(alreadyFull, { anchoredThin: false, siblingProfiles: siblings });
+const outerWins = g.selectBorderGroup(alreadyFull, { anchoredThin: false });
 assert('an outer side past 1.185mm is not replaced', outerWins && outerWins.widthMm === 2.50, outerWins);
 
-const noProfile = g.selectBorderGroup([
-  { widthMm: 0.99, widthPx: 10, profile: null },
-  { widthMm: 2.30, widthPx: 23, profile: null }
-], { anchoredThin: false, siblingProfiles: [] });
-assert('without a profile the outer group stays', noProfile && noProfile.widthMm === 0.99, noProfile);
+const atFloor = g.selectBorderGroup([{ widthMm: g.BORDER_MIN_MEDIAN_MM, widthPx: 12 }], { anchoredThin: false });
+assert('a side at 1.185mm is kept', atFloor && atFloor.widthMm === g.BORDER_MIN_MEDIAN_MM, atFloor);
+
+assert('no group withholds the side', g.selectBorderGroup([], { anchoredThin: true }) == null);
+assert('the engine does not export a silver or black width cutoff',
+  g.FRAME_WIDTH_ABS_MM === undefined && g.FRAME_BLACK_ABS_MM === undefined && g.sharedFrameProfile === undefined);
 
 if (failures) {
   console.error(failures + ' border-group check(s) failed.');
