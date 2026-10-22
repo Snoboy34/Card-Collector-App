@@ -91,6 +91,15 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var capturedBins: [String]
         var cornersGrade: Double?
         var debugPath: String?
+        var centeringAssist: CenteringAssist.Snapshot?
+        var deckId: String?
+        var side: String?
+        /// Server clock when the graded item was persisted. This can be
+        /// earlier than the phone. It is not the scan line.
+        var createdAt: Date?
+        /// Phone shutter time, stored on the server at capture. This is the
+        /// only scan time the vault shows.
+        var capturedAt: Date?
         var rawJSON: String
         var summaryText: String
     }
@@ -197,6 +206,115 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         return try Self.parseReport(data)
     }
 
+    func submitCenteringAssist(
+        baseURL: String,
+        scanId: String,
+        lines: [String: [String: Double]],
+        consent: Bool,
+        confirmImplausible: Bool = false,
+        setSide: String? = nil
+    ) async throws -> RemoteReport {
+        guard let root = Self.normalizedBaseURL(baseURL) else {
+            throw APIError.invalidServerURL
+        }
+        let endpoint = root
+            .appendingPathComponent("api")
+            .appendingPathComponent("scans")
+            .appendingPathComponent(scanId)
+            .appendingPathComponent("centering-assist")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = Self.centeringAssistRequestBody(
+            lines: lines,
+            consent: consent,
+            confirmImplausible: confirmImplausible,
+            setSide: setSide
+        )
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            throw Self.transportError(error)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(status) else {
+            let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let message = (parsed?["error"] as? String) ?? (String(data: data, encoding: .utf8) ?? "HTTP \(status)")
+            if parsed?["implausible"] != nil {
+                throw APIError.implausible(message)
+            }
+            throw APIError.httpFailure(status, message)
+        }
+        return try Self.parseReport(data)
+    }
+
+    /// Line positions only. Deck id, side, and createdAt stay on the server.
+    /// `setSide` is sent only for the explicit front/back button.
+    static func centeringAssistRequestBody(
+        lines: [String: [String: Double]],
+        consent: Bool,
+        confirmImplausible: Bool,
+        setSide: String?
+    ) -> [String: Any] {
+        var body: [String: Any] = [
+            "consent": consent,
+            "confirmImplausible": confirmImplausible
+        ]
+        if !lines.isEmpty {
+            body["lines"] = lines
+        }
+        if setSide == "front" || setSide == "back" {
+            body["setSide"] = setSide
+        }
+        return body
+    }
+
+    /// One persisted scan, including a record that is on disk after a restart.
+    func fetchScan(baseURL: String, scanId: String) async throws -> RemoteReport {
+        guard let root = Self.normalizedBaseURL(baseURL) else {
+            throw APIError.invalidServerURL
+        }
+        let endpoint = root
+            .appendingPathComponent("api")
+            .appendingPathComponent("scans")
+            .appendingPathComponent(scanId)
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            throw Self.transportError(error)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(status) else {
+            let snippet = String(data: data, encoding: .utf8) ?? "HTTP \(status)"
+            throw APIError.httpFailure(status, snippet)
+        }
+        return try Self.parseReport(data)
+    }
+
+    func fetch(_ url: URL) async throws -> Data {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            throw Self.transportError(error)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(status) else {
+            throw APIError.httpFailure(status, "warped card")
+        }
+        return data
+    }
+
     static func transportError(_ error: URLError) -> Error {
         switch error.code {
         case .timedOut, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
@@ -212,6 +330,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         case unreachable
         case cardNotFound(String)
         case httpFailure(Int, String)
+        case implausible(String)
         case undecodableResponse
 
         var errorDescription: String? {
@@ -224,6 +343,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 return "Card not found — retake. \(reason)"
             case .httpFailure(let code, let body):
                 return "Grade request failed (\(code)): \(body)"
+            case .implausible(let message):
+                return message
             case .undecodableResponse:
                 return "Server did not return JSON."
             }
@@ -404,9 +525,27 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         let metrics = report?["centeringMetrics"] as? [String: Any]
         let leftRightRatio = ratioPair(metrics?["leftRightRatio"], first: "left", second: "right")
         let topBottomRatio = ratioPair(metrics?["topBottomRatio"], first: "top", second: "bottom")
+        let centeringAssist = CenteringAssist.parse(report: report, item: item)
+        let deckId = (item?["deckId"] as? String) ?? (report?["deckId"] as? String)
+        let side = (item?["side"] as? String) ?? (report?["side"] as? String)
+        // createdAt is the server clock when the item was persisted. It can
+        // be earlier than the phone. The scan line is the phone shutter time
+        // stored at capture: item.capturedAt, or captureMetadata.capture.capturedAt.
+        // adjustedAt is the assist save and stays on its own line.
+        let createdAt = (item?["createdAt"] as? String).flatMap { CenteringAssist.parseISO($0) }
+        let captureGroup = (item?["captureMetadata"] as? [String: Any])?["capture"] as? [String: Any]
+        let capturedAt = (item?["capturedAt"] as? String).flatMap { CenteringAssist.parseISO($0) }
+            ?? (captureGroup?["capturedAt"] as? String).flatMap { CenteringAssist.parseISO($0) }
 
         var lines: [String] = []
         if let scanId, !scanId.isEmpty { lines.append("scanId  \(scanId)") }
+        if let deckId {
+            let trimmed = deckId.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                let face = side == "back" ? "back" : (side == "front" ? "front" : "")
+                lines.append(face.isEmpty ? "deckId  \(trimmed)" : "deckId  \(trimmed)  \(face)")
+            }
+        }
         if let finalScore { lines.append(String(format: "finalScore  %.1f", finalScore)) }
         if incomplete { lines.append("incomplete  true") }
         if let sub { lines.append(sub) }
@@ -445,6 +584,14 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 lines.append(String(format: "upload %.0f×%.0f · graded on %.0f×%.0f warp", uw, uh, ww, wh))
             }
         }
+        if let headline = centeringAssist?.headline {
+            let knownSide = ScanLedger.knownFace(centeringAssist?.side) != nil
+            if knownSide, let label = centeringAssist?.centeringLabel, !label.isEmpty {
+                lines.append("\(label) — \(headline)")
+            } else {
+                lines.append(headline)
+            }
+        }
         if lines.isEmpty { lines.append(raw) }
 
         return RemoteReport(
@@ -472,6 +619,11 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             capturedBins: capturedBins,
             cornersGrade: cornersGrade,
             debugPath: debugPath,
+            centeringAssist: centeringAssist,
+            deckId: deckId,
+            side: side,
+            createdAt: createdAt,
+            capturedAt: capturedAt,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )
@@ -479,7 +631,10 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
 
     /// Vault/report fields from a server grade. Name/set/grade/value stay
     /// Unidentified / — unless the server actually produced them.
-    static func ledger(from report: RemoteReport, clientScanId: String, timestamp: Date = Date()) -> ScanLedger {
+    /// The scan clock is the phone capture stored on the server.
+    /// `timestamp` is that same shutter time when the response has not
+    /// echoed it yet. createdAt is not the scan clock.
+    static func ledger(from report: RemoteReport, clientScanId: String, timestamp: Date? = nil) -> ScanLedger {
         let scanId = {
             if let remote = report.scanId, !remote.isEmpty { return remote }
             return clientScanId
@@ -505,11 +660,19 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         } else {
             setName = ScanLedger.absent
         }
-        let lr = report.leftRightRatio.map { String(format: "%.1f%%/%.1f%%", $0.left, $0.right) } ?? ScanLedger.absent
-        let tb = report.topBottomRatio.map { String(format: "%.1f%%/%.1f%%", $0.top, $0.bottom) } ?? ScanLedger.absent
+        let assistedRatios = report.centeringAssist.flatMap { snap -> (lr: String, tb: String)? in
+            guard snap.adjustedCount > 0 else { return nil }
+            return CenteringAssist.assistedRatioText(widths: snap.placedWidthsMM())
+        }
+        let lr = assistedRatios?.lr
+            ?? report.leftRightRatio.map { String(format: "%.1f%%/%.1f%%", $0.left, $0.right) }
+            ?? ScanLedger.absent
+        let tb = assistedRatios?.tb
+            ?? report.topBottomRatio.map { String(format: "%.1f%%/%.1f%%", $0.top, $0.bottom) }
+            ?? ScanLedger.absent
         return ScanLedger(
             scanId: scanId,
-            committedAt: timestamp,
+            committedAt: report.capturedAt ?? timestamp ?? .distantPast,
             name: name,
             setName: setName,
             grade: report.finalScore,
@@ -521,7 +684,10 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             primaryFlaw: report.primaryFlaw ?? "",
             incomplete: report.incomplete ?? false,
             cornersGrade: report.cornersGrade,
-            debugPath: report.debugPath
+            debugPath: report.debugPath,
+            centeringAssist: report.centeringAssist,
+            deckId: report.deckId,
+            side: ScanLedger.knownFace(report.side) ?? ScanLedger.knownFace(report.centeringAssist?.side)
         )
     }
 
@@ -574,8 +740,14 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
     }
 
     #if DEBUG
-    static func runContractChecks() {
-        precondition(JudgeTestDeck.graders == ["PSA", "BGS", "SGC", "CGC", "TAG", "Other"])
+    /// Form fields only. No camera session is opened.
+    /// The body contains the raw JPEG, so a strict UTF-8 decode is nil and used to
+    /// fail the first field check with a signal trap. Lossy UTF-8 keeps the ASCII fields.
+    static func runContractChecks(_ check: ContractCheck) {
+        func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String, file: StaticString = #filePath, line: UInt = #line) {
+            check(condition(), message(), file, line)
+        }
+        expect(JudgeTestDeck.graders == ["PSA", "BGS", "SGC", "CGC", "TAG", "Other"], "grader list is PSA, BGS, SGC, CGC, TAG, Other")
         let jpeg = Data([0xFF, 0xD8, 0xFF])
         func text(grader: String?, side: String? = nil, pairId: String? = nil) -> String {
             let data = multipartBody(
@@ -584,23 +756,78 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 preSubmission: true, intendedGrader: grader, side: side, pairId: pairId,
                 captureMetadata: nil, scanId: "scan"
             )
-            return String(data: data, encoding: .utf8) ?? ""
+            return String(decoding: data, as: UTF8.self)
         }
         let sent = text(grader: "BGS")
-        precondition(sent.contains("name=\"deckId\""))
-        precondition(sent.contains("name=\"preSubmission\""))
-        precondition(sent.contains("name=\"intendedGrader\""))
-        precondition(sent.contains("\r\n\r\nBGS\r\n"))
-        precondition(!text(grader: nil).contains("intendedGrader"))
-        precondition(!text(grader: "").contains("intendedGrader"))
-        precondition(!text(grader: "Beckett").contains("intendedGrader"))
+        expect(sent.contains("name=\"deckId\""), "multipart form keeps deckId beside the JPEG bytes")
+        expect(sent.contains("name=\"preSubmission\""), "pre-submission flag is a form field")
+        expect(sent.contains("name=\"intendedGrader\""), "a known grader is a form field")
+        expect(sent.contains("\r\n\r\nBGS\r\n"), "intended grader value is BGS")
+        expect(!text(grader: nil).contains("intendedGrader"), "a missing grader is omitted")
+        expect(!text(grader: "").contains("intendedGrader"), "an empty grader is omitted")
+        expect(!text(grader: "Beckett").contains("intendedGrader"), "an unknown grader is omitted")
         let back = text(grader: nil, side: "back", pairId: "front-scan-1")
-        precondition(back.contains("name=\"side\""))
-        precondition(back.contains("\r\n\r\nback\r\n"))
-        precondition(back.contains("name=\"pairId\""))
-        precondition(back.contains("\r\n\r\nfront-scan-1\r\n"))
-        precondition(!text(grader: nil, side: "top", pairId: "").contains("name=\"side\""))
-        precondition(!text(grader: nil).contains("name=\"pairId\""))
+        expect(back.contains("name=\"side\""), "back capture sends side")
+        expect(back.contains("\r\n\r\nback\r\n"), "side value is back")
+        expect(back.contains("name=\"pairId\""), "back capture sends pairId")
+        expect(back.contains("\r\n\r\nfront-scan-1\r\n"), "pairId is the front scan id")
+        expect(!text(grader: nil, side: "top", pairId: "").contains("name=\"side\""), "side other than front or back is omitted")
+        expect(!text(grader: nil).contains("name=\"pairId\""), "a missing pairId is omitted")
+
+        let linePositions: [String: [String: Double]] = [
+            "left": ["positionPx": 40, "warpWidth": 643, "warpHeight": 900]
+        ]
+        let saveBody = centeringAssistRequestBody(
+            lines: linePositions, consent: false, confirmImplausible: false, setSide: nil
+        )
+        expect(saveBody["deckId"] == nil, "a line save does not send a deck id")
+        expect(saveBody["side"] == nil, "a line save does not send a side")
+        expect(saveBody["createdAt"] == nil, "a line save does not send a clock")
+        expect(saveBody["capturedAt"] == nil, "a line save does not send the capture time")
+        expect(saveBody["setSide"] == nil, "a line save does not send setSide")
+        let sentLines = saveBody["lines"] as? [String: [String: Double]]
+        expect(sentLines?["left"]?["positionPx"] == 40, "a line save sends the line position")
+        let faceBody = centeringAssistRequestBody(
+            lines: [:], consent: false, confirmImplausible: false, setSide: "back"
+        )
+        expect(faceBody["setSide"] as? String == "back", "an explicit face sends setSide")
+        expect(faceBody["deckId"] == nil && faceBody["side"] == nil, "setting the face does not send a deck id or side")
+        let ignoredFace = centeringAssistRequestBody(
+            lines: linePositions, consent: false, confirmImplausible: false, setSide: "top"
+        )
+        expect(ignoredFace["setSide"] == nil, "a side other than front or back is not sent")
+
+        let serverJSON = """
+        {"ok":true,"item":{"scanId":"366A0E19-0000-4000-8000-000000000001","deckId":"TD-06","side":"back","createdAt":"2026-10-12T21:50:37.000Z","capturedAt":"2026-10-12T21:57:08.000Z","captureMetadata":{"capture":{"capturedAt":"2026-10-12T21:57:08.000Z"}},"gradingReport":{"side":"back","centeringDiagnostics":{"box":{"width":643,"height":900}},"centeringMetrics":{"borderWidthsMm":{"left":6.0,"right":4.0,"top":5.0,"bottom":5.0}},"centeringAssist":{"headline":"Centering (you adjusted 1 side)","centeringLabel":"10.0 assisted","adjustedCount":1,"adjustedAt":"2026-10-13T14:54:36.000Z","sides":{"left":{"userWidthMm":6.0,"engineWidthMm":5.0},"right":{"engineWidthMm":4.0},"top":{"engineWidthMm":5.0},"bottom":{"engineWidthMm":5.0}}}}}}
+        """
+        guard let payload = serverJSON.data(using: .utf8),
+              let parsed = try? parseReport(payload),
+              let phoneCapture = CenteringAssist.parseISO("2026-10-12T21:57:08.000Z"),
+              let earlierPersist = CenteringAssist.parseISO("2026-10-12T21:50:37.000Z") else {
+            expect(false, "the server record parses")
+            return
+        }
+        let fromServer = ledger(from: parsed, clientScanId: "local-scan", timestamp: earlierPersist)
+        expect(parsed.createdAt == earlierPersist, "createdAt stays the earlier server persist time")
+        expect(parsed.capturedAt == phoneCapture, "capturedAt is the phone shutter time stored at capture")
+        expect(fromServer.committedAt == phoneCapture, "the scan clock is the stored phone capture")
+        expect(fromServer.committedAt != earlierPersist, "the earlier server clock is not the scan time")
+        expect(fromServer.deckId == "TD-06" && fromServer.side == "back", "the parsed record keeps the server deck and side")
+        expect(fromServer.centeringAssist?.centeringLabel == "10.0 assisted", "the parsed record keeps the server label")
+        expect(fromServer.displayLR == "60.0%/40.0% assisted", "the parsed record keeps the server ratios")
+        expect(fromServer.centeringAssist?.adjustedAt == "2026-10-13T14:54:36.000Z", "the adjustment clock stays off the scan clock")
+        expect(fromServer.centeringAssist?.adjustmentLine?.hasPrefix("adjusted ") == true, "the adjustment is its own line")
+        let metadataOnly = """
+        {"ok":true,"item":{"scanId":"366A0E19-0000-4000-8000-000000000001","deckId":"TD-06","side":"back","createdAt":"2026-10-12T21:50:37.000Z","captureMetadata":{"capture":{"capturedAt":"2026-10-12T21:57:08.000Z"}},"gradingReport":{"side":"back","centeringDiagnostics":{"box":{"width":643,"height":900}}}}}
+        """
+        guard let nested = metadataOnly.data(using: .utf8),
+              let fromMetadata = try? parseReport(nested) else {
+            expect(false, "capture metadata parses")
+            return
+        }
+        expect(fromMetadata.capturedAt == phoneCapture, "a stored upload without its own field still carries the phone capture")
+        expect(ledger(from: fromMetadata, clientScanId: "local-scan").committedAt == phoneCapture, "the scan clock is read from capture metadata")
+        expect(ledger(from: fromMetadata, clientScanId: "local-scan").committedAt != earlierPersist, "capture metadata is not replaced by createdAt")
     }
     #endif
 }

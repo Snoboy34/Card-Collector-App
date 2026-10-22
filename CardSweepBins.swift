@@ -1,5 +1,11 @@
 import Foundation
 
+#if DEBUG
+/// Passed in by the XCTest method. A failed check records a message there.
+/// Contract checks must not call `assert`, `precondition`, `fatalError`, or force-unwrap.
+typealias ContractCheck = (_ passed: Bool, _ message: String, _ file: StaticString, _ line: UInt) -> Void
+#endif
+
 /// Diagnostic surface-sweep bins, ported from `public/scan_level.js`
 /// (`matchSweepBin`, `nextSweepBin`, `shouldGrabSweepBin`).
 ///
@@ -115,23 +121,29 @@ enum CardSweepBins {
         inTargetBin && !alreadyGrabbed && heldMs >= holdMs
     }
 
+    #if DEBUG
     /// Same assertions as `scripts/verify_judge_math.js` sweep matcher checks.
-    static func runContractChecks() {
-        precondition(matchSweepBin(pitchDeg: 0.2, rollDeg: -0.4) == .level)
-        precondition(matchSweepBin(pitchDeg: 12, rollDeg: 0.5) == .pitchPlus)
-        precondition(matchSweepBin(pitchDeg: -12, rollDeg: 0) == .pitchMinus)
-        precondition(matchSweepBin(pitchDeg: 0.3, rollDeg: 12) == .rollPlus)
-        precondition(matchSweepBin(pitchDeg: 1, rollDeg: -12) == .rollMinus)
-        precondition(matchSweepBin(pitchDeg: 12, rollDeg: 12) == nil)
-        precondition(matchSweepBin(pitchDeg: 6, rollDeg: 0) == nil)
-        precondition(nextSweepBin(captured: [.level])?.rawValue == "pitchPlus")
-        precondition(shouldGrabSweepBin(inTargetBin: true, heldMs: 250, alreadyGrabbed: false))
-        precondition(!shouldGrabSweepBin(inTargetBin: true, heldMs: 200, alreadyGrabbed: false))
+    /// Arithmetic only: no camera and no motion hardware.
+    static func runContractChecks(_ check: ContractCheck) {
+        func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String, file: StaticString = #filePath, line: UInt = #line) {
+            check(condition(), message(), file, line)
+        }
+        expect(matchSweepBin(pitchDeg: 0.2, rollDeg: -0.4) == .level, "0.2° / -0.4° is the level bin")
+        expect(matchSweepBin(pitchDeg: 12, rollDeg: 0.5) == .pitchPlus, "12° pitch is pitchPlus")
+        expect(matchSweepBin(pitchDeg: -12, rollDeg: 0) == .pitchMinus, "-12° pitch is pitchMinus")
+        expect(matchSweepBin(pitchDeg: 0.3, rollDeg: 12) == .rollPlus, "12° roll is rollPlus")
+        expect(matchSweepBin(pitchDeg: 1, rollDeg: -12) == .rollMinus, "-12° roll is rollMinus")
+        expect(matchSweepBin(pitchDeg: 12, rollDeg: 12) == nil, "pitch and roll together match no bin")
+        expect(matchSweepBin(pitchDeg: 6, rollDeg: 0) == nil, "6° pitch is between bins")
+        expect(nextSweepBin(captured: [.level])?.rawValue == "pitchPlus", "after level the next bin is pitchPlus")
+        expect(shouldGrabSweepBin(inTargetBin: true, heldMs: 250, alreadyGrabbed: false), "250 ms in the bin grabs")
+        expect(!shouldGrabSweepBin(inTargetBin: true, heldMs: 200, alreadyGrabbed: false), "200 ms in the bin waits")
         let partial = summarize(bins: ["level", "pitchPlus", "unknown"])
-        precondition(partial.complete == false)
-        precondition(partial.capturedBins.map(\.rawValue) == ["level", "pitchPlus"])
+        expect(partial.complete == false, "two bins are not a complete sweep")
+        expect(partial.capturedBins.map(\.rawValue) == ["level", "pitchPlus"], "partial sweep keeps level then pitchPlus")
         let full = summarize(bins: ["rollMinus", "level", "pitchPlus", "rollPlus", "pitchMinus"])
-        precondition(full.complete)
-        precondition(full.capturedBins.map(\.rawValue) == ["level", "pitchPlus", "pitchMinus", "rollPlus", "rollMinus"])
+        expect(full.complete, "five bins complete the sweep")
+        expect(full.capturedBins.map(\.rawValue) == ["level", "pitchPlus", "pitchMinus", "rollPlus", "rollMinus"], "a full sweep is stored in capture order")
     }
+    #endif
 }

@@ -92,12 +92,16 @@ public final class CameraCalibration: ObservableObject {
     }
 
     #if DEBUG
-    public static func runContractChecks() {
+    /// Gravity math only. Device motion is not started, so the simulator runs this.
+    static func runContractChecks(_ check: ContractCheck) {
+        func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String, file: StaticString = #filePath, line: UInt = #line) {
+            check(condition(), message(), file, line)
+        }
         let level = tiltFromGravity(x: 0, y: 0, z: -1)
-        precondition(abs(level.pitch) < 0.01 && abs(level.roll) < 0.01)
+        expect(abs(level.pitch) < 0.01 && abs(level.roll) < 0.01, "screen-up gravity is 0° pitch and 0° roll")
         let first = smoothedMean([], next: 10, maxN: 5)
         let second = smoothedMean(first.samples, next: 0, maxN: 5)
-        precondition(abs(second.mean - 5) < 0.001)
+        expect(abs(second.mean - 5) < 0.001, "two samples, 10 then 0, average to 5")
     }
     #endif
 }
