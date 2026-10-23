@@ -72,10 +72,11 @@ const scanLevel = require('../public/scan_level');
 const cardQuad = require('./card_quad');
 const scanDebug = require('./scan_debug');
 const backScan = require('./back_scan');
+const designOrientation = require('./design_orientation').designOrientation;
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.22-border-order';
+const ENGINE_VERSION = '2026.10.23-design-orientation';
 
 let sharp = null;
 try {
@@ -2838,6 +2839,38 @@ async function gradeBuffer(buffer, options) {
     }
     const cardDetection = located.detection;
     const shouldRotate = cardDetection.rotatedToPortrait;
+    // Name edges from the printed design. A 180-degree photo is rotated
+    // before any edge is called top, bottom, left, or right. A design that
+    // votes both ways withholds the four widths. No mixed-case line (an
+    // all-caps nameplate) leaves the portrait warp as it is.
+    if (options.side !== 'back') {
+      const orientWarp = located.warped;
+      const orientGrey = await sharp(orientWarp.data, {
+        raw: { width: orientWarp.width, height: orientWarp.height, channels: orientWarp.channels }
+      }).greyscale().raw().toBuffer();
+      const orient = designOrientation(orientGrey, orientWarp.width, orientWarp.height);
+      cardDetection.designOrientation = orient.orientation;
+      cardDetection.designOrientationVotes = { up: orient.up, down: orient.down };
+      if (orient.orientation === '180') {
+        const q = located.quad;
+        const flipped = {
+          tl: q.br.slice(),
+          tr: q.bl.slice(),
+          br: q.tl.slice(),
+          bl: q.tr.slice(),
+          rotatedToPortrait: q.rotatedToPortrait
+        };
+        located.quad = flipped;
+        const cw = cardDetection.centeringWarp.width;
+        const ch = cardDetection.centeringWarp.height;
+        located.warped = cardQuad.warpPerspective(
+          located.decoded, flipped, cardQuad.WARP_WIDTH, cardQuad.WARP_HEIGHT
+        );
+        located.centeringWarped = (cw === located.warped.width && ch === located.warped.height)
+          ? located.warped
+          : cardQuad.warpPerspective(located.decoded, flipped, cw, ch);
+      }
+    }
 
     // ----- Module A: anti-distortion pre-processing on the warped card -----
     // Greyscale, normalize, and a 1px blur to strip smartphone computational
@@ -2897,6 +2930,16 @@ async function gradeBuffer(buffer, options) {
     const centeringMeasurement = await measureCenteringOnWarp(
       located.centeringWarped, cardDetection.centeringWarp, getPixel, getPaperPixel, centeringBox
     );
+    if (cardDetection.designOrientation === 'conflict') {
+      ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+        centeringMeasurement.widths[edge] = null;
+        if (centeringMeasurement.widthsMm) centeringMeasurement.widthsMm[edge] = null;
+      });
+      centeringMeasurement.detected = false;
+      centeringMeasurement.leftRightRatio = null;
+      centeringMeasurement.topBottomRatio = null;
+      centeringMeasurement.orientationWithheld = true;
+    }
     const lowConfidenceEdges = applyCutConfidence(centeringMeasurement, cardDetection);
     const interiorGrey = measureInteriorGrey(
       getPaperPixel, centeringBox.width, centeringBox.height, centeringMeasurement.widths
@@ -2962,9 +3005,11 @@ async function gradeBuffer(buffer, options) {
     if (!centeringMeasurement.detected || !borderReliability.accepted) {
       const surfacePhase = scoreSurfacePhase(surface);
       const edgeScore = scoreEdgesPhase(edgesWhiteningCount);
-      const incompleteReason = !centeringMeasurement.detected
-        ? 'centering undetectable — no printed border found'
-        : 'centering undetectable — print-border samples do not agree on a printed frame';
+      const incompleteReason = centeringMeasurement.orientationWithheld
+        ? 'centering withheld — printed design does not agree on which edge is the top'
+        : !centeringMeasurement.detected
+          ? 'centering undetectable — no printed border found'
+          : 'centering undetectable — print-border samples do not agree on a printed frame';
       const report = {
         centering: null,
         corners: null,
