@@ -73,10 +73,11 @@ const cardQuad = require('./card_quad');
 const scanDebug = require('./scan_debug');
 const backScan = require('./back_scan');
 const designOrientation = require('./design_orientation').designOrientation;
+const phoneFrame = require('./phone_frame');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.23-quad-sides';
+const ENGINE_VERSION = '2026.10.23-phone-frame';
 
 let sharp = null;
 try {
@@ -2706,6 +2707,62 @@ async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, ge
     top: mm(wd.top, pxPerMmY),
     bottom: mm(wd.bottom, pxPerMmY)
   };
+  // The shared outline is the design block, or the matched frame when the
+  // four sides carry the same bands. It fills a withheld edge and replaces
+  // a step the matcher accepted on a different line. A step already within
+  // the 3 px group gap stays. An outline under 1.185 mm, or past 12% of
+  // the card, is not used.
+  if (centeringWarped && centeringWarped.data && (centeringWarped.channels || 3) >= 3) {
+    const outlineMm = phoneFrame.measureWarp(centeringWarped);
+    const adopted = phoneFrame.adoptOutline(
+      measurement.widthsMm,
+      outlineMm,
+      BORDER_MIN_MEDIAN_MM,
+      function (edge) { return EDGE_GROUP_GAP_PX / borderPxPerMm(edge); },
+      {
+        lowConfidence: measurement.voteLowConfidenceEdges || [],
+        frameMatches: outlineMm.frameMatches || {},
+        maxMmFor: function (edge) {
+          const side = (edge === 'left' || edge === 'right') ? BORDER_CARD_WIDTH_MM : BORDER_CARD_HEIGHT_MM;
+          return EDGE_MAX_DEPTH_FRAC * side;
+        }
+      }
+    );
+    measurement.frameOutlineMm = {
+      left: outlineMm.left == null ? null : Math.round(outlineMm.left * 1000) / 1000,
+      right: outlineMm.right == null ? null : Math.round(outlineMm.right * 1000) / 1000,
+      top: outlineMm.top == null ? null : Math.round(outlineMm.top * 1000) / 1000,
+      bottom: outlineMm.bottom == null ? null : Math.round(outlineMm.bottom * 1000) / 1000
+    };
+    measurement.frameMatched = outlineMm.matched === true;
+    if (adopted.replaced.length) {
+      adopted.replaced.forEach(function (edge) {
+        measurement.widthsMm[edge] = adopted.mm[edge];
+        measurement.widths[edge] = adopted.mm[edge] * borderPxPerMm(edge);
+      });
+      if (measurement.voteLowConfidenceEdges) {
+        measurement.voteLowConfidenceEdges = measurement.voteLowConfidenceEdges.filter(function (edge) {
+          return adopted.replaced.indexOf(edge) < 0;
+        });
+      }
+      const widths = measurement.widths;
+      const ready = ['left', 'right', 'top', 'bottom'].every(function (edge) {
+        return widths[edge] != null && isFinite(widths[edge]);
+      });
+      measurement.detected = ready;
+      if (!ready) {
+        measurement.leftRightRatio = null;
+        measurement.topBottomRatio = null;
+      } else {
+        const totalH = widths.left + widths.right;
+        const totalV = widths.top + widths.bottom;
+        const leftPct = totalH > 0 ? (widths.left / totalH) * 100 : 50;
+        const topPct = totalV > 0 ? (widths.top / totalV) * 100 : 50;
+        measurement.leftRightRatio = { left: leftPct, right: 100 - leftPct };
+        measurement.topBottomRatio = { top: topPct, bottom: 100 - topPct };
+      }
+    }
+  }
   measurement.centeringWarp = warpInfo || null;
   return measurement;
 }
