@@ -18,6 +18,9 @@ const MIN_AREA_FRAC = 0.15;
 const MAX_AREA_FRAC = 0.95;
 const MIN_SIDE_PX = 200;
 const BOUNDS_SLOP_PX = 2;
+// Opposite sides of a real card quad match. The worst saved scan is 3% apart.
+// A quad whose opposite sides differ by more than this has a corner off the card.
+const OPPOSITE_SIDE_RATIO_MAX = 1.15;
 
 function toPoint(value) {
   if (Array.isArray(value) && value.length >= 2) {
@@ -167,6 +170,17 @@ function validateQuad(q, imageWidth, imageHeight) {
   const minSidePx = Math.min(top, bottom, left, right);
   if (minSidePx < MIN_SIDE_PX) {
     reasons.push('shortest quad side ' + round2(minSidePx) + 'px is below ' + MIN_SIDE_PX + 'px');
+  }
+  function sideRatio(a, b) {
+    const hi = Math.max(a, b);
+    const lo = Math.min(a, b);
+    return lo > 0 ? hi / lo : Infinity;
+  }
+  const widthRatio = sideRatio(top, bottom);
+  const heightRatio = sideRatio(left, right);
+  if (widthRatio > OPPOSITE_SIDE_RATIO_MAX || heightRatio > OPPOSITE_SIDE_RATIO_MAX) {
+    reasons.push('opposite sides differ by ' + round2(Math.max(widthRatio, heightRatio)) +
+      '× (need ≤ ' + OPPOSITE_SIDE_RATIO_MAX + '×)');
   }
 
   return {
@@ -424,6 +438,7 @@ module.exports = {
   WARP_HEIGHT,
   CARD_ASPECT,
   ASPECT_TOLERANCE,
+  OPPOSITE_SIDE_RATIO_MAX,
   MIN_AREA_FRAC,
   MAX_AREA_FRAC,
   MIN_SIDE_PX,

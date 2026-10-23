@@ -191,6 +191,22 @@ const small = v([[10, 10], [150, 10], [150, 206], [10, 206]], 180, 230);
 assert('validate rejects a side under 200px', small.ok === false &&
   small.reasons.join(' ').indexOf('below 200px') !== -1, small.reasons);
 
+// Bottom is 1000 against a 700 top (1.43×). Real scans stay within 1.03×.
+const uneven = v([[150, 150], [850, 150], [990, 1130], [10, 1130]]);
+assert('validate rejects opposite sides that differ by more than 1.15×',
+  uneven.ok === false && uneven.reasons.join(' ').indexOf('opposite sides') !== -1, uneven.reasons);
+const mild = v([[150, 150], [850, 150], [870, 1130], [130, 1130]]);
+assert('validate accepts opposite sides within 3%', mild.ok === true, mild.reasons);
+
+// 31715997's phone quad. One corner sits on the card, so the top and bottom
+// edges are 1.66× apart. Every other saved scan is within 1.03×.
+const cutThrough = cq.validateQuad(cq.orderQuad([
+  [217, 1705.92], [222.23, 301.76], [1611.82, 320.31], [1596.64, 1164.36]
+]), 1748, 2448);
+assert('31715997 quad is rejected because one corner is off the card',
+  cutThrough.ok === false && cutThrough.reasons.join(' ').indexOf('opposite sides') !== -1,
+  cutThrough.reasons);
+
 assert('parseCardQuad reads {tl,tr,br,bl} JSON',
   cq.parseCardQuad('{"tl":[1,2],"tr":[3,4],"br":[5,6],"bl":[7,8]}').length === 4);
 assert('parseCardQuad reads {x,y} points',
