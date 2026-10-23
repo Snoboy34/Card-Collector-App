@@ -356,10 +356,14 @@ function refineQuadToCut(src, quad, outW, outH) {
       runnerUpRatio: runner >= 0 && bestStep > 0 ? Math.round((runnerStep / bestStep) * 1000) / 1000 : 0,
       runnerUpOffsetPx: runner >= 0 ? runner - best : null
     };
-    // Sub-pixel: locate the half-level crossing between the background and
-    // card plateaus around the strongest step, instead of snapping to a
-    // whole warp pixel. Returned value is the first card-side position
-    // (crossing + 0.5), so an exact pixel-boundary edge gives an integer.
+    // Sub-pixel half-level between the background and the card face, instead
+    // of a whole warp pixel. On a sharp edge this is the outer contact. On a
+    // soft edge the half-level sits inside the ramp, so a border measured
+    // from it is short by the outer part of that ramp. The outer contact is
+    // not used: on a real photo it also lengthens edges whose half-level
+    // already matches the key. Nothing is added in millimetres. Returned
+    // value is the first card-side position (crossing + 0.5), so an exact
+    // pixel-boundary edge gives an integer.
     const lo = Math.max(0, best - 3);
     const hi = Math.min(length - 1, best + 4);
     let bg = 0;
