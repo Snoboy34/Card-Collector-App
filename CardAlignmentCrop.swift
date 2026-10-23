@@ -3,10 +3,9 @@ import UIKit
 /// Fixed 2.5×3.5 neon-window geometry, ported from `public/scan_level.js`
 /// (`cardFrameRect`, `videoCoverCrop`, `alignmentCropInVideo`) on the Node stack.
 ///
-/// The still JPEG is cropped to this window before `POST /api/grade` so the
-/// bytes match the Safari alignment-crop contract (`alignmentCrop=true`).
-/// Vision quads are not used here — foil/glare makes them less stable than
-/// the fixed overlay the operator already fills.
+/// The still JPEG is cropped to this window before `POST /api/grade`. The
+/// crop is not the card: the operator leaves background showing, and the
+/// server grades only the card found by `CardStillQuad` (or its own detector).
 enum CardAlignmentCrop {
     static let cardAspect: CGFloat = 2.5 / 3.5
     static let jpegQuality: CGFloat = 0.92
