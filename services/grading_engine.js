@@ -75,7 +75,7 @@ const backScan = require('./back_scan');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.01-border-band';
+const ENGINE_VERSION = '2026.10.21-border-mm';
 
 let sharp = null;
 try {
@@ -119,17 +119,45 @@ const PSA10_CENTERING_MAX = 60.0;
  * is a frame when it is uniform, distinct from the backdrop and from the
  * interior, and the lines agree. Brightness alone is not a color.
  *
- * Median widths under 12px (643×900-equivalent) are still cut-edge slivers
- * unless the lines agree tightly and the band passes that same check.
- * 1.15 mm is about 11px here and is a real off-center border.
+ * Width floors are millimetres. Each edge converts with its own px/mm on
+ * the 643×900 warp (63.5 mm across, 88.9 mm down), so the rule does not
+ * follow the photo's pixel count or a later warp size. 1.185 mm is the
+ * old 12 px short-side floor. A median under that is still a cut-edge
+ * sliver unless the lines agree tightly and the band passes the same
+ * check. About 1.15 mm is a real off-center border.
  */
 const BORDER_SAMPLE_SPREAD_MAX_PX = 12;
 /** Of the attempted lines, at least this many must form the consensus window. */
 const BORDER_SAMPLE_MIN_HITS = 5;
-/** Default floor. Thinner than this needs the thin-border exception. */
-const BORDER_MIN_MEDIAN_WIDTH_PX = 12;
-/** Thinnest median still accepted when the lines agree and the band is real. */
-const BORDER_THIN_MIN_PX = 8;
+/** Warp the phone widths are reported in. Floors convert from millimetres on this warp. */
+const BORDER_WARP_WIDTH = 643;
+const BORDER_WARP_HEIGHT = 900;
+const BORDER_CARD_WIDTH_MM = 63.5;
+const BORDER_CARD_HEIGHT_MM = 88.9;
+/** 12 px on the short side of the 643×900 warp. */
+const BORDER_MIN_MEDIAN_MM = 12 * BORDER_CARD_WIDTH_MM / BORDER_WARP_WIDTH;
+/** 8 px on that short side. Unanchored thin exception. */
+const BORDER_THIN_MIN_MM = 8 * BORDER_CARD_WIDTH_MM / BORDER_WARP_WIDTH;
+/** 6 px on that short side. The inward guard, used when the other three sides are past the floor. */
+const BORDER_THIN_ANCHORED_MIN_MM = 6 * BORDER_CARD_WIDTH_MM / BORDER_WARP_WIDTH;
+
+function borderPxPerMm(edge) {
+  if (edge === 'left' || edge === 'right') return BORDER_WARP_WIDTH / BORDER_CARD_WIDTH_MM;
+  return BORDER_WARP_HEIGHT / BORDER_CARD_HEIGHT_MM;
+}
+
+function borderMmToPx(mm, edge) {
+  const px = mm * borderPxPerMm(edge);
+  // 8 * 63.5/643 * 643/63.5 is 7.999999999999999 in IEEE math. The short-side
+  // floors were integer pixel counts, so a value that close to an integer is
+  // that integer.
+  if ((edge === 'left' || edge === 'right') && Math.abs(px - Math.round(px)) < 1e-9) return Math.round(px);
+  return px;
+}
+
+/** Short-side pixel equivalent of the millimetre floors. Left and right still read 12, 8, and 6. */
+const BORDER_MIN_MEDIAN_WIDTH_PX = borderMmToPx(BORDER_MIN_MEDIAN_MM, 'left');
+const BORDER_THIN_MIN_PX = borderMmToPx(BORDER_THIN_MIN_MM, 'left');
 /** Thin exception: most of the 15 voting lines, not a 5-hit accident. */
 const BORDER_THIN_MIN_HITS = 12;
 /** Thin exception: the agreeing lines stay inside this spread. */
@@ -156,11 +184,11 @@ const BORDER_BAND_DISTINCT_GREY = 18;
 const BORDER_BAND_DISTINCT_RGB = 40;
 /**
  * Thinnest single edge still accepted when the other three edges are
- * already full borders. The finder cannot report anything inside the 6px
- * inward guard, so this is that guard: one skinny side of a real frame,
- * not a sliver around a borderless card.
+ * already past the millimetre floor. The finder cannot report anything
+ * inside the inward guard, so this is that guard: one skinny side of a
+ * real frame, not a sliver around a borderless card.
  */
-const BORDER_THIN_ANCHORED_MIN_PX = 6;
+const BORDER_THIN_ANCHORED_MIN_PX = borderMmToPx(BORDER_THIN_ANCHORED_MIN_MM, 'left');
 /** BGS 10 centering window (48/52 — near 50/50). */
 const BGS10_CENTERING_MIN = 48.0;
 const BGS10_CENTERING_MAX = 52.0;
@@ -1367,10 +1395,11 @@ function bandIsDistinct(bandGrey, otherGrey, bandRgb, otherRgb) {
  * other three edges are already full borders may be as thin as the inward
  * guard. A card that is thin on every side stays rejected.
  */
-function thinBorderAllowed(hits, medianWidth, consensus, bandGrey, interiorMean, backdropGrey, bandRgb, interiorRgb, backdropRgb, anchored) {
+function thinBorderAllowed(hits, medianWidth, consensus, bandGrey, interiorMean, backdropGrey, bandRgb, interiorRgb, backdropRgb, anchored, edge) {
   if (medianWidth == null || !isFinite(medianWidth)) return false;
-  const floor = anchored ? BORDER_THIN_ANCHORED_MIN_PX : BORDER_THIN_MIN_PX;
-  if (medianWidth < floor || medianWidth >= BORDER_MIN_MEDIAN_WIDTH_PX) return false;
+  const floor = borderMmToPx(anchored ? BORDER_THIN_ANCHORED_MIN_MM : BORDER_THIN_MIN_MM, edge);
+  const ceiling = borderMmToPx(BORDER_MIN_MEDIAN_MM, edge);
+  if (medianWidth < floor || medianWidth >= ceiling) return false;
   if (hits < BORDER_THIN_MIN_HITS) return false;
   if (consensus == null || consensus > BORDER_THIN_MAX_SPREAD_PX) return false;
   if (!bandIsDistinct(bandGrey, interiorMean, bandRgb, interiorRgb)) return false;
@@ -1385,9 +1414,9 @@ function thinBorderAllowed(hits, medianWidth, consensus, bandGrey, interiorMean,
  *   - any edge has fewer than BORDER_SAMPLE_MIN_HITS successful lines
  *   - the tightest BORDER_SAMPLE_MIN_HITS-hit window on any edge exceeds
  *     BORDER_SAMPLE_SPREAD_MAX_PX (outliers are ignored)
- *   - any edge's median width is below BORDER_MIN_MEDIAN_WIDTH_PX, unless
- *     it is a thin real border (lines agree and the band is uniform and
- *     distinct from the backdrop and the interior)
+ *   - any edge's median width is below BORDER_MIN_MEDIAN_MM on that axis,
+ *     unless it is a thin real border (lines agree and the band is uniform
+ *     and distinct from the backdrop and the interior)
  *   - the raw border band is not uniform (more than one edge), or is not
  *     distinct from the backdrop or the interior, when those samples exist
  *   - measurePrintCentering already failed (detected === false)
@@ -1455,7 +1484,7 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
       if (edges[k] === edge) continue;
       const sibling = widths[edges[k]];
       if (sibling != null && typeof sibling === 'number' && isFinite(sibling) &&
-          sibling >= BORDER_MIN_MEDIAN_WIDTH_PX) solid += 1;
+          sibling >= borderMmToPx(BORDER_MIN_MEDIAN_MM, edges[k])) solid += 1;
     }
     return solid >= 3;
   }
@@ -1477,13 +1506,14 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
     const bandRgb = rgbOf(paperBandRgb[edge]);
     const thinAgreed = thinBorderAllowed(
       hits, medianWidth, consensusRange[edge], bandGrey, interiorMean, backdropGrey,
-      bandRgb, interiorRgb, backdropRgb, edgeAnchored(edge)
+      bandRgb, interiorRgb, backdropRgb, edgeAnchored(edge), edge
     );
+    const floorPx = borderMmToPx(BORDER_MIN_MEDIAN_MM, edge);
     if (medianWidth != null && typeof medianWidth === 'number' && isFinite(medianWidth) &&
-        medianWidth < BORDER_MIN_MEDIAN_WIDTH_PX && !thinAgreed) {
+        medianWidth < floorPx && !thinAgreed) {
       reasons.push(
         edge + ' median width ' + round2(medianWidth) +
-        'px is below ' + BORDER_MIN_MEDIAN_WIDTH_PX + 'px'
+        'px is below ' + BORDER_MIN_MEDIAN_MM.toFixed(3) + 'mm'
       );
     }
     const rawSd = finiteOrNull(paperBandStddev[edge]);
@@ -1532,6 +1562,7 @@ function assessPrintBorderReliability(box, imageWidth, imageHeight, centeringMea
     thresholdPx: BORDER_SAMPLE_SPREAD_MAX_PX,
     minHits: BORDER_SAMPLE_MIN_HITS,
     minMedianWidthPx: BORDER_MIN_MEDIAN_WIDTH_PX,
+    minMedianWidthMm: BORDER_MIN_MEDIAN_MM,
     sampleRangePx: {
       left: round2(sampleRange.left),
       right: round2(sampleRange.right),
@@ -3060,9 +3091,14 @@ module.exports = {
   MAX_DECODE_DIM,
   BORDER_SAMPLE_SPREAD_MAX_PX,
   BORDER_SAMPLE_MIN_HITS,
+  BORDER_MIN_MEDIAN_MM,
+  BORDER_THIN_MIN_MM,
+  BORDER_THIN_ANCHORED_MIN_MM,
   BORDER_MIN_MEDIAN_WIDTH_PX,
   BORDER_THIN_MIN_PX,
   BORDER_THIN_ANCHORED_MIN_PX,
+  borderPxPerMm,
+  borderMmToPx,
   BORDER_THIN_MIN_HITS,
   BORDER_THIN_MAX_SPREAD_PX,
   BORDER_BAND_UNIFORM_MAX,
