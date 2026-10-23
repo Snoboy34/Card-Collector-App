@@ -75,7 +75,7 @@ const backScan = require('./back_scan');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.21-anchored-thin';
+const ENGINE_VERSION = '2026.10.22-border-order';
 
 let sharp = null;
 try {
@@ -872,6 +872,9 @@ function findBorderWidth(getPixel, edge, cardWidth, cardHeight, getPaperPixel, s
   if (s === 1) return r;
   const div = function (v) { return v == null ? v : v / s; };
   r.width = div(r.width);
+  r.groups = (r.groups || []).map(function (g) {
+    return Object.assign({}, g, { width: div(g.width) });
+  });
   r.samples = (r.samples || []).map(div);
   r.lines = (r.lines || []).map(function (l) {
     return Object.assign({}, l, { at: Math.round(l.at / s), pos: l.pos == null ? null : round2(l.pos / s) });
@@ -929,14 +932,23 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
   const flags = [];
   const sortedHits = hits.slice().sort(function (x, y) { return x.width - y.width; });
   const minGroup = Math.ceil(EDGE_LINE_COUNT * EDGE_GROUP_MIN_FRAC);
-  let group = null;
+  const clusters = [];
   let start = 0;
   for (let i = 1; i <= sortedHits.length; i++) {
     if (i === sortedHits.length || sortedHits[i].width - sortedHits[i - 1].width > pr.groupGap) {
-      if (i - start >= minGroup) { group = sortedHits.slice(start, i); break; }
+      if (i - start >= minGroup) clusters.push(sortedHits.slice(start, i));
       start = i;
     }
   }
+  // Outermost cluster. A deeper cluster is not a border in this finder.
+  // The order below keeps this cluster when it is past 1.185 mm, or when
+  // it is the one thin side of a frame whose other three sides are past
+  // that floor. Every other under-floor side is withheld.
+  const group = clusters.length ? clusters[0] : null;
+  const groupSummaries = clusters.map(function (cluster) {
+    const w = cluster.map(function (h) { return h.width; });
+    return { width: median(w), hits: cluster.length };
+  });
 
   const base = {
     lines: lines,
@@ -950,7 +962,7 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
     flags.push(edge + ': no ' + minGroup + ' of ' + EDGE_LINE_COUNT + ' lines agree within ' +
       EDGE_GROUP_GAP_PX + 'px (' + hits.length + ' hits)');
     return Object.assign(base, {
-      width: null, samples: hits.map(function (h) { return h.width; }).sort(function (x, y) { return x - y; }),
+      width: null, groups: [], samples: hits.map(function (h) { return h.width; }).sort(function (x, y) { return x - y; }),
       bandStddev: null, baseline: null, paperBandMean: null, paperBandStddev: null, paperBaseline: null,
       groupCount: 0, hitCount: hits.length, voteLowConfidence: false
     });
@@ -995,6 +1007,7 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
   const sortNum = function (arr) { return arr.slice().sort(function (x, y) { return x - y; }); };
   return Object.assign(base, {
     width: width,
+    groups: groupSummaries,
     samples: sortNum(widths),
     bandStddev: stddevs.length ? median(sortNum(stddevs)) : null,
     baseline: baselines.length ? median(sortNum(baselines)) : null,
@@ -1004,6 +1017,55 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
     groupCount: group.length,
     hitCount: hits.length,
     voteLowConfidence: minority || profileDisagrees
+  });
+}
+
+/**
+ * Groups are outermost first, in millimetres.
+ *   1. An outermost group at or above 1.185 mm is the border. A deeper
+ *      group is not used.
+ *   2. An outermost group under 1.185 mm stays when the other three sides
+ *      are already past 1.185 mm. That anchored thin side beats a jump
+ *      inward, so an off-center card is not pushed onto an inner line.
+ *   3. Otherwise the edge is withheld. A deeper group is not a substitute.
+ *      Comparing frame profiles belongs to the outline matcher.
+ */
+function selectBorderGroup(groups, options) {
+  const list = (groups || []).filter(function (g) {
+    return g && typeof g.widthMm === 'number' && isFinite(g.widthMm);
+  });
+  if (!list.length) return null;
+  const outer = list[0];
+  if (outer.widthMm >= BORDER_MIN_MEDIAN_MM) return outer;
+  if (options && options.anchoredThin) return outer;
+  return null;
+}
+
+function applyBorderGroupOrder(scans) {
+  const names = ['left', 'right', 'top', 'bottom'];
+  const outerMm = {};
+  names.forEach(function (edge) {
+    const w = scans[edge] && scans[edge].width;
+    outerMm[edge] = w == null ? null : w / borderPxPerMm(edge);
+  });
+  names.forEach(function (edge) {
+    const scan = scans[edge];
+    if (!scan) return;
+    const groups = (scan.groups || []).map(function (g) {
+      return {
+        widthPx: g.width,
+        widthMm: g.width == null ? null : g.width / borderPxPerMm(edge)
+      };
+    });
+    const anchoredThin = names.every(function (n) {
+      if (n === edge) return true;
+      return outerMm[n] != null && outerMm[n] >= BORDER_MIN_MEDIAN_MM;
+    });
+    const chosen = selectBorderGroup(groups, { anchoredThin: anchoredThin });
+    if (!chosen) {
+      scan.width = null;
+      scan.borderWithheld = true;
+    }
   });
 }
 
@@ -1025,6 +1087,7 @@ function measurePrintCentering(getPixel, cardWidth, cardHeight, getPaperPixel, o
   const rightScan = findBorderWidth(getPixel, 'right', cardWidth, cardHeight, getPaperPixel, scale);
   const topScan = findBorderWidth(getPixel, 'top', cardWidth, cardHeight, getPaperPixel, scale);
   const bottomScan = findBorderWidth(getPixel, 'bottom', cardWidth, cardHeight, getPaperPixel, scale);
+  applyBorderGroupOrder({ left: leftScan, right: rightScan, top: topScan, bottom: bottomScan });
 
   const leftW = leftScan.width;
   const rightW = rightScan.width;
@@ -3105,6 +3168,7 @@ module.exports = {
   BORDER_THIN_ANCHORED_MIN_PX,
   borderPxPerMm,
   borderMmToPx,
+  selectBorderGroup,
   BORDER_THIN_MIN_HITS,
   BORDER_THIN_MAX_SPREAD_PX,
   BORDER_BAND_UNIFORM_MAX,
