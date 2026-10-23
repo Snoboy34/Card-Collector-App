@@ -267,7 +267,7 @@ assertHint('undetected hint', undetectedHint.hint, 'undetected');
 assertEq('spread threshold is 12px', g.BORDER_SAMPLE_SPREAD_MAX_PX, 12);
 assertEq('min hits is 5', g.BORDER_SAMPLE_MIN_HITS, 5);
 assertEq('min median width is 1.185mm', Math.round(g.BORDER_MIN_MEDIAN_MM * 1000) / 1000, 1.185);
-assertEq('thin border floor is 0.790mm', Math.round(g.BORDER_THIN_MIN_MM * 1000) / 1000, 0.790);
+assertEq('retired unanchored floor stays 0.790mm', Math.round(g.BORDER_THIN_MIN_MM * 1000) / 1000, 0.790);
 assertEq('anchored thin floor is 0.593mm', Math.round(g.BORDER_THIN_ANCHORED_MIN_MM * 1000) / 1000, 0.593);
 assertEq('short-side floor is still 12px', g.BORDER_MIN_MEDIAN_WIDTH_PX, 12);
 assertEq('short-side thin floor is still 8px', g.BORDER_THIN_MIN_PX, 8);
@@ -401,6 +401,32 @@ assert('top at 11.998px is past 1.185mm on the long side', topJustOver.accepted 
 const topJustUnder = topAt(11.99);
 assert('top at 11.990px is under 1.185mm when the thin exception does not apply', topJustUnder.accepted === false, topJustUnder.reasons);
 assert('the floor reason is in millimetres', topJustUnder.reasons.join(' ').indexOf('1.185mm') !== -1);
+
+const thinNine = [9.2, 9.3, 9.35, 9.4, 9.45, 9.5, 9.5, 9.55, 9.6, 9.62, 9.7, 9.8];
+function thinCase(widths, samples) {
+  return g.assessPrintBorderReliability(bandBox, 643, 900, {
+    detected: true,
+    widths: widths,
+    samples: samples,
+    paperBandMean: { left: 230, right: 228, top: 232, bottom: 226 }
+  }, { alignmentCrop: true, interiorGrey: { mean: 60 }, backdrop: { grey: 150 } });
+}
+const oneThinSide = thinCase(
+  { left: 9.5, right: 30, top: 30, bottom: 30 },
+  { left: thinNine, right: tightSamples.right, top: tightSamples.top, bottom: tightSamples.bottom }
+);
+assert('one 9.5px side is accepted when the other three are past 1.185mm', oneThinSide.accepted === true, oneThinSide.reasons);
+const cornerOff = thinCase(
+  { left: 9.5, right: 30, top: 9.5, bottom: 30 },
+  { left: thinNine, right: tightSamples.right, top: thinNine, bottom: tightSamples.bottom }
+);
+assert('two adjacent thin sides are rejected', cornerOff.accepted === false, cornerOff.reasons);
+assert('corner-off names both thin sides', cornerOff.reasons.join(' ').indexOf('left') !== -1 && cornerOff.reasons.join(' ').indexOf('top') !== -1);
+const oppositeThin = thinCase(
+  { left: 9.5, right: 9.5, top: 30, bottom: 30 },
+  { left: thinNine, right: thinNine, top: tightSamples.top, bottom: tightSamples.bottom }
+);
+assert('two opposite thin sides are rejected', oppositeThin.accepted === false, oppositeThin.reasons);
 
 const allThin = g.assessPrintBorderReliability(bandBox, 643, 900, {
   detected: true,

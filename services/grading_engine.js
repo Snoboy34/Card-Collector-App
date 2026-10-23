@@ -75,7 +75,7 @@ const backScan = require('./back_scan');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.21-border-mm';
+const ENGINE_VERSION = '2026.10.21-anchored-thin';
 
 let sharp = null;
 try {
@@ -136,7 +136,11 @@ const BORDER_CARD_WIDTH_MM = 63.5;
 const BORDER_CARD_HEIGHT_MM = 88.9;
 /** 12 px on the short side of the 643×900 warp. */
 const BORDER_MIN_MEDIAN_MM = 12 * BORDER_CARD_WIDTH_MM / BORDER_WARP_WIDTH;
-/** 8 px on that short side. Unanchored thin exception. */
+/**
+ * 8 px on that short side. Kept so the retired unanchored exception stays
+ * visible. It is not an acceptance path: a thin side is accepted only when
+ * the other three sides are already past 1.185 mm.
+ */
 const BORDER_THIN_MIN_MM = 8 * BORDER_CARD_WIDTH_MM / BORDER_WARP_WIDTH;
 /** 6 px on that short side. The inward guard, used when the other three sides are past the floor. */
 const BORDER_THIN_ANCHORED_MIN_MM = 6 * BORDER_CARD_WIDTH_MM / BORDER_WARP_WIDTH;
@@ -1389,15 +1393,16 @@ function bandIsDistinct(bandGrey, otherGrey, bandRgb, otherRgb) {
 }
 
 /**
- * A width under the 12px floor is still a printed border when most lines
- * agree and the band is separated from both the table and the interior
- * (by grey, or by color when the greys match). One edge of a frame whose
- * other three edges are already full borders may be as thin as the inward
- * guard. A card that is thin on every side stays rejected.
+ * A width under 1.185 mm is still a printed border only when the other
+ * three edges are already past 1.185 mm, most lines agree, and the band is
+ * separated from both the table and the interior. That one side may be as
+ * thin as the inward guard. Two thin sides, including a corner-off card,
+ * stay rejected: this gate cannot tell that cut from a sliver.
  */
 function thinBorderAllowed(hits, medianWidth, consensus, bandGrey, interiorMean, backdropGrey, bandRgb, interiorRgb, backdropRgb, anchored, edge) {
+  if (!anchored) return false;
   if (medianWidth == null || !isFinite(medianWidth)) return false;
-  const floor = borderMmToPx(anchored ? BORDER_THIN_ANCHORED_MIN_MM : BORDER_THIN_MIN_MM, edge);
+  const floor = borderMmToPx(BORDER_THIN_ANCHORED_MIN_MM, edge);
   const ceiling = borderMmToPx(BORDER_MIN_MEDIAN_MM, edge);
   if (medianWidth < floor || medianWidth >= ceiling) return false;
   if (hits < BORDER_THIN_MIN_HITS) return false;
@@ -1415,8 +1420,9 @@ function thinBorderAllowed(hits, medianWidth, consensus, bandGrey, interiorMean,
  *   - the tightest BORDER_SAMPLE_MIN_HITS-hit window on any edge exceeds
  *     BORDER_SAMPLE_SPREAD_MAX_PX (outliers are ignored)
  *   - any edge's median width is below BORDER_MIN_MEDIAN_MM on that axis,
- *     unless it is a thin real border (lines agree and the band is uniform
- *     and distinct from the backdrop and the interior)
+ *     unless that is the one thin side of a frame whose other three sides
+ *     are already past the floor (lines agree, and the band is distinct
+ *     from the backdrop and the interior)
  *   - the raw border band is not uniform (more than one edge), or is not
  *     distinct from the backdrop or the interior, when those samples exist
  *   - measurePrintCentering already failed (detected === false)
