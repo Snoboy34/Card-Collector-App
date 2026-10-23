@@ -15,24 +15,28 @@
           "confidence": 0.677,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "pickedFrom": "180-image-bottom",
           "upMm": 3.76,
           "rot180Mm": 3.527,
           "diffMm": 0.233,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-23"
         },
         "bottom": {
           "mm": 3.014,
           "confidence": 0.716,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "pickedFrom": "up-image-bottom",
           "upMm": 3.014,
           "rot180Mm": 3.232,
           "diffMm": -0.218,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-23"
         },
         "left": {
           "mm": 3.102,
@@ -4985,24 +4989,28 @@
           "confidence": 0.494,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "pickedFrom": "180-image-bottom",
           "upMm": 3.534,
           "rot180Mm": 3.345,
           "diffMm": 0.19,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-23"
         },
         "bottom": {
           "mm": 3.899,
           "confidence": 0.657,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "pickedFrom": "up-image-bottom",
           "upMm": 3.899,
           "rot180Mm": 4.091,
           "diffMm": -0.193,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-23"
         },
         "left": {
           "mm": 4.113,
@@ -9544,24 +9552,28 @@
           "confidence": 0.497,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "pickedFrom": "180-image-bottom",
           "upMm": 3.084,
           "rot180Mm": 2.909,
           "diffMm": 0.175,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-23"
         },
         "bottom": {
           "mm": 3.681,
           "confidence": 0.564,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "pickedFrom": "up-image-bottom",
           "upMm": 3.681,
           "rot180Mm": 3.832,
           "diffMm": -0.151,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-23"
         },
         "left": {
           "mm": 3.706,
@@ -14160,24 +14172,28 @@
           "confidence": 0.653,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "pickedFrom": "180-image-bottom",
           "upMm": 2.793,
           "rot180Mm": 2.66,
           "diffMm": 0.133,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-23"
         },
         "bottom": {
           "mm": 2.333,
           "confidence": 0.672,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "pickedFrom": "up-image-bottom",
           "upMm": 2.333,
           "rot180Mm": 2.54,
           "diffMm": -0.207,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-23"
         },
         "left": {
           "mm": 2.702,
@@ -19510,24 +19526,28 @@
           "confidence": 0.692,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "pickedFrom": "180-image-bottom",
           "upMm": 3.726,
           "rot180Mm": 3.41,
           "diffMm": 0.316,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-23"
         },
         "bottom": {
           "mm": 1.416,
           "confidence": 0.682,
           "withheld": false,
           "reason": null,
-          "approved": false,
+          "approved": true,
           "pickedFrom": "up-image-bottom",
           "upMm": 1.416,
           "rot180Mm": 1.707,
           "diffMm": -0.29,
-          "agree": true
+          "agree": true,
+          "approved_by": "owner",
+          "approved_on": "2026-10-23"
         },
         "left": {
           "mm": null,
