@@ -76,7 +76,7 @@ const designOrientation = require('./design_orientation').designOrientation;
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.23-design-orientation';
+const ENGINE_VERSION = '2026.10.23-quad-sides';
 
 let sharp = null;
 try {
