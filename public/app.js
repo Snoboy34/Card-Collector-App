@@ -112,27 +112,29 @@ function adjustmentStamp(assist) {
   return 'adjusted ' + (date.getMonth() + 1) + '/' + date.getDate() + ' ' + hh + ':' + mm;
 }
 
-/** Assisted centering is never presented as the engine grade. A missing side withholds the number. */
+/** The user's lines, apart from the predicted grade. A missing side withholds the number. */
 function assistedGradeLine(report) {
-  const assist = report && report.centeringAssist;
-  if (!assist || !(assist.adjustedCount > 0) || !assist.headline) return '';
-  if (assist.gradeSource && assist.gradeSource !== 'assisted') return '';
-  const face = knownFace(report && report.side) || knownFace(assist.side);
-  if (!face) return assist.headline;
-  if (typeof assist.centering === 'number') {
-    return assist.centering.toFixed(1) + ' assisted — ' + assist.headline;
+  if (window.CenteringAssist && typeof CenteringAssist.estimateText === 'function') {
+    return CenteringAssist.estimateText(report);
   }
-  return assist.headline;
+  return '';
 }
 
+/** Card lists show the engine prediction. An assisted centering is not the grade. */
 function itemHeadlineGrade(report) {
-  if (!report) return '—';
-  const assisted = assistedGradeLine(report);
-  if (assisted) return assisted;
-  if (typeof report.finalScore === 'number') {
-    return predictedGradeText(report.finalScore);
+  if (window.CenteringAssist && typeof CenteringAssist.officialGradeText === 'function') {
+    return CenteringAssist.officialGradeText(report);
   }
+  if (!report) return '—';
+  if (typeof report.finalScore === 'number') return predictedGradeText(report.finalScore);
   return report.label || '—';
+}
+
+/** The user's lines under the predicted grade. Empty when there is no assist. */
+function estimateMarkup(report) {
+  const line = assistedGradeLine(report);
+  if (!line) return '';
+  return '<div class="your-estimate">' + escapeHtml(line) + '</div>';
 }
 
 window.__judgeBooted = true;
@@ -244,7 +246,10 @@ function renderCardGrid() {
           <div class="name">${escapeHtml(item.name)}</div>
           <div class="sub muted">Added: ${new Date(item.createdAt).toLocaleString()}</div>
         </div>
-        <div class="grade">${itemHeadlineGrade(itemReport(item))}</div>
+        <div>
+          <div class="grade">${itemHeadlineGrade(itemReport(item))}</div>
+          ${estimateMarkup(itemReport(item))}
+        </div>
       </div>
     `;
     el.addEventListener('click', () => openReportModal(item));
@@ -268,6 +273,7 @@ function renderWallet() {
       <div class="meta">
         <div class="name">${escapeHtml(item.name)}</div>
         <div class="sub">${itemReport(item) ? itemHeadlineGrade(itemReport(item)) : 'Unscanned'}</div>
+        ${estimateMarkup(itemReport(item))}
       </div>
     `;
     row.addEventListener('click', () => openReportModal(item));
@@ -298,6 +304,7 @@ function renderInventory() {
       <div style="flex:1;">
         <div style="font-weight:700">${escapeHtml(item.name)}</div>
         <div class="muted">${itemReport(item) ? itemHeadlineGrade(itemReport(item)) : 'Unscanned'}</div>
+        ${estimateMarkup(itemReport(item))}
       </div>
       <div><button class="small" onclick="openReportFromId('${item.id}')">Report</button></div>
     </div>
@@ -965,10 +972,8 @@ function openReportModal(item) {
   modal.className = 'modal';
   const scoreLine = predictedGradeText(report && report.finalScore);
   const assistedLine = assistedGradeLine(report);
-  const gradeHeading = assistedLine
-    ? '<h4 style="margin:0 0 8px 0;">Prediction: <span style="color:var(--accent)">' + escapeHtml(scoreLine) + '</span></h4>' +
-      '<h4 style="margin:0 0 8px 0;">' + escapeHtml(assistedLine) + '</h4>'
-    : '<h4 style="margin:0 0 8px 0;">Prediction: <span style="color:var(--accent)">' + escapeHtml(scoreLine) + '</span></h4>';
+  const gradeHeading = '<h4 style="margin:0 0 8px 0;">Prediction: <span style="color:var(--accent)">' + escapeHtml(scoreLine) + '</span></h4>' +
+    (assistedLine ? '<p class="muted" style="margin:0 0 8px 0;">' + escapeHtml(assistedLine) + '</p>' : '');
   const canAdjust = Boolean(report && window.CenteringAssist && CenteringAssist.warpBox(report) && !report.cardNotFound);
   const showAssistNow = Boolean(canAdjust && window.CenteringAssistUI && CenteringAssistUI.needsAssist(report));
   const scanId = item.scanId || (report && report.scanId) || '';
@@ -1081,8 +1086,8 @@ function openReportModal(item) {
           ${ceiling}
           ${report ? `
             <ul>
-              <li>${assistedLine ? 'Engine centering (0–100 projection)' : 'Centering (0–100 projection)'}: ${dash(report.centering)}</li>
-              ${report.centeringAssist && report.centeringAssist.borderWidthsMm ? '<li>Assisted borders (mm): L ' + dash(report.centeringAssist.borderWidthsMm.left) + ' · R ' + dash(report.centeringAssist.borderWidthsMm.right) + ' · T ' + dash(report.centeringAssist.borderWidthsMm.top) + ' · B ' + dash(report.centeringAssist.borderWidthsMm.bottom) + '</li>' : ''}
+              <li>Centering (0–100 projection): ${dash(report.centering)}</li>
+              ${report.centeringAssist && report.centeringAssist.borderWidthsMm ? '<li>Your estimate (mm): L ' + dash(report.centeringAssist.borderWidthsMm.left) + ' · R ' + dash(report.centeringAssist.borderWidthsMm.right) + ' · T ' + dash(report.centeringAssist.borderWidthsMm.top) + ' · B ' + dash(report.centeringAssist.borderWidthsMm.bottom) + '</li>' : ''}
               <li>Corners: ${dash(report.corners)}</li>
               <li>Edges (0–100 projection): ${dash(report.edges)}</li>
               <li>Surface (0–100 projection): ${dash(report.surface)}</li>

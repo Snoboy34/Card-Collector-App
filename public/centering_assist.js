@@ -262,6 +262,40 @@
     return parts.join(' ') + ' This is outside that range. Save again to keep this line.';
   }
 
+  /**
+   * The predicted grade reads finalScore only. An assisted centering block
+   * on the same report is not an input.
+   */
+  function officialGradeText(report) {
+    if (!report) return '—';
+    var score = report.finalScore;
+    if (typeof score === 'number' && isFinite(score)) {
+      var text = (Math.round(score * 10) / 10).toFixed(1);
+      return 'Predicted PSA ' + (text.slice(-2) === '.0' ? text.slice(0, -2) : text);
+    }
+    return report.label || '—';
+  }
+
+  /** The user's lines, shown apart from the predicted grade. */
+  function estimateText(report) {
+    var assist = report && report.centeringAssist;
+    if (!assist || !(assist.adjustedCount > 0)) return '';
+    if (assist.gradeSource && assist.gradeSource !== 'assisted') return '';
+    var face = (report && (report.side === 'front' || report.side === 'back')) ||
+      assist.side === 'front' || assist.side === 'back';
+    if (!face) {
+      return assist.headline ? 'Your estimate: ' + assist.headline : '';
+    }
+    var parts = [];
+    if (typeof assist.centering === 'number' && isFinite(assist.centering)) {
+      parts.push(assist.centering.toFixed(1));
+    }
+    if (assist.leftRightRatio) parts.push(String(assist.leftRightRatio));
+    if (assist.topBottomRatio) parts.push(String(assist.topBottomRatio));
+    if (!parts.length) return assist.headline ? 'Your estimate: ' + assist.headline : '';
+    return 'Your estimate: ' + parts.join(' · ');
+  }
+
   function warpBox(report) {
     var box = report && report.centeringDiagnostics && report.centeringDiagnostics.box;
     if (!box || !isFiniteNumber(box.width) || !isFiniteNumber(box.height)) return null;
@@ -287,6 +321,8 @@
     measuredWidthsMm: measuredWidthsMm,
     implausibleSides: implausibleSides,
     plausibilityWarning: plausibilityWarning,
+    officialGradeText: officialGradeText,
+    estimateText: estimateText,
     warpBox: warpBox
   };
 

@@ -130,6 +130,30 @@ async function main() {
     noSide.assist.centeringLabel == null,
     noSide.assist && { side: noSide.assist.side, centering: noSide.assist.centering, label: noSide.assist.centeringLabel });
   assert('assisted label does not say PSA', String(built.assist.centeringLabel).indexOf('PSA') === -1);
+  const gradedWithAssist = {
+    finalScore: 8,
+    label: 'Near Mint',
+    side: 'back',
+    centeringAssist: {
+      adjustedCount: 1,
+      gradeSource: 'assisted',
+      centering: 10,
+      centeringLabel: '10.0 assisted',
+      leftRightRatio: '56.0/44.0',
+      topBottomRatio: '46.8/53.2',
+      headline: 'Centering (you adjusted 1 side)',
+      side: 'back'
+    }
+  };
+  assert('an assisted centering does not replace the predicted grade',
+    geo.officialGradeText(gradedWithAssist) === 'Predicted PSA 8' &&
+    geo.officialGradeText(gradedWithAssist).indexOf('10') === -1 &&
+    geo.officialGradeText({ centeringAssist: gradedWithAssist.centeringAssist }) === '—');
+  assert('assisted centering is your estimate and is not a PSA grade',
+    geo.estimateText(gradedWithAssist) === 'Your estimate: 10.0 · 56.0/44.0 · 46.8/53.2' &&
+    geo.estimateText(gradedWithAssist).indexOf('PSA') === -1 &&
+    geo.estimateText({ side: null, centeringAssist: { adjustedCount: 1, gradeSource: 'assisted', centering: 9, centeringLabel: '9.0 assisted', headline: 'Centering (you adjusted 1 side)' } }) === 'Your estimate: Centering (you adjusted 1 side)' &&
+    geo.estimateText({ finalScore: 8 }) === '');
 
   function blankWidths(side) {
     const report = reportWith({ side: side });
