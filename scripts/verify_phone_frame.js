@@ -9,6 +9,7 @@
 
 const phoneFrame = require('../services/phone_frame');
 const frameProfile = require('../services/frame_profile');
+const engine = require('../services/grading_engine');
 
 let failed = 0;
 function check(name, ok, detail) {
@@ -194,6 +195,45 @@ check('shared matcher accepts the same bands on four sides', !!matched, matched)
 const reading = matched ? frameProfile.outermostReading(matched.left) : null;
 check('outermost reading uses the matched left edge',
   reading && Math.abs(reading.mm - 3.1) < 0.02, reading);
+
+const pokeSize = engine.cardSizeMm('pokemon');
+const sportsSize = engine.cardSizeMm('sports');
+check('pokemon card is 63 by 88 mm', pokeSize.width === 63 && pokeSize.height === 88, pokeSize);
+check('tcg-pokemon uses the pokemon span',
+  engine.cardSizeMm('tcg-pokemon').width === 63 && engine.cardSizeMm('Pokémon').height === 88);
+check('sports card stays 63.5 by 88.9 mm',
+  sportsSize.width === 63.5 && sportsSize.height === 88.9 &&
+  engine.cardSizeMm('generic').width === 63.5 && engine.cardSizeMm('TCG').width === 63.5);
+check('the 1.185 mm floor stays on the sports warp',
+  Math.abs(engine.BORDER_MIN_MEDIAN_MM - (12 * 63.5 / 643)) < 1e-12, engine.BORDER_MIN_MEDIAN_MM);
+
+function paintSized(w, h, borders, size) {
+  const data = Buffer.alloc(w * h * 3);
+  const ppmX = w / size.width;
+  const ppmY = h / size.height;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dl = x / ppmX;
+      const dr = (w - 1 - x) / ppmX;
+      const dt = y / ppmY;
+      const db = (h - 1 - y) / ppmY;
+      const rgb = (dl < borders.left || dr < borders.right || dt < borders.top || db < borders.bottom)
+        ? [236, 236, 232] : [28, 36, 72];
+      const i = (y * w + x) * 3;
+      data[i] = rgb[0];
+      data[i + 1] = rgb[1];
+      data[i + 2] = rgb[2];
+    }
+  }
+  return { data: data, width: w, height: h, channels: 3 };
+}
+const pokeWarp = paintSized(420, 588, { left: 4.0, right: 3.4, top: 3.3, bottom: 3.7 }, pokeSize);
+const pokeMeasured = phoneFrame.measureWarp(pokeWarp, pokeSize);
+check('pokemon warp reads the ink in true mm',
+  near(pokeMeasured.left, 4.0) && near(pokeMeasured.top, 3.3), pokeMeasured);
+const pokeAsSports = phoneFrame.measureWarp(pokeWarp);
+check('sports default reads that same warp longer',
+  pokeAsSports.left != null && pokeAsSports.left > pokeMeasured.left + 0.02, pokeAsSports);
 
 if (failed) {
   console.error(failed + ' phone-frame check(s) failed');

@@ -49,12 +49,13 @@ function engineLabel(e) {
  * only supplies the quad. A missing file is reported and not filled in
  * from the old grade.
  */
-async function regradeUpload(candidate, scan, uploadsDir) {
+async function regradeUpload(candidate, scan, uploadsDir, cardType) {
   if (!candidate || !scan || !scan.item || !scan.item.imagePath) return null;
   const file = path.join(uploadsDir, path.basename(scan.item.imagePath));
   if (!fs.existsSync(file)) return { missing: file };
   const q = candidate.cmp.quadOptions(scan.item.gradingReport);
   const gradeOpts = Object.assign({}, q.opts);
+  if (cardType) gradeOpts.cardType = cardType;
   if (scan.side === 'back') gradeOpts.side = 'back';
   const report = await candidate.cmp.gradeQuietly(candidate.engine, fs.readFileSync(file), gradeOpts);
   return { result: resultFromReport(report), engine: { version: report.engineVersion || '?' } };
@@ -249,7 +250,7 @@ async function buildDeckReport(opts) {
       lines.push('  front not scanned');
       lines.push(resultLine('back', latestBack.result, backNote(latestBack)));
       lines.push('  ' + psaBackComparison(latestBack));
-      const backOnly = await regradeUpload(candidate, latestBack, uploadsDir);
+      const backOnly = await regradeUpload(candidate, latestBack, uploadsDir, card.category);
       if (backOnly && backOnly.missing) {
         row.backCandidate = { missing: backOnly.missing };
         lines.push('  candidate back  upload missing: ' + backOnly.missing);
@@ -284,7 +285,7 @@ async function buildDeckReport(opts) {
       lines.push(resultLine('back', latestBack.result, backNote(latestBack)));
       lines.push('  ' + psaBackComparison(latestBack));
     }
-    const frontCand = await regradeUpload(candidate, latest, uploadsDir);
+    const frontCand = await regradeUpload(candidate, latest, uploadsDir, card.category);
     if (frontCand && frontCand.missing) {
       row.candidate = { missing: frontCand.missing };
       lines.push('  candidate  upload missing: ' + frontCand.missing);
@@ -293,7 +294,7 @@ async function buildDeckReport(opts) {
       row.candidate = { result: frontCand.result, pass: c.pass, engine: frontCand.engine };
       lines.push(resultLine('candidate', frontCand.result, c.text + '  engine ' + (frontCand.engine.version || '?')));
     }
-    const backCand = await regradeUpload(candidate, latestBack, uploadsDir);
+    const backCand = await regradeUpload(candidate, latestBack, uploadsDir, card.category);
     if (backCand && backCand.missing) {
       row.backCandidate = { missing: backCand.missing };
       lines.push('  candidate back  upload missing: ' + backCand.missing);
