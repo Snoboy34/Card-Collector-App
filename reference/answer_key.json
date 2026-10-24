@@ -6,12 +6,15 @@
     "height": 88.9
   },
   "biasAgreeMm": 0.02,
+  "finePrintLabel": "fine-print, ±0.2 mm",
+  "finePrintToleranceMm": 0.2,
   "definition": "Border is the perpendicular distance from the card edge to the outermost points of the design-block outline on that side. A patterned margin is margin, including chrome rays and angled shapes. The outline may be a segment: the same thin-silver, thicker-black, thin-silver profile has to appear on all four sides, parallel to the edges. Two runs of that stroke on one side are one line. A gold line with black immediately inside it is the outline when that same profile is on all four sides; the contacts are the outer corners, two per side. A logo, stamp, lettering, or ray on only one side is not the outline. On the HP ENVY 6400, image-top is the hinge and the shadow side. Top and bottom are each taken from the scan in which that edge faces image-bottom (rule 2026.10.13-shadow-free-v1). Left and right stay the mean of the upright scan and the swapped 180 degree scan, and that axis is accepted only when the bias estimated from each of its two sides agrees within 0.02 mm. Bias is reported and is not subtracted. No fixed band is subtracted. A side whose clear scan is withheld stays unmeasured. tiltDeg is the outline angle against the card edge, in degrees, positive when the border widens toward the side end corner. A design-referenced name edge or an anchor (a diamond tip, a letter descender) is not a centering measurement and is not a grade. Unapproved until a person checks the overlay.",
   "cards": {
     "TD-01": {
       "sides": {
         "top": {
           "mm": 3.527,
+          "finePrint": false,
           "confidence": 0.677,
           "withheld": false,
           "reason": null,
@@ -26,6 +29,7 @@
         },
         "bottom": {
           "mm": 3.014,
+          "finePrint": false,
           "confidence": 0.716,
           "withheld": false,
           "reason": null,
@@ -40,6 +44,7 @@
         },
         "left": {
           "mm": 3.102,
+          "finePrint": false,
           "confidence": 0.672,
           "withheld": false,
           "reason": null,
@@ -54,6 +59,7 @@
         },
         "right": {
           "mm": 3.252,
+          "finePrint": false,
           "confidence": 0.813,
           "withheld": false,
           "reason": null,
@@ -4986,6 +4992,7 @@
       "sides": {
         "top": {
           "mm": 3.345,
+          "finePrint": true,
           "confidence": 0.494,
           "withheld": false,
           "reason": null,
@@ -5000,6 +5007,7 @@
         },
         "bottom": {
           "mm": 3.899,
+          "finePrint": false,
           "confidence": 0.657,
           "withheld": false,
           "reason": null,
@@ -5014,6 +5022,7 @@
         },
         "left": {
           "mm": 4.113,
+          "finePrint": true,
           "confidence": 0.43,
           "withheld": false,
           "reason": null,
@@ -5028,6 +5037,7 @@
         },
         "right": {
           "mm": 3.428,
+          "finePrint": false,
           "confidence": 0.916,
           "withheld": false,
           "reason": null,
@@ -9549,6 +9559,7 @@
       "sides": {
         "top": {
           "mm": 2.909,
+          "finePrint": true,
           "confidence": 0.497,
           "withheld": false,
           "reason": null,
@@ -9563,6 +9574,7 @@
         },
         "bottom": {
           "mm": 3.681,
+          "finePrint": true,
           "confidence": 0.564,
           "withheld": false,
           "reason": null,
@@ -9577,6 +9589,7 @@
         },
         "left": {
           "mm": 3.706,
+          "finePrint": false,
           "confidence": 0.708,
           "withheld": false,
           "reason": null,
@@ -9591,6 +9604,7 @@
         },
         "right": {
           "mm": 2.768,
+          "finePrint": true,
           "confidence": 0.514,
           "withheld": false,
           "reason": null,
@@ -13577,6 +13591,7 @@
       "sides": {
         "top": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0,
           "withheld": true,
           "reason": "unmeasured",
@@ -13589,6 +13604,7 @@
         },
         "bottom": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.203,
           "withheld": true,
           "reason": "unmeasured",
@@ -13601,6 +13617,7 @@
         },
         "left": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.269,
           "withheld": true,
           "reason": "unmeasured",
@@ -13613,6 +13630,7 @@
         },
         "right": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.438,
           "withheld": true,
           "reason": "unmeasured",
@@ -14169,6 +14187,7 @@
       "sides": {
         "top": {
           "mm": 2.66,
+          "finePrint": true,
           "confidence": 0.653,
           "withheld": false,
           "reason": null,
@@ -14183,6 +14202,7 @@
         },
         "bottom": {
           "mm": 2.333,
+          "finePrint": true,
           "confidence": 0.672,
           "withheld": false,
           "reason": null,
@@ -14197,6 +14217,7 @@
         },
         "left": {
           "mm": 2.702,
+          "finePrint": true,
           "confidence": 0.51,
           "withheld": false,
           "reason": null,
@@ -14209,6 +14230,7 @@
         },
         "right": {
           "mm": 2.32,
+          "finePrint": false,
           "confidence": 0.522,
           "withheld": false,
           "reason": null,
@@ -19523,6 +19545,7 @@
       "sides": {
         "top": {
           "mm": 3.41,
+          "finePrint": false,
           "confidence": 0.692,
           "withheld": false,
           "reason": null,
@@ -19537,6 +19560,7 @@
         },
         "bottom": {
           "mm": 1.416,
+          "finePrint": false,
           "confidence": 0.682,
           "withheld": false,
           "reason": null,
@@ -19551,6 +19575,7 @@
         },
         "left": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.638,
           "withheld": true,
           "reason": "bias-disagreement",
@@ -19563,6 +19588,7 @@
         },
         "right": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.68,
           "withheld": true,
           "reason": "bias-disagreement",
@@ -24325,6 +24351,7 @@
       "sides": {
         "top": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.34,
           "withheld": true,
           "reason": "unmeasured",
@@ -24337,6 +24364,7 @@
         },
         "bottom": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.34,
           "withheld": true,
           "reason": "unmeasured",
@@ -24349,6 +24377,7 @@
         },
         "left": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.34,
           "withheld": true,
           "reason": "unmeasured",
@@ -24361,6 +24390,7 @@
         },
         "right": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.34,
           "withheld": true,
           "reason": "unmeasured",
@@ -29090,6 +29120,7 @@
       "sides": {
         "top": {
           "mm": 3.06,
+          "finePrint": false,
           "confidence": 0.62,
           "withheld": false,
           "reason": null,
@@ -29102,6 +29133,7 @@
         },
         "bottom": {
           "mm": 3.47,
+          "finePrint": false,
           "confidence": 0.62,
           "withheld": false,
           "reason": null,
@@ -29114,6 +29146,7 @@
         },
         "left": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.62,
           "withheld": true,
           "reason": "bias-disagreement",
@@ -29126,6 +29159,7 @@
         },
         "right": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.62,
           "withheld": true,
           "reason": "bias-disagreement",
@@ -32124,6 +32158,7 @@
       "sides": {
         "top": {
           "mm": 2.58,
+          "finePrint": false,
           "confidence": 0.529,
           "withheld": false,
           "reason": null,
@@ -32136,6 +32171,7 @@
         },
         "bottom": {
           "mm": 3.46,
+          "finePrint": false,
           "confidence": 0.561,
           "withheld": false,
           "reason": null,
@@ -32148,6 +32184,7 @@
         },
         "left": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.551,
           "withheld": true,
           "reason": "bias-disagreement",
@@ -32160,6 +32197,7 @@
         },
         "right": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.579,
           "withheld": true,
           "reason": "bias-disagreement",
@@ -38625,6 +38663,7 @@
       "sides": {
         "top": {
           "mm": 3.31,
+          "finePrint": false,
           "confidence": 0.525,
           "withheld": false,
           "reason": null,
@@ -38637,6 +38676,7 @@
         },
         "bottom": {
           "mm": 2.67,
+          "finePrint": false,
           "confidence": 0.52,
           "withheld": false,
           "reason": null,
@@ -38649,6 +38689,7 @@
         },
         "left": {
           "mm": 4.155,
+          "finePrint": false,
           "confidence": 0.52,
           "withheld": false,
           "reason": null,
@@ -38661,6 +38702,7 @@
         },
         "right": {
           "mm": 4.215,
+          "finePrint": false,
           "confidence": 0.526,
           "withheld": false,
           "reason": null,
@@ -42004,6 +42046,7 @@
       "sides": {
         "top": {
           "mm": 3.21,
+          "finePrint": false,
           "confidence": 0.603,
           "withheld": false,
           "reason": null,
@@ -42016,6 +42059,7 @@
         },
         "bottom": {
           "mm": 2.8,
+          "finePrint": false,
           "confidence": 0.587,
           "withheld": false,
           "reason": null,
@@ -42028,6 +42072,7 @@
         },
         "left": {
           "mm": 4.3,
+          "finePrint": false,
           "confidence": 0.571,
           "withheld": false,
           "reason": null,
@@ -42040,6 +42085,7 @@
         },
         "right": {
           "mm": 3.36,
+          "finePrint": false,
           "confidence": 0.52,
           "withheld": false,
           "reason": null,
@@ -48499,6 +48545,7 @@
       "sides": {
         "top": {
           "mm": 2.66,
+          "finePrint": false,
           "confidence": 0.52,
           "withheld": false,
           "reason": null,
@@ -48511,6 +48558,7 @@
         },
         "bottom": {
           "mm": 3.28,
+          "finePrint": false,
           "confidence": 0.52,
           "withheld": false,
           "reason": null,
@@ -48523,6 +48571,7 @@
         },
         "left": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.532,
           "withheld": true,
           "reason": "bias-disagreement",
@@ -48535,6 +48584,7 @@
         },
         "right": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.546,
           "withheld": true,
           "reason": "bias-disagreement",
@@ -54972,6 +55022,7 @@
       "sides": {
         "top": {
           "mm": 3.44,
+          "finePrint": false,
           "confidence": 0.52,
           "withheld": false,
           "reason": null,
@@ -54984,6 +55035,7 @@
         },
         "bottom": {
           "mm": 3.06,
+          "finePrint": false,
           "confidence": 0.52,
           "withheld": false,
           "reason": null,
@@ -54996,6 +55048,7 @@
         },
         "left": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.52,
           "withheld": true,
           "reason": "bias-disagreement",
@@ -55008,6 +55061,7 @@
         },
         "right": {
           "mm": null,
+          "finePrint": false,
           "confidence": 0.52,
           "withheld": true,
           "reason": "bias-disagreement",

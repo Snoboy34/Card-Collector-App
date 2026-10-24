@@ -993,6 +993,19 @@ function openReportModal(item) {
     ? diag.box.width + '×' + diag.box.height +
       ' at (' + diag.box.left + ',' + diag.box.top + ')'
     : '—';
+  const metrics = report && report.centeringMetrics ? report.centeringMetrics : null;
+  const borderMm = metrics && metrics.borderWidthsMm ? metrics.borderWidthsMm : null;
+  const fineEdges = metrics && Array.isArray(metrics.finePrintEdges) ? metrics.finePrintEdges : [];
+  const fineLabel = (metrics && metrics.finePrintLabel) || 'fine-print, ±0.2 mm';
+  function mmBit(edge, letter) {
+    const v = borderMm ? borderMm[edge] : null;
+    const shown = v == null || !isFinite(Number(v)) ? '—' : Number(v).toFixed(3);
+    const note = fineEdges.indexOf(edge) >= 0 ? ' (' + fineLabel + ')' : '';
+    return letter + ' ' + shown + note;
+  }
+  const borderMmHtml = borderMm
+    ? '<li>Borders (mm): ' + mmBit('left', 'L') + ' · ' + mmBit('right', 'R') + ' · ' + mmBit('top', 'T') + ' · ' + mmBit('bottom', 'B') + '</li>'
+    : '';
   const w = diag && diag.printBorderWidths ? diag.printBorderWidths : {};
   const diagWidths = diag
     ? 'L ' + fmtPx(w.left) + ' · R ' + fmtPx(w.right) +
@@ -1083,6 +1096,7 @@ function openReportModal(item) {
             <ul>
               <li>${assistedLine ? 'Engine centering (0–100 projection)' : 'Centering (0–100 projection)'}: ${dash(report.centering)}</li>
               ${report.centeringAssist && report.centeringAssist.borderWidthsMm ? '<li>Assisted borders (mm): L ' + dash(report.centeringAssist.borderWidthsMm.left) + ' · R ' + dash(report.centeringAssist.borderWidthsMm.right) + ' · T ' + dash(report.centeringAssist.borderWidthsMm.top) + ' · B ' + dash(report.centeringAssist.borderWidthsMm.bottom) + '</li>' : ''}
+              ${borderMmHtml}
               <li>Corners: ${dash(report.corners)}</li>
               <li>Edges (0–100 projection): ${dash(report.edges)}</li>
               <li>Surface (0–100 projection): ${dash(report.surface)}</li>

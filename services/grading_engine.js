@@ -77,7 +77,28 @@ const phoneFrame = require('./phone_frame');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.24-profile-withhold';
+const ENGINE_VERSION = '2026.10.24-fine-print';
+const FINE_PRINT_LABEL = 'fine-print, ±0.2 mm';
+const FINE_PRINT_TOLERANCE_MM = 0.2;
+const SOLID_EDGE_TOLERANCE_MM = 0.1;
+
+function applyFinePrintLabel(report, edges) {
+  if (!report || !report.centeringMetrics) return report;
+  const names = ['left', 'right', 'top', 'bottom'];
+  const list = [];
+  (edges || []).forEach(function (edge) {
+    if (names.indexOf(edge) >= 0 && list.indexOf(edge) < 0) list.push(edge);
+  });
+  const metrics = report.centeringMetrics;
+  metrics.finePrintEdges = list;
+  metrics.finePrintLabel = FINE_PRINT_LABEL;
+  const tol = {};
+  names.forEach(function (edge) {
+    tol[edge] = list.indexOf(edge) >= 0 ? FINE_PRINT_TOLERANCE_MM : SOLID_EDGE_TOLERANCE_MM;
+  });
+  metrics.borderToleranceMm = tol;
+  return report;
+}
 
 let sharp = null;
 try {
@@ -2939,6 +2960,7 @@ async function gradeBuffer(buffer, options) {
   // not enter unscoreBack and the report stays byte-for-byte the same.
   async function deliver(report, ctx) {
     if (options.side === 'back') backScan.unscoreBack(report);
+    if (Array.isArray(options.finePrintEdges)) applyFinePrintLabel(report, options.finePrintEdges);
     return returnGrade(await attachScanDebug(report, ctx));
   }
 
@@ -3300,6 +3322,9 @@ module.exports = {
   GRADE_SCALE,
   scoreCenteringPhase,
   PSA_FRONT_CENTERING_TABLE,
+  applyFinePrintLabel,
+  FINE_PRINT_LABEL,
+  FINE_PRINT_TOLERANCE_MM,
   scoreSurfacePhase,
   scoreEdgesPhase,
   scoreCornersPhase,
