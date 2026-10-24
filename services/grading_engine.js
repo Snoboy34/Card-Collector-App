@@ -2712,18 +2712,53 @@ async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, ge
   // a step the matcher accepted on a different line. A step already within
   // the 3 px group gap stays. An outline under 1.185 mm, or past 12% of
   // the card, is not used. A vote broken up by the outline's line, when
-  // the straight-edge profile sits on that outline, is withheld.
+  // the straight-edge profile sits on that outline, is withheld. A broken
+  // vote just over the floor is withheld when its outline sat on that
+  // same line and two other sides sit on a deeper outline. A contiguous
+  // edge stays.
   if (centeringWarped && centeringWarped.data && (centeringWarped.channels || 3) >= 3) {
     const outlineMm = phoneFrame.measureWarp(centeringWarped);
     const profileMismatch = [];
     const profiles = measurement.edgeProfiles || {};
     const sampleLines = measurement.sampleLines || {};
-    ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+    const edgeNames = ['left', 'right', 'top', 'bottom'];
+    function brokenVote(edge) {
+      const lines = sampleLines[edge] || [];
+      const onVote = [];
+      lines.forEach(function (line, i) { if (line.inGroup) onVote.push(i); });
+      if (onVote.length < 2) return false;
+      return (onVote[onVote.length - 1] - onVote[0] + 1) !== onVote.length;
+    }
+    function onItsOutline(edge) {
       const step = measurement.widthsMm[edge];
       const outlined = outlineMm[edge];
-      if (step == null || outlined == null || !isFinite(step) || !isFinite(outlined)) return;
-      if (outlined < BORDER_MIN_MEDIAN_MM) return;
+      if (step == null || outlined == null || !isFinite(step) || !isFinite(outlined)) return false;
+      if (outlined < BORDER_MIN_MEDIAN_MM) return false;
       const gap = EDGE_GROUP_GAP_PX / borderPxPerMm(edge);
+      return Math.abs(outlined - step) <= gap;
+    }
+    edgeNames.forEach(function (edge) {
+      const step = measurement.widthsMm[edge];
+      const outlined = outlineMm[edge];
+      if (step == null || !isFinite(step)) return;
+      const gap = EDGE_GROUP_GAP_PX / borderPxPerMm(edge);
+      const outlineUsable = outlined != null && isFinite(outlined) && outlined >= BORDER_MIN_MEDIAN_MM;
+      // A broken vote just over the floor, on the line its own outline
+      // also sat on, is not the frame two other sides already measured.
+      // The group gap is the same 3 px test. A contiguous edge stays, as
+      // does a real off-center side farther above the floor and the
+      // anchored-thin side under it.
+      if (step >= BORDER_MIN_MEDIAN_MM && step < BORDER_MIN_MEDIAN_MM + gap &&
+          brokenVote(edge) && onItsOutline(edge)) {
+        const deeper = edgeNames.filter(function (other) {
+          return other !== edge && onItsOutline(other) && outlineMm[other] > step + gap;
+        });
+        if (deeper.length >= 2) {
+          profileMismatch.push(edge);
+          return;
+        }
+      }
+      if (!outlineUsable) return;
       if (Math.abs(outlined - step) <= gap) return;
       if (!(outlined > step)) return;
       const profPx = profiles[edge] && profiles[edge].profileWidth;
@@ -2733,12 +2768,7 @@ async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, ge
       if (Math.abs(profMm - step) <= gap) return;
       // A partial edge is one contiguous run of the outer line. A vote
       // broken up by the outline's line is a different profile.
-      const lines = sampleLines[edge] || [];
-      const onVote = [];
-      lines.forEach(function (line, i) { if (line.inGroup) onVote.push(i); });
-      if (onVote.length < 2) return;
-      const broken = (onVote[onVote.length - 1] - onVote[0] + 1) !== onVote.length;
-      if (!broken) return;
+      if (!brokenVote(edge)) return;
       profileMismatch.push(edge);
     });
     const adopted = phoneFrame.adoptOutline(

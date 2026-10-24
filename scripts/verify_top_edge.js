@@ -234,6 +234,28 @@ async function run() {
   assert('split vote still reports the measured widths',
     split.widths.left != null && split.widths.right != null, split.widths);
 
+  // A bottom just over the 12 px floor, broken up by one interior hit,
+  // while the other sides sit on a deeper outline. That is not their frame.
+  // The same bottom with a contiguous vote stays. Contrast stays low so the
+  // cut refiner does not swallow the band.
+  function lowBorder(x, y, b, inBorder) {
+    return inBorder ? [230, 230, 228] : [180, 170, 160];
+  }
+  const shallow = await gradeCard({ borders: { bottom: 13 }, paint: lowBorder });
+  assert('contiguous bottom just over the floor stays',
+    near(shallow.widths.bottom, 13, 1.5) && near(shallow.widths.top, 30, 1), shallow.widths);
+  const brokenShallow = await gradeCard({
+    borders: { bottom: 13 },
+    paint: function (x, y, b, inBorder) {
+      if (x >= 300 && x < 340 && y >= H - b.bottom + 4) return DARK;
+      return lowBorder(x, y, b, inBorder);
+    }
+  });
+  const brokenMm = brokenShallow.report.centeringMetrics && brokenShallow.report.centeringMetrics.borderWidthsMm;
+  assert('broken bottom just over the floor is withheld',
+    brokenMm && brokenMm.bottom == null && brokenMm.top != null && brokenMm.left != null,
+    { widths: brokenShallow.widths, mm: brokenMm });
+
   if (failures) {
     console.error(failures + ' top-edge check(s) failed.');
     process.exit(1);

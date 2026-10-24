@@ -14,8 +14,9 @@
  * step stays, so a pale strip is not pushed inward. An anchored-thin step
  * under 1.185 mm is replaced when its vote is a minority and the outline
  * is past the floor. A vote broken up along the edge is withheld when the
- * straight-edge profile sits on the outline. A contiguous partial edge
- * stays. An outline under 1.185 mm, or
+ * straight-edge profile sits on the outline. A broken vote just over
+ * the floor is withheld when two other sides sit on a deeper outline.
+ * A contiguous partial edge stays. An outline under 1.185 mm, or
  * past 12% of the card, is not published.
  */
 'use strict';
