@@ -24,8 +24,18 @@
 const designOutline = require('./design_outline');
 const cardOutline = require('./card_outline');
 
+// Sports card, 2.5 × 3.5 in. The raster is sampled on this grid so a noisy
+// edge stays on the same pixel. measureWarp scales the published depth
+// onto the named card: the warp is the whole card, so a fraction of the
+// raster is that fraction of the real span. A Pokémon card is 63 × 88 mm.
 const CARD_W_MM = 63.5;
 const CARD_H_MM = 88.9;
+
+function cardSpan(size) {
+  const width = size && isFinite(size.width) && size.width > 0 ? size.width : CARD_W_MM;
+  const height = size && isFinite(size.height) && size.height > 0 ? size.height : CARD_H_MM;
+  return { width: width, height: height };
+}
 const DEPTH_STEP_MM = 0.02;
 const STATION_STEP_MM = 0.4;
 const SEARCH_TO_MM = 14;
@@ -53,29 +63,30 @@ function sampleRgb(data, w, h, channels, x, y) {
   return out;
 }
 
-function sideGeometry(name, w, h) {
-  const ppmX = w / CARD_W_MM;
-  const ppmY = h / CARD_H_MM;
+function sideGeometry(name, w, h, size) {
+  const span = cardSpan(size);
+  const ppmX = w / span.width;
+  const ppmY = h / span.height;
   if (name === 'left') {
     return {
-      lengthMm: CARD_H_MM, ppmAlong: ppmY, ppmDepth: ppmX, nx: 1, ny: 0,
+      lengthMm: span.height, ppmAlong: ppmY, ppmDepth: ppmX, nx: 1, ny: 0,
       at: function (alongPx) { return { x: 0, y: alongPx }; }
     };
   }
   if (name === 'right') {
     return {
-      lengthMm: CARD_H_MM, ppmAlong: ppmY, ppmDepth: ppmX, nx: -1, ny: 0,
+      lengthMm: span.height, ppmAlong: ppmY, ppmDepth: ppmX, nx: -1, ny: 0,
       at: function (alongPx) { return { x: w - 1, y: alongPx }; }
     };
   }
   if (name === 'top') {
     return {
-      lengthMm: CARD_W_MM, ppmAlong: ppmX, ppmDepth: ppmY, nx: 0, ny: 1,
+      lengthMm: span.width, ppmAlong: ppmX, ppmDepth: ppmY, nx: 0, ny: 1,
       at: function (alongPx) { return { x: alongPx, y: 0 }; }
     };
   }
   return {
-    lengthMm: CARD_W_MM, ppmAlong: ppmX, ppmDepth: ppmY, nx: 0, ny: -1,
+    lengthMm: span.width, ppmAlong: ppmX, ppmDepth: ppmY, nx: 0, ny: -1,
     at: function (alongPx) { return { x: alongPx, y: h - 1 }; }
   };
 }
@@ -117,8 +128,8 @@ function stationFromProfile(profile, origin, g, alongMm, t) {
   };
 }
 
-function sampleSide(data, w, h, channels, name) {
-  const g = sideGeometry(name, w, h);
+function sampleSide(data, w, h, channels, name, size) {
+  const g = sideGeometry(name, w, h, size);
   const lengthPx = g.lengthMm * g.ppmAlong;
   const stepPx = STATION_STEP_MM * g.ppmAlong;
   const depthSteps = Math.round(SEARCH_TO_MM / DEPTH_STEP_MM);
@@ -164,14 +175,25 @@ function sampleSide(data, w, h, channels, name) {
  * Millimetres from the card cut to the shared outline, or null when that
  * side is withheld. The matcher has already replaced a matched frame.
  */
-function measureWarp(warp) {
+function depthScale(name, span) {
+  if (name === 'left' || name === 'right') return span.width / CARD_W_MM;
+  return span.height / CARD_H_MM;
+}
+
+function scaleDepth(name, mm, span) {
+  if (mm == null || !isFinite(mm)) return mm;
+  return mm * depthScale(name, span);
+}
+
+function measureWarp(warp, size) {
   const out = { left: null, right: null, top: null, bottom: null, matched: false };
   if (!warp || !warp.data || !warp.width || !warp.height) return out;
   const channels = warp.channels || 3;
   if (channels < 3) return out;
+  const span = cardSpan(size);
   const sides = {};
   EDGES.forEach(function (name) {
-    sides[name] = sampleSide(warp.data, warp.width, warp.height, channels, name);
+    sides[name] = sampleSide(warp.data, warp.width, warp.height, channels, name, null);
   });
   const before = {};
   EDGES.forEach(function (name) { before[name] = sides[name].mm; });
@@ -180,9 +202,11 @@ function measureWarp(warp) {
   out.frameMatches = {};
   EDGES.forEach(function (name) {
     const side = sides[name];
-    out.designMm[name] = before[name] == null ? null : Math.round(before[name] * 1000) / 1000;
+    const design = scaleDepth(name, before[name], span);
+    const published = scaleDepth(name, side && side.mm, span);
+    out.designMm[name] = design == null ? null : Math.round(design * 1000) / 1000;
     out.frameMatches[name] = !!(side && side.frameMatches);
-    out[name] = side && side.withheld !== true && side.mm != null && isFinite(side.mm) ? side.mm : null;
+    out[name] = side && side.withheld !== true && published != null && isFinite(published) ? published : null;
     if (side && side.frameMatches && before[name] !== side.mm) out.matched = true;
   });
   return out;

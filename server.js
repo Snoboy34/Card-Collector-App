@@ -484,7 +484,8 @@ app.get('/api/stats', (req, res) => {
  *   cardQuad  optional JSON {tl,tr,br,bl} card corners in image pixels
  *             (quadImageWidth / quadImageHeight / quadConfidence alongside)
  *   name      ignored for identity (title is Unidentified until family match)
- *   cardType  optional SPORTS | TCG (reserved for Phase 3 corner templates)
+ *   cardType  optional. `pokemon` or `tcg-pokemon` measures a 63 × 88 mm
+ *             card. SPORTS, TCG, and any other value stay 63.5 × 88.9 mm.
  *   debug     optional "true" to attach metrology dumps
  *   captureMetadata optional JSON {schema, app, device, camera, capture} from
  *             the native app; stored as item.captureMetadata (never graded).

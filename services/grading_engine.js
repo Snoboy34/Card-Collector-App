@@ -77,7 +77,7 @@ const phoneFrame = require('./phone_frame');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.24-profile-withhold';
+const ENGINE_VERSION = '2026.10.24-card-size';
 
 let sharp = null;
 try {
@@ -134,6 +134,9 @@ const BORDER_SAMPLE_MIN_HITS = 5;
 /** Warp the phone widths are reported in. Floors convert from millimetres on this warp. */
 const BORDER_WARP_WIDTH = 643;
 const BORDER_WARP_HEIGHT = 900;
+// Floor and group gap stay on this sports span. A Pokémon card publishes
+// its border in 63 × 88 mm; that size does not move the 1.185 mm floor
+// or the 0.296 mm gap.
 const BORDER_CARD_WIDTH_MM = 63.5;
 const BORDER_CARD_HEIGHT_MM = 88.9;
 /** 12 px on the short side of the 643×900 warp. */
@@ -2353,9 +2356,21 @@ function applyDetectorTrust(report) {
  *  grading raster without holding a 12–48 MP RGB buffer in memory. */
 const MAX_DECODE_DIM = 2400;
 
-// Card size (ISO/IEC 7810 ID-1 trading card) for physical units.
+// Sports cards are 2.5 × 3.5 in. A Pokémon card is 63 × 88 mm; the TD-03
+// flatbed span is 63.009 × 88.105. cardSizeMm picks the span for widthsMm
+// and the phone outline. The floor above stays on the sports warp.
 const CARD_WIDTH_MM = 63.5;
 const CARD_HEIGHT_MM = 88.9;
+const CARD_TYPE_MM = {
+  sports: { width: 63.5, height: 88.9, type: 'sports' },
+  pokemon: { width: 63, height: 88, type: 'pokemon' }
+};
+
+function cardSizeMm(cardType) {
+  const t = String(cardType == null ? '' : cardType).trim().toLowerCase();
+  if (t === 'pokemon' || t === 'pokémon' || t === 'tcg-pokemon') return CARD_TYPE_MM.pokemon;
+  return CARD_TYPE_MM.sports;
+}
 // Centering is measured on a warp at the card's own decoded resolution
 // (≈20+ px/mm on a 12 MP neon crop) instead of the 643×900 grading raster
 // (≈10.1 px/mm). Other detectors keep 643×900: their thresholds are tuned there.
@@ -2655,12 +2670,16 @@ async function locateCard(buffer, options) {
   const centeringWarped = centerH === cardQuad.WARP_HEIGHT
     ? warped
     : cardQuad.warpPerspective(decoded, q, centerW, centerH);
+  const size = cardSizeMm(opts.cardType);
   detection.centeringWarp = {
     mode: nativeRes ? 'native' : 'standard',
     width: centerW,
     height: centerH,
-    pxPerMm: round2(centerH / CARD_HEIGHT_MM),
-    scale: Math.round(centerScale * 10000) / 10000
+    pxPerMm: round2(centerH / size.height),
+    scale: Math.round(centerScale * 10000) / 10000,
+    cardWidthMm: size.width,
+    cardHeightMm: size.height,
+    cardType: size.type
   };
   return {
     found: true,
@@ -2697,8 +2716,12 @@ async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, ge
     const getPaperHi = function (x, y) { return (x < 0 || y < 0 || x >= w || y >= h) ? 0 : pp[y * w + x]; };
     measurement = measurePrintCentering(getHi, w, h, getPaperHi, { scale: scale });
   }
-  const pxPerMmX = box643.width / CARD_WIDTH_MM;
-  const pxPerMmY = box643.height / CARD_HEIGHT_MM;
+  const size = {
+    width: warpInfo && isFinite(warpInfo.cardWidthMm) ? warpInfo.cardWidthMm : CARD_WIDTH_MM,
+    height: warpInfo && isFinite(warpInfo.cardHeightMm) ? warpInfo.cardHeightMm : CARD_HEIGHT_MM
+  };
+  const pxPerMmX = box643.width / size.width;
+  const pxPerMmY = box643.height / size.height;
   const wd = measurement.widths || {};
   const mm = function (v, k) { return v == null ? null : Math.round((v / k) * 1000) / 1000; };
   measurement.widthsMm = {
@@ -2717,7 +2740,7 @@ async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, ge
   // same line and two other sides sit on a deeper outline. A contiguous
   // edge stays.
   if (centeringWarped && centeringWarped.data && (centeringWarped.channels || 3) >= 3) {
-    const outlineMm = phoneFrame.measureWarp(centeringWarped);
+    const outlineMm = phoneFrame.measureWarp(centeringWarped, size);
     const profileMismatch = [];
     const profiles = measurement.edgeProfiles || {};
     const sampleLines = measurement.sampleLines || {};
@@ -2763,7 +2786,8 @@ async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, ge
       if (!(outlined > step)) return;
       const profPx = profiles[edge] && profiles[edge].profileWidth;
       if (profPx == null || !isFinite(profPx)) return;
-      const profMm = profPx / borderPxPerMm(edge);
+      const profDenom = (edge === 'left' || edge === 'right') ? pxPerMmX : pxPerMmY;
+      const profMm = profPx / profDenom;
       if (Math.abs(profMm - outlined) > gap) return;
       if (Math.abs(profMm - step) <= gap) return;
       // A partial edge is one contiguous run of the outer line. A vote
@@ -2781,7 +2805,7 @@ async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, ge
         frameMatches: outlineMm.frameMatches || {},
         profileMismatch: profileMismatch,
         maxMmFor: function (edge) {
-          const side = (edge === 'left' || edge === 'right') ? BORDER_CARD_WIDTH_MM : BORDER_CARD_HEIGHT_MM;
+          const side = (edge === 'left' || edge === 'right') ? size.width : size.height;
           return EDGE_MAX_DEPTH_FRAC * side;
         }
       }
@@ -2870,7 +2894,9 @@ function cardNotFoundReport(detection) {
  * Options:
  *   maxDim    {number}  longest processed edge in pixels (default 900)
  *   debug     {boolean} attach raw metrology dumps
- *   cardType  {string}  reserved for sports-vs-TCG corner templates (Phase 3)
+ *   cardType  {string}  `pokemon` or `tcg-pokemon` publishes borders on a
+ *                      63 × 88 mm card. Sports and any other type stay
+ *                      63.5 × 88.9 mm. Corner templates are still unused.
  *
  * Return shape (always JSON-serializable):
  *   Legacy 0–100 fields (wallet_engine.js / older UI):
@@ -3295,6 +3321,7 @@ async function gradeBuffer(buffer, options) {
 
 module.exports = {
   ENGINE_VERSION,
+  cardSizeMm,
   gradeBuffer,
   evaluateMultiPhaseCondition,
   GRADE_SCALE,
