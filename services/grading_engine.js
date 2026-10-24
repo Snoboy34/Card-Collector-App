@@ -72,10 +72,12 @@ const scanLevel = require('../public/scan_level');
 const cardQuad = require('./card_quad');
 const scanDebug = require('./scan_debug');
 const backScan = require('./back_scan');
+const designOrientation = require('./design_orientation').designOrientation;
+const phoneFrame = require('./phone_frame');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.22-border-order';
+const ENGINE_VERSION = '2026.10.24-profile-withhold';
 
 let sharp = null;
 try {
@@ -2705,6 +2707,125 @@ async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, ge
     top: mm(wd.top, pxPerMmY),
     bottom: mm(wd.bottom, pxPerMmY)
   };
+  // The shared outline is the design block, or the matched frame when the
+  // four sides carry the same bands. It fills a withheld edge and replaces
+  // a step the matcher accepted on a different line. A step already within
+  // the 3 px group gap stays. An outline under 1.185 mm, or past 12% of
+  // the card, is not used. A vote broken up by the outline's line, when
+  // the straight-edge profile sits on that outline, is withheld. A broken
+  // vote just over the floor is withheld when its outline sat on that
+  // same line and two other sides sit on a deeper outline. A contiguous
+  // edge stays.
+  if (centeringWarped && centeringWarped.data && (centeringWarped.channels || 3) >= 3) {
+    const outlineMm = phoneFrame.measureWarp(centeringWarped);
+    const profileMismatch = [];
+    const profiles = measurement.edgeProfiles || {};
+    const sampleLines = measurement.sampleLines || {};
+    const edgeNames = ['left', 'right', 'top', 'bottom'];
+    function brokenVote(edge) {
+      const lines = sampleLines[edge] || [];
+      const onVote = [];
+      lines.forEach(function (line, i) { if (line.inGroup) onVote.push(i); });
+      if (onVote.length < 2) return false;
+      return (onVote[onVote.length - 1] - onVote[0] + 1) !== onVote.length;
+    }
+    function onItsOutline(edge) {
+      const step = measurement.widthsMm[edge];
+      const outlined = outlineMm[edge];
+      if (step == null || outlined == null || !isFinite(step) || !isFinite(outlined)) return false;
+      if (outlined < BORDER_MIN_MEDIAN_MM) return false;
+      const gap = EDGE_GROUP_GAP_PX / borderPxPerMm(edge);
+      return Math.abs(outlined - step) <= gap;
+    }
+    edgeNames.forEach(function (edge) {
+      const step = measurement.widthsMm[edge];
+      const outlined = outlineMm[edge];
+      if (step == null || !isFinite(step)) return;
+      const gap = EDGE_GROUP_GAP_PX / borderPxPerMm(edge);
+      const outlineUsable = outlined != null && isFinite(outlined) && outlined >= BORDER_MIN_MEDIAN_MM;
+      // A broken vote just over the floor, on the line its own outline
+      // also sat on, is not the frame two other sides already measured.
+      // The group gap is the same 3 px test. A contiguous edge stays, as
+      // does a real off-center side farther above the floor and the
+      // anchored-thin side under it.
+      if (step >= BORDER_MIN_MEDIAN_MM && step < BORDER_MIN_MEDIAN_MM + gap &&
+          brokenVote(edge) && onItsOutline(edge)) {
+        const deeper = edgeNames.filter(function (other) {
+          return other !== edge && onItsOutline(other) && outlineMm[other] > step + gap;
+        });
+        if (deeper.length >= 2) {
+          profileMismatch.push(edge);
+          return;
+        }
+      }
+      if (!outlineUsable) return;
+      if (Math.abs(outlined - step) <= gap) return;
+      if (!(outlined > step)) return;
+      const profPx = profiles[edge] && profiles[edge].profileWidth;
+      if (profPx == null || !isFinite(profPx)) return;
+      const profMm = profPx / borderPxPerMm(edge);
+      if (Math.abs(profMm - outlined) > gap) return;
+      if (Math.abs(profMm - step) <= gap) return;
+      // A partial edge is one contiguous run of the outer line. A vote
+      // broken up by the outline's line is a different profile.
+      if (!brokenVote(edge)) return;
+      profileMismatch.push(edge);
+    });
+    const adopted = phoneFrame.adoptOutline(
+      measurement.widthsMm,
+      outlineMm,
+      BORDER_MIN_MEDIAN_MM,
+      function (edge) { return EDGE_GROUP_GAP_PX / borderPxPerMm(edge); },
+      {
+        lowConfidence: measurement.voteLowConfidenceEdges || [],
+        frameMatches: outlineMm.frameMatches || {},
+        profileMismatch: profileMismatch,
+        maxMmFor: function (edge) {
+          const side = (edge === 'left' || edge === 'right') ? BORDER_CARD_WIDTH_MM : BORDER_CARD_HEIGHT_MM;
+          return EDGE_MAX_DEPTH_FRAC * side;
+        }
+      }
+    );
+    measurement.frameOutlineMm = {
+      left: outlineMm.left == null ? null : Math.round(outlineMm.left * 1000) / 1000,
+      right: outlineMm.right == null ? null : Math.round(outlineMm.right * 1000) / 1000,
+      top: outlineMm.top == null ? null : Math.round(outlineMm.top * 1000) / 1000,
+      bottom: outlineMm.bottom == null ? null : Math.round(outlineMm.bottom * 1000) / 1000
+    };
+    measurement.frameMatched = outlineMm.matched === true;
+    const changed = adopted.replaced.length + adopted.withheld.length > 0;
+    if (changed) {
+      adopted.replaced.forEach(function (edge) {
+        measurement.widthsMm[edge] = adopted.mm[edge];
+        measurement.widths[edge] = adopted.mm[edge] * borderPxPerMm(edge);
+      });
+      adopted.withheld.forEach(function (edge) {
+        measurement.widthsMm[edge] = null;
+        measurement.widths[edge] = null;
+      });
+      if (measurement.voteLowConfidenceEdges) {
+        measurement.voteLowConfidenceEdges = measurement.voteLowConfidenceEdges.filter(function (edge) {
+          return adopted.replaced.indexOf(edge) < 0 && adopted.withheld.indexOf(edge) < 0;
+        });
+      }
+      const widths = measurement.widths;
+      const ready = ['left', 'right', 'top', 'bottom'].every(function (edge) {
+        return widths[edge] != null && isFinite(widths[edge]);
+      });
+      measurement.detected = ready;
+      if (!ready) {
+        measurement.leftRightRatio = null;
+        measurement.topBottomRatio = null;
+      } else {
+        const totalH = widths.left + widths.right;
+        const totalV = widths.top + widths.bottom;
+        const leftPct = totalH > 0 ? (widths.left / totalH) * 100 : 50;
+        const topPct = totalV > 0 ? (widths.top / totalV) * 100 : 50;
+        measurement.leftRightRatio = { left: leftPct, right: 100 - leftPct };
+        measurement.topBottomRatio = { top: topPct, bottom: 100 - topPct };
+      }
+    }
+  }
   measurement.centeringWarp = warpInfo || null;
   return measurement;
 }
@@ -2838,6 +2959,38 @@ async function gradeBuffer(buffer, options) {
     }
     const cardDetection = located.detection;
     const shouldRotate = cardDetection.rotatedToPortrait;
+    // Name edges from the printed design. A 180-degree photo is rotated
+    // before any edge is called top, bottom, left, or right. A design that
+    // votes both ways withholds the four widths. No mixed-case line (an
+    // all-caps nameplate) leaves the portrait warp as it is.
+    if (options.side !== 'back') {
+      const orientWarp = located.warped;
+      const orientGrey = await sharp(orientWarp.data, {
+        raw: { width: orientWarp.width, height: orientWarp.height, channels: orientWarp.channels }
+      }).greyscale().raw().toBuffer();
+      const orient = designOrientation(orientGrey, orientWarp.width, orientWarp.height);
+      cardDetection.designOrientation = orient.orientation;
+      cardDetection.designOrientationVotes = { up: orient.up, down: orient.down };
+      if (orient.orientation === '180') {
+        const q = located.quad;
+        const flipped = {
+          tl: q.br.slice(),
+          tr: q.bl.slice(),
+          br: q.tl.slice(),
+          bl: q.tr.slice(),
+          rotatedToPortrait: q.rotatedToPortrait
+        };
+        located.quad = flipped;
+        const cw = cardDetection.centeringWarp.width;
+        const ch = cardDetection.centeringWarp.height;
+        located.warped = cardQuad.warpPerspective(
+          located.decoded, flipped, cardQuad.WARP_WIDTH, cardQuad.WARP_HEIGHT
+        );
+        located.centeringWarped = (cw === located.warped.width && ch === located.warped.height)
+          ? located.warped
+          : cardQuad.warpPerspective(located.decoded, flipped, cw, ch);
+      }
+    }
 
     // ----- Module A: anti-distortion pre-processing on the warped card -----
     // Greyscale, normalize, and a 1px blur to strip smartphone computational
@@ -2897,6 +3050,16 @@ async function gradeBuffer(buffer, options) {
     const centeringMeasurement = await measureCenteringOnWarp(
       located.centeringWarped, cardDetection.centeringWarp, getPixel, getPaperPixel, centeringBox
     );
+    if (cardDetection.designOrientation === 'conflict') {
+      ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+        centeringMeasurement.widths[edge] = null;
+        if (centeringMeasurement.widthsMm) centeringMeasurement.widthsMm[edge] = null;
+      });
+      centeringMeasurement.detected = false;
+      centeringMeasurement.leftRightRatio = null;
+      centeringMeasurement.topBottomRatio = null;
+      centeringMeasurement.orientationWithheld = true;
+    }
     const lowConfidenceEdges = applyCutConfidence(centeringMeasurement, cardDetection);
     const interiorGrey = measureInteriorGrey(
       getPaperPixel, centeringBox.width, centeringBox.height, centeringMeasurement.widths
@@ -2962,9 +3125,11 @@ async function gradeBuffer(buffer, options) {
     if (!centeringMeasurement.detected || !borderReliability.accepted) {
       const surfacePhase = scoreSurfacePhase(surface);
       const edgeScore = scoreEdgesPhase(edgesWhiteningCount);
-      const incompleteReason = !centeringMeasurement.detected
-        ? 'centering undetectable — no printed border found'
-        : 'centering undetectable — print-border samples do not agree on a printed frame';
+      const incompleteReason = centeringMeasurement.orientationWithheld
+        ? 'centering withheld — printed design does not agree on which edge is the top'
+        : !centeringMeasurement.detected
+          ? 'centering undetectable — no printed border found'
+          : 'centering undetectable — print-border samples do not agree on a printed frame';
       const report = {
         centering: null,
         corners: null,

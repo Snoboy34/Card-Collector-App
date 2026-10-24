@@ -18,6 +18,9 @@ const MIN_AREA_FRAC = 0.15;
 const MAX_AREA_FRAC = 0.95;
 const MIN_SIDE_PX = 200;
 const BOUNDS_SLOP_PX = 2;
+// Opposite sides of a real card quad match. The worst saved scan is 3% apart.
+// A quad whose opposite sides differ by more than this has a corner off the card.
+const OPPOSITE_SIDE_RATIO_MAX = 1.15;
 
 function toPoint(value) {
   if (Array.isArray(value) && value.length >= 2) {
@@ -167,6 +170,17 @@ function validateQuad(q, imageWidth, imageHeight) {
   const minSidePx = Math.min(top, bottom, left, right);
   if (minSidePx < MIN_SIDE_PX) {
     reasons.push('shortest quad side ' + round2(minSidePx) + 'px is below ' + MIN_SIDE_PX + 'px');
+  }
+  function sideRatio(a, b) {
+    const hi = Math.max(a, b);
+    const lo = Math.min(a, b);
+    return lo > 0 ? hi / lo : Infinity;
+  }
+  const widthRatio = sideRatio(top, bottom);
+  const heightRatio = sideRatio(left, right);
+  if (widthRatio > OPPOSITE_SIDE_RATIO_MAX || heightRatio > OPPOSITE_SIDE_RATIO_MAX) {
+    reasons.push('opposite sides differ by ' + round2(Math.max(widthRatio, heightRatio)) +
+      '× (need ≤ ' + OPPOSITE_SIDE_RATIO_MAX + '×)');
   }
 
   return {
@@ -356,10 +370,14 @@ function refineQuadToCut(src, quad, outW, outH) {
       runnerUpRatio: runner >= 0 && bestStep > 0 ? Math.round((runnerStep / bestStep) * 1000) / 1000 : 0,
       runnerUpOffsetPx: runner >= 0 ? runner - best : null
     };
-    // Sub-pixel: locate the half-level crossing between the background and
-    // card plateaus around the strongest step, instead of snapping to a
-    // whole warp pixel. Returned value is the first card-side position
-    // (crossing + 0.5), so an exact pixel-boundary edge gives an integer.
+    // Sub-pixel half-level between the background and the card face, instead
+    // of a whole warp pixel. On a sharp edge this is the outer contact. On a
+    // soft edge the half-level sits inside the ramp, so a border measured
+    // from it is short by the outer part of that ramp. The outer contact is
+    // not used: on a real photo it also lengthens edges whose half-level
+    // already matches the key. Nothing is added in millimetres. Returned
+    // value is the first card-side position (crossing + 0.5), so an exact
+    // pixel-boundary edge gives an integer.
     const lo = Math.max(0, best - 3);
     const hi = Math.min(length - 1, best + 4);
     let bg = 0;
@@ -420,6 +438,7 @@ module.exports = {
   WARP_HEIGHT,
   CARD_ASPECT,
   ASPECT_TOLERANCE,
+  OPPOSITE_SIDE_RATIO_MAX,
   MIN_AREA_FRAC,
   MAX_AREA_FRAC,
   MIN_SIDE_PX,
