@@ -1,5 +1,9 @@
 node_modules/
 uploads/
+scans/
+data/regrades/
+data/centering_examples.jsonl
+data/assist_settings.json
 .env
 .DS_Store
 .vscode/
