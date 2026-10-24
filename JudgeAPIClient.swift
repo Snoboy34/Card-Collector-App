@@ -584,13 +584,10 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
                 lines.append(String(format: "upload %.0f×%.0f · graded on %.0f×%.0f warp", uw, uh, ww, wh))
             }
         }
-        if let headline = centeringAssist?.headline {
-            let knownSide = ScanLedger.knownFace(centeringAssist?.side) != nil
-            if knownSide, let label = centeringAssist?.centeringLabel, !label.isEmpty {
-                lines.append("\(label) — \(headline)")
-            } else {
-                lines.append(headline)
-            }
+        if let estimate = centeringAssist?.estimateLine {
+            lines.append(estimate)
+        } else if let headline = centeringAssist?.headline, !headline.isEmpty {
+            lines.append("Your estimate: \(headline)")
         }
         if lines.isEmpty { lines.append(raw) }
 
@@ -660,15 +657,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         } else {
             setName = ScanLedger.absent
         }
-        let assistedRatios = report.centeringAssist.flatMap { snap -> (lr: String, tb: String)? in
-            guard snap.adjustedCount > 0 else { return nil }
-            return CenteringAssist.assistedRatioText(widths: snap.placedWidthsMM())
-        }
-        let lr = assistedRatios?.lr
-            ?? report.leftRightRatio.map { String(format: "%.1f%%/%.1f%%", $0.left, $0.right) }
+        let lr = report.leftRightRatio.map { String(format: "%.1f%%/%.1f%%", $0.left, $0.right) }
             ?? ScanLedger.absent
-        let tb = assistedRatios?.tb
-            ?? report.topBottomRatio.map { String(format: "%.1f%%/%.1f%%", $0.top, $0.bottom) }
+        let tb = report.topBottomRatio.map { String(format: "%.1f%%/%.1f%%", $0.top, $0.bottom) }
             ?? ScanLedger.absent
         return ScanLedger(
             scanId: scanId,
@@ -814,7 +805,10 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         expect(fromServer.committedAt != earlierPersist, "the earlier server clock is not the scan time")
         expect(fromServer.deckId == "TD-06" && fromServer.side == "back", "the parsed record keeps the server deck and side")
         expect(fromServer.centeringAssist?.centeringLabel == "10.0 assisted", "the parsed record keeps the server label")
-        expect(fromServer.displayLR == "60.0%/40.0% assisted", "the parsed record keeps the server ratios")
+        expect(fromServer.displayGrade == ScanLedger.absent, "the parsed assisted label is not the card grade")
+        expect(fromServer.displayLR == ScanLedger.absent, "the parsed assisted ratio is not the card's L/R")
+        expect(fromServer.displayEstimate?.contains("Your estimate") == true && fromServer.displayEstimate?.contains("10.0") == true, "the parsed record keeps the estimate")
+        expect(fromServer.displayEstimate?.contains("PSA") != true, "your estimate is not a PSA grade")
         expect(fromServer.centeringAssist?.adjustedAt == "2026-10-13T14:54:36.000Z", "the adjustment clock stays off the scan clock")
         expect(fromServer.centeringAssist?.adjustmentLine?.hasPrefix("adjusted ") == true, "the adjustment is its own line")
         let metadataOnly = """

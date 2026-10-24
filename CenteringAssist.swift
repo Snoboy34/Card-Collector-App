@@ -177,6 +177,31 @@ public enum CenteringAssist {
             return headline
         }
 
+        /// Shown apart from the predicted grade. A missing side keeps the headline and withholds the number.
+        public var estimateLine: String? {
+            guard adjustedCount > 0 else { return nil }
+            let known = side == "front" || side == "back"
+            if !known {
+                guard let headline, !headline.isEmpty else { return nil }
+                return "Your estimate: \(headline)"
+            }
+            var parts: [String] = []
+            if let centeringLabel, !centeringLabel.isEmpty {
+                parts.append(centeringLabel.replacingOccurrences(of: " assisted", with: ""))
+            }
+            if let lr = assistedLRText {
+                parts.append(lr.replacingOccurrences(of: " assisted", with: ""))
+            }
+            if let tb = assistedTBText {
+                parts.append(tb.replacingOccurrences(of: " assisted", with: ""))
+            }
+            if parts.isEmpty {
+                guard let headline, !headline.isEmpty else { return nil }
+                return "Your estimate: \(headline)"
+            }
+            return "Your estimate: " + parts.joined(separator: " · ")
+        }
+
         /// "adjusted 10/13 09:54". Empty when this save has no adjustment clock.
         public var adjustmentLine: String? {
             guard let adjustedAt, !adjustedAt.isEmpty, let date = CenteringAssist.parseISO(adjustedAt) else { return nil }
@@ -803,10 +828,33 @@ public enum CenteringAssist {
         let vaultCard = SavedCard(ledger: vaultLedger)
         expect(vaultCard.name == "Unidentified")
         expect(vaultCard.vaultSubtitle == "TD-06 · back")
-        expect(vaultCard.asLedger.displayLR == "60.0%/40.0% assisted")
-        expect(vaultCard.asLedger.displayTB == "50.0%/50.0% assisted")
-        expect(vaultCard.displayGrade == "10.0 assisted — Centering (you adjusted 1 side)")
-        expect(vaultCard.displayGrade.contains("PSA") == false)
+        expect(vaultCard.asLedger.displayLR == ScanLedger.absent, "assisted ratios are not the card's L/R")
+        expect(vaultCard.asLedger.displayTB == ScanLedger.absent, "assisted ratios are not the card's T/B")
+        expect(vaultCard.displayGrade == ScanLedger.absent, "with no engine score the assisted number is not the grade")
+        expect(vaultCard.displayEstimate == "Your estimate: 10.0 · 60.0%/40.0% · 50.0%/50.0%")
+        expect(vaultCard.displayEstimate?.contains("PSA") != true, "your estimate is not a PSA grade")
+        let gradedLedger = ScanLedger(
+            scanId: "366A0E19-0000-4000-8000-000000000001",
+            committedAt: .distantPast,
+            name: ScanLedger.unidentified,
+            setName: ScanLedger.absent,
+            grade: 8,
+            lrCentering: "55.0%/45.0%",
+            tbCentering: "48.0%/52.0%",
+            value: nil,
+            familyId: nil,
+            subGradesLabel: "",
+            primaryFlaw: "",
+            incomplete: false,
+            cornersGrade: nil,
+            debugPath: nil,
+            centeringAssist: agreeSnap,
+            deckId: "TD-06",
+            side: "back"
+        )
+        expect(gradedLedger.displayGrade == "Predicted PSA 8", "the predicted grade stays the engine score")
+        expect(gradedLedger.displayLR == "55.0%/45.0%" && gradedLedger.displayTB == "48.0%/52.0%", "the card ratios stay the engine ratios")
+        expect(gradedLedger.displayEstimate?.contains("10.0") == true, "the assisted number stays on your estimate")
         if let data = try? JSONEncoder().encode(vaultCard),
            let decoded = try? JSONDecoder().decode(SavedCard.self, from: data) {
             expect(decoded.deckId == "TD-06" && decoded.side == "back")
@@ -830,6 +878,8 @@ public enum CenteringAssist {
         unknownSnap.centeringLabel = "9.0 assisted"
         unknownSnap.checkAssistedTable()
         expect(unknownSnap.displayLine == "Centering (you adjusted 1 side)", "a missing side withholds the assisted grade")
+        expect(unknownSnap.estimateLine == "Your estimate: Centering (you adjusted 1 side)", "a missing side still labels the lines as your estimate")
+        expect(unknownSnap.estimateLine?.contains("9.0") != true, "a missing side does not show a front-table grade")
         expect(unknownSnap.displayLine?.contains("9.0") == false, "a missing side does not show a front-table grade")
         expect(lastTableCheck?.side == "unknown", "a missing side is not scored as the front")
         expect(lastTableCheck?.localLabel == nil, "a missing side has no local assisted grade")
@@ -949,7 +999,8 @@ public enum CenteringAssist {
         expect(offline.ledger.deckId == "TD-13" && offline.ledger.side == "front", "the offline copy keeps the phone's deck and side")
         expect(offline.ledger.committedAt == phoneCapture, "the offline copy keeps the phone's capture")
         expect(offline.ledger.centeringAssist?.centeringLabel == "9.0 assisted", "the offline copy keeps the phone's label")
-        expect(offline.ledger.displayLR == "56.0%/44.0% assisted", "the offline copy keeps the phone's ratio")
+        expect(offline.ledger.displayLR == ScanLedger.absent, "the offline copy does not store the assisted ratio as L/R")
+        expect(offline.ledger.displayEstimate?.contains("9.0") == true && offline.ledger.displayEstimate?.contains("56.0%/44.0%") == true, "the offline copy keeps the phone's estimate")
         expect(offline.ledger.centeringAssist?.adjustmentLine == nil, "the offline copy has no adjustment line")
         let live = ScanLedger.refreshedFromServer(local: staleLocal, server: serverRecord)
         expect(live.offlineCopy == false, "a server record clears the offline mark")
@@ -990,9 +1041,10 @@ public enum CenteringAssist {
         expect(noAdjustment.centeringAssist?.adjustedAt == nil, "a server record without adjustedAt does not keep a local adjustment time")
         expect(noAdjustment.centeringAssist?.adjustmentLine == nil, "a server record without adjustedAt shows no adjusted line")
         expect(noAdjustment.committedAt == phoneCapture, "a missing adjustment time is not used as the scan time")
-        expect(live.ledger.displayGrade.contains("10.0 assisted"), "the server label replaces the phone's label")
-        expect(live.ledger.displayLR == "60.0%/40.0% assisted", "the server L/R replaces the phone's ratio")
-        expect(live.ledger.displayTB == "50.0%/50.0% assisted", "the server T/B replaces the phone's ratio")
+        expect(live.ledger.displayGrade == ScanLedger.absent, "the assisted label is not the card grade")
+        expect(live.ledger.displayEstimate?.contains("Your estimate") == true && live.ledger.displayEstimate?.contains("10.0") == true, "the server estimate replaces the phone's estimate")
+        expect(live.ledger.displayEstimate?.contains("9.0") != true, "the phone's 9.0 estimate does not stay")
+        expect(live.ledger.displayLR == ScanLedger.absent && live.ledger.displayTB == ScanLedger.absent, "assisted ratios are not the card's L/R or T/B")
         expect(live.ledger.centeringAssist?.adjustmentLine?.hasPrefix("adjusted ") == true, "the adjustment stays on its own line")
         expect(live.ledger.centeringAssist?.adjustedAt == "2026-10-13T14:54:36.000Z", "the adjustment clock is not the scan clock")
     }
@@ -1105,7 +1157,7 @@ struct CenteringAssistEditor: View {
                         .disabled(saving || (!confirming && (!dirty || placedCount == 0)))
                     Text(status).font(.caption).foregroundColor(.secondary)
                 }
-                Text("Amber is your line. A saved result is labelled assisted. The engine's measurement stays as it was.")
+                Text("Amber is your line. A saved result is your estimate. It does not change the predicted grade.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else if let loadError {
@@ -1340,7 +1392,7 @@ struct CenteringAssistEditor: View {
                 )
                 CenteringAssistStore.append(rows)
             }
-            status = "Saved. This centering is assisted."
+            status = "Saved. This is your estimate. The predicted grade is unchanged."
             warningText = ""
             confirming = false
             dirty = false
@@ -1380,7 +1432,7 @@ struct CenteringAssistEditor: View {
                 confirmImplausible: confirming,
                 setSide: face
             )
-            status = "Saved. This centering is assisted."
+            status = "Saved. This is your estimate. The predicted grade is unchanged."
             warningText = ""
             confirming = false
             dirty = false
