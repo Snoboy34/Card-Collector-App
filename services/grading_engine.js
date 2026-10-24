@@ -77,7 +77,7 @@ const phoneFrame = require('./phone_frame');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.24-profile-withhold';
+const ENGINE_VERSION = '2026.10.24-ink-onset';
 
 let sharp = null;
 try {
@@ -749,6 +749,12 @@ const EDGE_PROFILE_AGREE_PX = 4;
 const EDGE_TRIGGER_SIGMA = 4;
 const EDGE_TRIGGER_MIN = 8;
 const EDGE_TRIGGER_MAX = 40;
+/**
+ * A deep ink step falls at least halfway from the border's brightness
+ * toward black. A shallower step flattens while the border is still
+ * bright, and its half-level is already where the ink begins.
+ */
+const DEEP_INK_CONTRAST = 0.5;
 // Minimum inward distance: nothing within 6px of the tightened cut edge is
 // a border. A cut-edge shadow, glare line, or a tighten a few px outside the
 // card reads as an early step there (5-scan run: hits at 3–8px). The noise
@@ -788,9 +794,13 @@ function edgeSampler(getPixel, edge, cardWidth, cardHeight) {
 }
 
 /**
- * First sustained step away from the border's own brightness, located at
- * half the step height (not at the trigger), within maxDepth. Returns the
- * border width in pixels (crossing + 0.5, i.e. count of border pixels).
+ * First sustained step away from the border's own brightness. The half-level
+ * of a symmetric ramp is the edge. On a deep step, a longer tail on the
+ * border side of that ramp pulls the half-level outside where the ink
+ * begins; `excess` is that extra tail, measured on this same step. A sharp
+ * step and a shallow step have no extra tail to add. The width itself stays
+ * the half-level so the lines still group there.
+ * Returns the border width in pixels (crossing + 0.5).
  */
 function detectBorderStep(profile, trigger, maxDepth, params) {
   const pr = params || edgeParams(1);
@@ -819,20 +829,32 @@ function detectBorderStep(profile, trigger, maxDepth, params) {
     while (k0 < flatLimit && Math.abs(profile[k0 + 1] - profile[k0]) > flatStep) k0 += 1;
     const plateau = (profile[k0] + profile[k0 + 1] + profile[k0 + 2]) / 3;
     const half = (baseline + plateau) / 2;
-    // The trigger fires on the slope; the half-level crossing can be before
-    // it (sharp edge) or after it (soft edge). Find the first sample on the
-    // plateau side of `half`, then interpolate against the one before it.
-    let j = i;
-    if ((profile[j] - half) * sign > 0) {
-      while (j > b0 + 1 && (profile[j - 1] - half) * sign > 0) j -= 1;
-    } else {
-      while (j < k0 + 2 && (profile[j] - half) * sign <= 0) j += 1;
+    // Crossings stay on this ramp. The 10% and 90% levels are the two
+    // shoulders. Their distances from the half-level are the two tails.
+    function crossingAt(level) {
+      let j = i;
+      if ((profile[j] - level) * sign > 0) {
+        while (j > b0 + 1 && (profile[j - 1] - level) * sign > 0) j -= 1;
+      } else {
+        while (j < k0 + 2 && j < profile.length - 1 && (profile[j] - level) * sign <= 0) j += 1;
+      }
+      const before = profile[j - 1];
+      const after = profile[j];
+      const step = after - before;
+      const frac = step === 0 ? 0.5 : Math.max(0, Math.min(1, (level - before) / step));
+      return (j - 1) + frac;
     }
-    const before = profile[j - 1];
-    const after = profile[j];
-    const step = after - before;
-    const frac = step === 0 ? 0.5 : Math.max(0, Math.min(1, (half - before) / step));
-    return { width: (j - 1) + frac + 0.5, baseline: baseline, plateau: plateau };
+    const halfPos = crossingAt(half);
+    const outerPos = crossingAt(baseline + (plateau - baseline) * 0.1);
+    const innerPos = crossingAt(baseline + (plateau - baseline) * 0.9);
+    // Longer border-side tail than ink-side tail. Width stays the half-level.
+    const excess = (halfPos - outerPos) - (innerPos - halfPos);
+    return {
+      width: halfPos + 0.5,
+      excess: excess > 0 ? excess : 0,
+      baseline: baseline,
+      plateau: plateau
+    };
   }
   return null;
 }
@@ -971,12 +993,32 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
   }
   group.forEach(function (h) { h.line.inGroup = true; });
   const widths = group.map(function (h) { return h.width; });
+  // One tail for the whole edge, from the straight-edge profile, so the
+  // vote still groups on the half-level. A deep step's longer white-side
+  // tail is how far that half-level sits outside the ink. A shallow step
+  // keeps the half-level: its ink never gets halfway to black, and the
+  // half-level is already where the ink begins.
+  const contrast = profileHit && profileHit.baseline > 1
+    ? (profileHit.baseline - profileHit.plateau) / profileHit.baseline
+    : 0;
+  const tail = profileHit && profileHit.excess > 0 && contrast >= DEEP_INK_CONTRAST
+    ? profileHit.excess
+    : 0;
+  if (tail) {
+    group.forEach(function (h) {
+      h.width += tail;
+      if (h.line.pos != null) h.line.pos = round2(h.line.pos + tail);
+    });
+    for (let i = 0; i < widths.length; i++) widths[i] += tail;
+  }
   const width = median(widths);
+  const onsetProfile = profileWidth == null ? null : profileWidth + tail;
   const outliers = hits.length - group.length;
   if (outliers > 0) flags.push(edge + ': ' + outliers + ' line(s) outside the agreeing group');
-  const profileDisagrees = profileWidth != null && Math.abs(profileWidth - width) > pr.profileAgree;
+  base.profileWidth = onsetProfile == null ? null : round2(onsetProfile);
+  const profileDisagrees = onsetProfile != null && Math.abs(onsetProfile - width) > pr.profileAgree;
   if (profileDisagrees) {
-    flags.push(edge + ': straight-edge profile ' + round2(profileWidth / pr.scale) + 'px disagrees with voted ' +
+    flags.push(edge + ': straight-edge profile ' + round2(onsetProfile / pr.scale) + 'px disagrees with voted ' +
       round2(width / pr.scale) + 'px');
   }
   // The outermost agreeing group can be the smaller cluster (6 lines at the
