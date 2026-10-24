@@ -13,8 +13,11 @@
  * side. A shallower step is replaced in that same case. A solid outermost
  * step stays, so a pale strip is not pushed inward. An anchored-thin step
  * under 1.185 mm is replaced when its vote is a minority and the outline
- * is past the floor. An outline under 1.185 mm, or past 12% of the card,
- * is not published.
+ * is past the floor. A vote broken up along the edge is withheld when the
+ * straight-edge profile sits on the outline. A broken vote just over
+ * the floor is withheld when two other sides sit on a deeper outline.
+ * A contiguous partial edge stays. An outline under 1.185 mm, or
+ * past 12% of the card, is not published.
  */
 'use strict';
 
@@ -189,9 +192,10 @@ function measureWarp(warp) {
  * Keep the step finder when it is on the outline. Take the outline when
  * the step withheld, when the matcher accepted a different line, or when
  * an anchored-thin minority is under the floor. A solid outermost step
- * stays. An outline under the floor, or past the inward cap, stays off.
+ * stays. A step the straight-edge profile does not share with the outline
+ * is withheld. An outline under the floor, or past the inward cap, stays off.
  *
- * @returns {{mm: object, replaced: string[]}}
+ * @returns {{mm: object, replaced: string[], withheld: string[]}}
  */
 function adoptOutline(stepMm, outlineMm, floorMm, gapMmFor, options) {
   const opts = options || {};
@@ -205,7 +209,8 @@ function adoptOutline(stepMm, outlineMm, floorMm, gapMmFor, options) {
     bottom: stepMm ? stepMm.bottom : null
   };
   const replaced = [];
-  if (!outlineMm) return { mm: mm, replaced: replaced };
+  const withheld = [];
+  if (!outlineMm) return { mm: mm, replaced: replaced, withheld: withheld };
   EDGES.forEach(function (edge) {
     const outlined = outlineMm[edge];
     if (outlined == null || !isFinite(outlined) || outlined < floorMm) return;
@@ -231,7 +236,17 @@ function adoptOutline(stepMm, outlineMm, floorMm, gapMmFor, options) {
       replaced.push(edge);
     }
   });
-  return { mm: mm, replaced: replaced };
+  // The vote landed on a different line from the straight-edge profile,
+  // and that profile is the outline. Do not publish the vote. A side the
+  // matcher already accepted keeps the outline.
+  const mismatch = opts.profileMismatch || [];
+  mismatch.forEach(function (edge) {
+    if (replaced.indexOf(edge) >= 0) return;
+    if (mm[edge] == null) return;
+    mm[edge] = null;
+    withheld.push(edge);
+  });
+  return { mm: mm, replaced: replaced, withheld: withheld };
 }
 
 module.exports = {
