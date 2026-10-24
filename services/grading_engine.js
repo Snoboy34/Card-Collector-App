@@ -134,6 +134,9 @@ const BORDER_SAMPLE_MIN_HITS = 5;
 /** Warp the phone widths are reported in. Floors convert from millimetres on this warp. */
 const BORDER_WARP_WIDTH = 643;
 const BORDER_WARP_HEIGHT = 900;
+// Same nominal card as CARD_WIDTH_MM / CARD_HEIGHT_MM. The floor in
+// millimetres is converted with these, so a different physical span is
+// not folded into the 1.185 mm minimum.
 const BORDER_CARD_WIDTH_MM = 63.5;
 const BORDER_CARD_HEIGHT_MM = 88.9;
 /** 12 px on the short side of the 643×900 warp. */
@@ -2395,7 +2398,11 @@ function applyDetectorTrust(report) {
  *  grading raster without holding a 12–48 MP RGB buffer in memory. */
 const MAX_DECODE_DIM = 2400;
 
-// Card size (ISO/IEC 7810 ID-1 trading card) for physical units.
+// 2.5 × 3.5 in, the nominal size of a sports card and of a Pokémon card.
+// widthsMm divides the 643×900-equivalent border by these numbers. TD-03's
+// flatbed edge-to-edge span is 63.0 × 88.1 mm. Using that span here would
+// shorten a 2.66 mm border by about 0.02 mm, and the phone readings on that
+// card are already short of the key, so the nominal size is not the miss.
 const CARD_WIDTH_MM = 63.5;
 const CARD_HEIGHT_MM = 88.9;
 // Centering is measured on a warp at the card's own decoded resolution

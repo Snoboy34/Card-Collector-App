@@ -24,6 +24,8 @@
 const designOutline = require('./design_outline');
 const cardOutline = require('./card_outline');
 
+// Nominal 2.5 × 3.5 in. The flatbed span of a Pokémon card is not
+// substituted here; see CARD_WIDTH_MM in the grading engine.
 const CARD_W_MM = 63.5;
 const CARD_H_MM = 88.9;
 const DEPTH_STEP_MM = 0.02;
