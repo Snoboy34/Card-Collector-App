@@ -113,6 +113,30 @@ check('an outline under 1.185 mm is not published',
   under.replaced.length === 0 && under.mm.left == null && under.mm.bottom == null,
   under);
 
+const innerVote = phoneFrame.adoptOutline(
+  { left: 2.96, right: 1.291, top: 3.495, bottom: 2.902 },
+  { left: 2.94, right: 3.18, top: 3.42, bottom: 2.77 },
+  FLOOR,
+  gapFor,
+  { profileMismatch: ['right'] }
+);
+check('a vote off the straight-edge profile is withheld',
+  innerVote.mm.right == null && innerVote.withheld.indexOf('right') >= 0 &&
+  innerVote.mm.left === 2.96 && innerVote.mm.top === 3.495 && innerVote.mm.bottom === 2.902,
+  innerVote);
+
+const matchedInner = phoneFrame.adoptOutline(
+  { left: 2.45, right: 1.291, top: 3.91, bottom: 3.85 },
+  { left: 4.08, right: 3.18, top: 3.3, bottom: 3.76 },
+  FLOOR,
+  gapFor,
+  { frameMatches: { left: true }, profileMismatch: ['left', 'right'] }
+);
+check('a matched side keeps the outline when the vote disagrees',
+  matchedInner.mm.left === 4.08 && matchedInner.withheld.indexOf('left') < 0 &&
+  matchedInner.mm.right == null,
+  matchedInner);
+
 function paint(w, h, borders) {
   const data = Buffer.alloc(w * h * 3);
   const ppmX = w / 63.5;

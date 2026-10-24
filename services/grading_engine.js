@@ -77,7 +77,7 @@ const phoneFrame = require('./phone_frame');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.23-phone-frame';
+const ENGINE_VERSION = '2026.10.24-profile-withhold';
 
 let sharp = null;
 try {
@@ -2711,9 +2711,36 @@ async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, ge
   // four sides carry the same bands. It fills a withheld edge and replaces
   // a step the matcher accepted on a different line. A step already within
   // the 3 px group gap stays. An outline under 1.185 mm, or past 12% of
-  // the card, is not used.
+  // the card, is not used. A vote broken up by the outline's line, when
+  // the straight-edge profile sits on that outline, is withheld.
   if (centeringWarped && centeringWarped.data && (centeringWarped.channels || 3) >= 3) {
     const outlineMm = phoneFrame.measureWarp(centeringWarped);
+    const profileMismatch = [];
+    const profiles = measurement.edgeProfiles || {};
+    const sampleLines = measurement.sampleLines || {};
+    ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+      const step = measurement.widthsMm[edge];
+      const outlined = outlineMm[edge];
+      if (step == null || outlined == null || !isFinite(step) || !isFinite(outlined)) return;
+      if (outlined < BORDER_MIN_MEDIAN_MM) return;
+      const gap = EDGE_GROUP_GAP_PX / borderPxPerMm(edge);
+      if (Math.abs(outlined - step) <= gap) return;
+      if (!(outlined > step)) return;
+      const profPx = profiles[edge] && profiles[edge].profileWidth;
+      if (profPx == null || !isFinite(profPx)) return;
+      const profMm = profPx / borderPxPerMm(edge);
+      if (Math.abs(profMm - outlined) > gap) return;
+      if (Math.abs(profMm - step) <= gap) return;
+      // A partial edge is one contiguous run of the outer line. A vote
+      // broken up by the outline's line is a different profile.
+      const lines = sampleLines[edge] || [];
+      const onVote = [];
+      lines.forEach(function (line, i) { if (line.inGroup) onVote.push(i); });
+      if (onVote.length < 2) return;
+      const broken = (onVote[onVote.length - 1] - onVote[0] + 1) !== onVote.length;
+      if (!broken) return;
+      profileMismatch.push(edge);
+    });
     const adopted = phoneFrame.adoptOutline(
       measurement.widthsMm,
       outlineMm,
@@ -2722,6 +2749,7 @@ async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, ge
       {
         lowConfidence: measurement.voteLowConfidenceEdges || [],
         frameMatches: outlineMm.frameMatches || {},
+        profileMismatch: profileMismatch,
         maxMmFor: function (edge) {
           const side = (edge === 'left' || edge === 'right') ? BORDER_CARD_WIDTH_MM : BORDER_CARD_HEIGHT_MM;
           return EDGE_MAX_DEPTH_FRAC * side;
@@ -2735,14 +2763,19 @@ async function measureCenteringOnWarp(centeringWarped, warpInfo, getPixel643, ge
       bottom: outlineMm.bottom == null ? null : Math.round(outlineMm.bottom * 1000) / 1000
     };
     measurement.frameMatched = outlineMm.matched === true;
-    if (adopted.replaced.length) {
+    const changed = adopted.replaced.length + adopted.withheld.length > 0;
+    if (changed) {
       adopted.replaced.forEach(function (edge) {
         measurement.widthsMm[edge] = adopted.mm[edge];
         measurement.widths[edge] = adopted.mm[edge] * borderPxPerMm(edge);
       });
+      adopted.withheld.forEach(function (edge) {
+        measurement.widthsMm[edge] = null;
+        measurement.widths[edge] = null;
+      });
       if (measurement.voteLowConfidenceEdges) {
         measurement.voteLowConfidenceEdges = measurement.voteLowConfidenceEdges.filter(function (edge) {
-          return adopted.replaced.indexOf(edge) < 0;
+          return adopted.replaced.indexOf(edge) < 0 && adopted.withheld.indexOf(edge) < 0;
         });
       }
       const widths = measurement.widths;
