@@ -77,7 +77,7 @@ const phoneFrame = require('./phone_frame');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.24-profile-withhold';
+const ENGINE_VERSION = '2026.10.24-thin-cut';
 
 let sharp = null;
 try {
@@ -2460,7 +2460,47 @@ function withholdUntrustedBorderVote(report, measurement) {
   return report;
 }
 
-/** Low-confidence cut edges → edge flags and centeringMetrics. Values untouched. */
+/**
+ * An under-floor border is published only because the other three sides are
+ * past 1.185 mm. When that edge's cut has a second edge, the thin reading
+ * is the uncertain cut, not a border to publish. A side past the floor keeps
+ * its width. The low-confidence flag on that side stays a flag.
+ */
+function withholdThinUncertainCut(measurement, lowEdges) {
+  const names = ['left', 'right', 'top', 'bottom'];
+  const low = lowEdges || [];
+  let dropped = false;
+  names.forEach(function (edge) {
+    const mm = measurement.widthsMm && measurement.widthsMm[edge];
+    if (mm == null || !(mm < BORDER_MIN_MEDIAN_MM)) return;
+    if (low.indexOf(edge) < 0) return;
+    measurement.widthsMm[edge] = null;
+    if (measurement.widths) measurement.widths[edge] = null;
+    dropped = true;
+    measurement.edgeFlags = measurement.edgeFlags || [];
+    measurement.edgeFlags.push(edge + ': thin border withheld — the cut has a second edge');
+  });
+  if (!dropped) return measurement;
+  const widths = measurement.widths || {};
+  const ready = names.every(function (edge) {
+    return widths[edge] != null && isFinite(widths[edge]);
+  });
+  measurement.detected = ready;
+  if (!ready) {
+    measurement.leftRightRatio = null;
+    measurement.topBottomRatio = null;
+    return measurement;
+  }
+  const totalH = widths.left + widths.right;
+  const totalV = widths.top + widths.bottom;
+  const leftPct = totalH > 0 ? (widths.left / totalH) * 100 : 50;
+  const topPct = totalV > 0 ? (widths.top / totalV) * 100 : 50;
+  measurement.leftRightRatio = { left: leftPct, right: 100 - leftPct };
+  measurement.topBottomRatio = { top: topPct, bottom: 100 - topPct };
+  return measurement;
+}
+
+/** Low-confidence cut edges → edge flags and centeringMetrics. A side past the floor is untouched. */
 function applyCutConfidence(centeringMeasurement, detection) {
   const low = (detection && detection.lowConfidenceEdges) || [];
   centeringMeasurement.edgeFlags = centeringMeasurement.edgeFlags || [];
@@ -3061,6 +3101,7 @@ async function gradeBuffer(buffer, options) {
       centeringMeasurement.orientationWithheld = true;
     }
     const lowConfidenceEdges = applyCutConfidence(centeringMeasurement, cardDetection);
+    withholdThinUncertainCut(centeringMeasurement, lowConfidenceEdges);
     const interiorGrey = measureInteriorGrey(
       getPaperPixel, centeringBox.width, centeringBox.height, centeringMeasurement.widths
     );
@@ -3326,6 +3367,7 @@ module.exports = {
   BORDER_SAMPLE_SPREAD_MAX_PX,
   BORDER_SAMPLE_MIN_HITS,
   BORDER_MIN_MEDIAN_MM,
+  withholdThinUncertainCut,
   BORDER_THIN_MIN_MM,
   BORDER_THIN_ANCHORED_MIN_MM,
   BORDER_MIN_MEDIAN_WIDTH_PX,
