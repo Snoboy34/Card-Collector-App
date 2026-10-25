@@ -10,6 +10,7 @@
     "test:judge": "node scripts/verify_judge_math.js",
     "test:cardbox": "node scripts/verify_card_box.js",
     "test:topedge": "node scripts/verify_top_edge.js",
+    "test:corners": "node scripts/verify_corners.js",
     "test:precision": "node scripts/verify_centering_precision.js",
     "test:edgebias": "node scripts/verify_edge_bias.js",
     "test:cutconf": "node scripts/verify_cut_confidence.js",
