@@ -191,6 +191,26 @@ async function run() {
   const solidLine = tdSideFailure('TD-02', 'front', 'measured', solidFar);
   assert('td_deck keeps a solid edge at 0.1 mm when another edge on the card is fine-print', solidLine &&
     /bottom 4.049 mm vs key 3.899 \(±0.1\)/.test(solidLine), solidLine);
+  const underThirty = Object.assign({}, pastTolerance, { pxPerMm: 20 });
+  assert('td_deck accepts a solid edge inside 0.2 mm when the capture is under 30 px/mm',
+    tdSideFailure('TD-04', 'front', 'offcenter', underThirty) == null, underThirty);
+  const underThirtyFar = {
+    measured: true, status: 'measured', cen: 8, lr: 50, tb: 55, pxPerMm: 20,
+    mm: { top: 3.41, bottom: 1.617, left: null, right: null }
+  };
+  const underThirtyLine = tdSideFailure('TD-04', 'front', 'offcenter', underThirtyFar);
+  assert('td_deck rejects a solid edge past 0.2 mm on a 20 px/mm capture', underThirtyLine &&
+    /bottom 1.617 mm vs key 1.416 \(±0.2\)/.test(underThirtyLine), underThirtyLine);
+  const tooCoarse = {
+    measured: true, status: 'measured', cen: 6, lr: 52, tb: 70, pxPerMm: 10,
+    mm: { top: null, bottom: 1.152, left: null, right: null }
+  };
+  assert('td_deck does not score an edge the resolution withholds',
+    tdSideFailure('TD-04', 'front', 'offcenter', tooCoarse) == null, tooCoarse);
+  const fineAtFull = Object.assign({}, fineFar, { pxPerMm: 40 });
+  const fineAtFullLine = tdSideFailure('TD-02', 'front', 'measured', fineAtFull);
+  assert('td_deck keeps a fine-print edge at 0.2 mm when the capture supports 0.1', fineAtFullLine &&
+    /top 3.556 mm vs key 3.345 \(±0.2\)/.test(fineAtFullLine), fineAtFullLine);
   assert('td_deck still uses the label on a back', 
     /TD-04 back expected measured/.test(tdSideFailure('TD-04', 'back', 'measured', withheldBottom) || ''));
 

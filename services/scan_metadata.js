@@ -181,8 +181,60 @@ function stampStoredCaptureTimes(db, emit) {
   return count;
 }
 
+function textField(v) {
+  if (v == null || v === '') return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  return s.slice(0, MAX_STRING);
+}
+
+function positiveInt(v) {
+  const n = Number(v);
+  if (!isFinite(n) || n < 1) return null;
+  return Math.round(n);
+}
+
+/**
+ * Device, camera, and pixel size for one scan, plus the px/mm the server
+ * measured on the card. Flat multipart fields win, then a previously stored
+ * `capture`, then captureMetadata. A client-sent px/mm is ignored.
+ *
+ * @param {object} body
+ * @param {object|null} metadata sanitized captureMetadata
+ * @param {object|null} report grading report, when the card was measured
+ * @param {object|null} stored item.capture already on disk
+ * @returns {object|null}
+ */
+function captureFacts(body, metadata, report, stored) {
+  const meta = metadata && typeof metadata === 'object' ? metadata : {};
+  const device = meta.device && typeof meta.device === 'object' ? meta.device : {};
+  const camera = meta.camera && typeof meta.camera === 'object' ? meta.camera : {};
+  const capture = meta.capture && typeof meta.capture === 'object' ? meta.capture : {};
+  const b = body && typeof body === 'object' ? body : {};
+  const keep = stored && typeof stored === 'object' ? stored : {};
+  const deviceModel = textField(b.deviceModel) || textField(keep.deviceModel) || textField(device.model);
+  const cameraName = textField(b.camera) || textField(keep.camera) || textField(camera.deviceType);
+  const captureWidth = positiveInt(b.captureWidth) || positiveInt(keep.captureWidth) ||
+    positiveInt(capture.uploadWidth) || positiveInt(camera.photoWidth);
+  const captureHeight = positiveInt(b.captureHeight) || positiveInt(keep.captureHeight) ||
+    positiveInt(capture.uploadHeight) || positiveInt(camera.photoHeight);
+  let pxPerMm = null;
+  if (report) {
+    pxPerMm = require('./grading_engine').achievedPxPerMmFromReport(report);
+  }
+  if (!(pxPerMm > 0) && keep.pxPerMm > 0 && isFinite(Number(keep.pxPerMm))) pxPerMm = Number(keep.pxPerMm);
+  if (!deviceModel && !cameraName && captureWidth == null && captureHeight == null && !(pxPerMm > 0)) return null;
+  return {
+    deviceModel: deviceModel,
+    camera: cameraName,
+    captureWidth: captureWidth,
+    captureHeight: captureHeight,
+    pxPerMm: pxPerMm > 0 ? pxPerMm : null
+  };
+}
+
 module.exports = {
-  parseCaptureMetadata, buildServerMetadata, normalizeBackground,
+  parseCaptureMetadata, buildServerMetadata, normalizeBackground, captureFacts,
   isCaptureInstant, captureInstantFrom, stampCaptureTime, stampStoredCaptureTimes,
   CAPTURE_GROUPS, BACKGROUNDS, MAX_JSON_BYTES
 };

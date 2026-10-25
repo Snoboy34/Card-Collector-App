@@ -21,6 +21,7 @@ const deck = require('../services/test_deck');
 const dumpScans = require('./dump_scans');
 const scanMetadata = require('../services/scan_metadata');
 const backScan = require('../services/back_scan');
+const grading = require('../services/grading_engine');
 
 function fmt(v, d) {
   return typeof v === 'number' && isFinite(v) ? v.toFixed(d == null ? 1 : d) : '—';
@@ -87,6 +88,7 @@ function resultFromReport(report) {
     surface: r.subGrades ? r.subGrades.surface : null,
     finalScore: r.finalScore != null ? r.finalScore : null,
     mm: m.borderWidthsMm || null,
+    pxPerMm: grading.achievedPxPerMmFromReport(r),
     lowConfidenceEdges: m.lowConfidenceEdges || (r.cardDetection && r.cardDetection.lowConfidenceEdges) || [],
     borderVoteLowConfidenceEdges: m.borderVoteLowConfidenceEdges || []
   };
@@ -128,7 +130,7 @@ function backgroundOf(meta) {
 }
 
 let finePrintKey = null;
-function finePrintNote(deckId) {
+function loadAnswerKey() {
   if (!finePrintKey) {
     try {
       finePrintKey = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'reference', 'answer_key.json'), 'utf8'));
@@ -136,8 +138,104 @@ function finePrintNote(deckId) {
       finePrintKey = { cards: {} };
     }
   }
-  const key = finePrintKey;
-  const card = key.cards && key.cards[deckId];
+  return finePrintKey;
+}
+
+function approvedKeySides(deckId) {
+  const card = loadAnswerKey().cards && loadAnswerKey().cards[deckId];
+  if (!card || !card.sides) return null;
+  const sides = {};
+  let any = false;
+  ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+    const row = card.sides[edge];
+    if (!row || row.approved !== true || typeof row.mm !== 'number' || !isFinite(row.mm)) return;
+    sides[edge] = row;
+    any = true;
+  });
+  return any ? sides : null;
+}
+
+function captureGroupLine(g) {
+  const px = g.pxMin == null ? 'px/mm —'
+    : (g.pxMin === g.pxMax ? g.pxMin.toFixed(2) + ' px/mm' : g.pxMin.toFixed(2) + '–' + g.pxMax.toFixed(2) + ' px/mm');
+  const why = g.claim === 'not trusted' && g.reason ? ' (' + g.reason + ')' : '';
+  const fronts = g.count + ' front' + (g.count === 1 ? '' : 's');
+  return g.deviceModel + ' · ' + g.camera + ' · ' + g.size + ' · ' + fronts + ' · ' + px + ' · ' + g.claim + why;
+}
+
+/**
+ * One line per device, camera, and capture size. px/mm is the range of the
+ * card in those uploads. The claim is the weakest scan: trusted at ±0.1 mm
+ * only when every front supports that resolution and every scored key edge
+ * lands on the flatbed answer (0.1 mm, or 0.2 mm when the key says fine-print).
+ * Otherwise ±0.2 mm when the edges still land inside 0.2 mm, or not trusted.
+ */
+function buildCaptureGroups(scans) {
+  const buckets = new Map();
+  (scans || []).forEach(function (scan) {
+    const model = scan.deviceModel ? String(scan.deviceModel) : 'unspecified device';
+    const camera = scan.camera ? String(scan.camera) : 'unspecified camera';
+    const size = scan.captureWidth > 0 && scan.captureHeight > 0
+      ? (scan.captureWidth + '×' + scan.captureHeight) : 'unspecified size';
+    const key = model + '\n' + camera + '\n' + size;
+    if (!buckets.has(key)) buckets.set(key, { deviceModel: model, camera: camera, size: size, scans: [] });
+    buckets.get(key).scans.push(scan);
+  });
+  const groups = [];
+  buckets.forEach(function (bucket) {
+    const px = bucket.scans.map(function (s) { return Number(s.pxPerMm); }).filter(function (n) { return n > 0 && isFinite(n); });
+    const trust = captureGroupTrust(bucket.scans);
+    groups.push({
+      deviceModel: bucket.deviceModel,
+      camera: bucket.camera,
+      size: bucket.size,
+      count: bucket.scans.length,
+      pxMin: px.length ? Math.round(Math.min.apply(null, px) * 100) / 100 : null,
+      pxMax: px.length ? Math.round(Math.max.apply(null, px) * 100) / 100 : null,
+      claim: trust.claim,
+      reason: trust.reason
+    });
+  });
+  groups.sort(function (a, b) {
+    return (a.deviceModel + a.camera + a.size).localeCompare(b.deviceModel + b.camera + b.size);
+  });
+  groups.forEach(function (g) { g.line = captureGroupLine(g); });
+  return groups;
+}
+
+function captureGroupTrust(scans) {
+  if (!scans.length) return { claim: 'not trusted', reason: 'not proven on the flatbed key' };
+  if (scans.some(function (s) { return !(Number(s.pxPerMm) > 0); })) {
+    return { claim: 'not trusted', reason: 'px/mm missing' };
+  }
+  const weakest = Math.min.apply(null, scans.map(function (s) { return Number(s.pxPerMm); }));
+  const res = grading.resolutionToleranceMm(weakest);
+  if (res == null) return { claim: 'not trusted', reason: 'withheld, resolution' };
+  let keyed = 0;
+  let missTight = false;
+  let missLoose = false;
+  scans.forEach(function (scan) {
+    const sides = approvedKeySides(scan.deckId);
+    if (!sides || !scan.mm) return;
+    ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+      const row = sides[edge];
+      if (!row) return;
+      const got = scan.mm[edge];
+      if (got == null || !isFinite(Number(got))) return;
+      keyed += 1;
+      const delta = Math.abs(Math.round((Number(got) - row.mm) * 1000) / 1000);
+      if (delta > (row.finePrint === true ? 0.2 : 0.1)) missTight = true;
+      if (delta > 0.2) missLoose = true;
+    });
+  });
+  if (!keyed) return { claim: 'not trusted', reason: 'not proven on the flatbed key' };
+  if (res === 0.1 && !missTight) return { claim: 'trusted, ±0.1 mm', reason: null };
+  if (!missLoose) return { claim: '±0.2 mm', reason: null };
+  return { claim: 'not trusted', reason: 'off the flatbed key' };
+}
+
+function finePrintNote(deckId) {
+  const card = loadAnswerKey().cards && loadAnswerKey().cards[deckId];
   if (!card || !card.sides) return '';
   const edges = ['left', 'right', 'top', 'bottom'].filter(function (edge) {
     return card.sides[edge] && card.sides[edge].finePrint === true;
@@ -163,6 +261,7 @@ function resultLine(label, res, extra) {
   if (res.borderVoteLowConfidenceEdges && res.borderVoteLowConfidenceEdges.length) {
     line += '  low-confidence border: ' + res.borderVoteLowConfidenceEdges.join(', ');
   }
+  if (res.pxPerMm > 0) line += '  ' + Number(res.pxPerMm).toFixed(2) + ' px/mm';
   return line + (extra ? '  ' + extra : '');
 }
 
@@ -184,6 +283,7 @@ async function buildDeckReport(opts) {
       engine: item.engine || (item.gradingReport && item.gradingReport.engineVersion
         ? { version: item.gradingReport.engineVersion } : null),
       result: resultFromReport(item.gradingReport),
+      capture: scanMetadata.captureFacts(null, item.captureMetadata, item.gradingReport, item.capture),
       familyId: item.cardIdentity && item.cardIdentity.familyId,
       background: backgroundOf(item.captureMetadata),
       edgeMap: item.gradingReport && item.gradingReport.edgeMap || null,
@@ -218,6 +318,7 @@ async function buildDeckReport(opts) {
 
   const lines = [];
   const rows = [];
+  const captureScans = [];
   lines.push('# Test deck report · ' + sortedIds.length + ' deck cards · data=' + dataDir +
     (candidate ? ' · candidate=' + candidate.dir : ''));
   for (const deckId of sortedIds) {
@@ -322,6 +423,25 @@ async function buildDeckReport(opts) {
       row.backCandidate = { result: backCand.result, engine: backCand.engine };
       lines.push(resultLine('candidate back', backCand.result, 'engine ' + (backCand.engine.version || '?')));
     }
+    frontScans.forEach(function (scan) {
+      if (!scan.result || !scan.result.measured) return;
+      const cap = scan.capture || {};
+      let px = scan.result.pxPerMm;
+      let mm = scan.result.mm;
+      if (latest && scan.scanId === latest.scanId && row.candidate && row.candidate.result) {
+        if (row.candidate.result.pxPerMm > 0) px = row.candidate.result.pxPerMm;
+        if (row.candidate.result.mm) mm = row.candidate.result.mm;
+      }
+      captureScans.push({
+        deckId: deckId,
+        deviceModel: cap.deviceModel,
+        camera: cap.camera,
+        captureWidth: cap.captureWidth,
+        captureHeight: cap.captureHeight,
+        pxPerMm: px,
+        mm: mm
+      });
+    });
     rows.push(row);
   }
 
@@ -353,6 +473,13 @@ async function buildDeckReport(opts) {
   lines.push('LOW-CONFIDENCE CUT  ' + lowCut.length + ' of ' + totals.scanned + ' latest scans' +
     (lowCut.length ? ': ' + lowCut.map(function (r) { return r.deckId + ' (' + r.latest.result.lowConfidenceEdges.join(', ') + ')'; }).join(', ') : ''));
 
+  const captureGroups = buildCaptureGroups(captureScans);
+  lines.push('');
+  lines.push('CAPTURE  grouped by device, camera, and capture size. px/mm is the card in the upload.');
+  lines.push('  A group is trusted at ±0.1 mm only when every front supports that resolution and lands on the flatbed key.');
+  if (!captureGroups.length) lines.push('  no measured fronts');
+  captureGroups.forEach(function (g) { lines.push('  ' + g.line); });
+
   // Returned grades, one section per company. Scales are not combined.
   const groundTruth = groundTruthByGrader(labels, byScan);
   lines.push('');
@@ -382,6 +509,7 @@ async function buildDeckReport(opts) {
   return {
     text: lines.join('\n'), rows: rows, categories: categories,
     psa: groundTruth.PSA.returned.length, pending: pending, groundTruth: groundTruth,
+    captureGroups: captureGroups,
     lowConfidenceCut: lowCut.map(function (r) { return { deckId: r.deckId, edges: r.latest.result.lowConfidenceEdges }; })
   };
 }
@@ -446,4 +574,4 @@ if (require.main === module) {
     .catch(function (err) { console.error('deck_report failed:', err && err.stack ? err.stack : err); process.exit(1); });
 }
 
-module.exports = { buildDeckReport, resultFromReport };
+module.exports = { buildDeckReport, resultFromReport, buildCaptureGroups };

@@ -100,9 +100,13 @@ the warp so they keep the same physical size, widths are reported in
 tightened with sub-pixel precision at that resolution. Pass
 `centeringResolution: 'standard'` to force the 643×900 path.
 `centeringResolution: 'full'` crops the card from the upright photo and
-warps that crop once at 70 px/mm (the cut refine and the border measure
-share that warp; the runner-up exclusion stays 0.2 mm). The default is the
-capped warp, so a request that omits the field grades the old way.
+warps that crop once at the card's own pixel height (the cut refine and
+the border measure share that warp; the runner-up exclusion stays 0.2 mm).
+The ±0.1 mm label is used only when that card reaches 30 px/mm. 15 px/mm
+supports ±0.2 mm. Below that the edge is withheld. A fine-print edge stays
+at least ±0.2 mm. Phone apps upload the still described in
+`docs/capture_contract.md`. The default is the capped warp, so a request
+that omits the field grades the old way.
 `node scripts/verify_centering_precision.js` compares standard and native
 on 12 synthetic phone-like captures. Uploads up to 20 MB are accepted.
 
