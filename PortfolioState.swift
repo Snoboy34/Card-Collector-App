@@ -47,17 +47,14 @@ public struct ScanLedger: Equatable {
         return Self.predictedGradeText(grade)
     }
 
-    /// L/R from the dragged lines when an assist is saved. Otherwise the engine ratio.
-    public var displayLR: String {
-        if let text = centeringAssist?.assistedLRText { return text }
-        return lrCentering
-    }
+    /// Engine L/R. An assisted ratio is not this line.
+    public var displayLR: String { lrCentering }
 
-    /// T/B from the dragged lines when an assist is saved. Otherwise the engine ratio.
-    public var displayTB: String {
-        if let text = centeringAssist?.assistedTBText { return text }
-        return tbCentering
-    }
+    /// Engine T/B. An assisted ratio is not this line.
+    public var displayTB: String { tbCentering }
+
+    /// The user's lines, apart from the predicted grade.
+    public var displayEstimate: String? { centeringAssist?.estimateLine }
 
     public static func knownFace(_ side: String?) -> String? {
         if side == "front" || side == "back" { return side }
@@ -169,11 +166,8 @@ public struct ScanLedger: Equatable {
         Self.deckLine(deckId: deckId, side: side)
     }
 
-    /// Assisted line when the user moved a border. Otherwise the engine grade.
-    public var displayGrade: String {
-        if let line = centeringAssist?.displayLine { return line }
-        return displayEngineGrade
-    }
+    /// Engine final score only. An assisted centering is displayEstimate.
+    public var displayGrade: String { displayEngineGrade }
 
     public var displayValue: String {
         guard let value else { return Self.absent }
@@ -295,10 +289,10 @@ public struct SavedCard: Identifiable, Codable {
         return ScanLedger.predictedGradeText(predictedGradePSA)
     }
 
-    public var displayGrade: String {
-        if let line = centeringAssist?.displayLine { return line }
-        return displayEngineGrade
-    }
+    /// Engine final score only. An assisted centering is displayEstimate.
+    public var displayGrade: String { displayEngineGrade }
+
+    public var displayEstimate: String? { centeringAssist?.estimateLine }
 
     public var deckLine: String? {
         ScanLedger.deckLine(deckId: deckId, side: side)
@@ -620,11 +614,11 @@ public class PortfolioState: ObservableObject {
         guard let deviceCacheDirectoryPath = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
 
         let outputTargetURL = deviceCacheDirectoryPath.appendingPathComponent(manifestDocumentFileName)
-        var csvStringDocumentPayload = "Scan ID,Committed At,Card Name,Expansion Set,L/R Centering,T/B Centering,Predicted PSA Grade,Assisted centering,Market Valuation,Family ID,Assigned Batch Folder,Deck ID\n"
+        var csvStringDocumentPayload = "Scan ID,Committed At,Card Name,Expansion Set,L/R Centering,T/B Centering,Predicted PSA Grade,Your estimate,Market Valuation,Family ID,Assigned Batch Folder,Deck ID\n"
 
         for asset in savedCards {
             let assignedFolderName = activeSubmissionBatches.first(where: { $0.id == asset.targetBatchId })?.batchName ?? "Unassigned Vault"
-            let assisted = asset.centeringAssist?.headline ?? ScanLedger.absent
+            let assisted = asset.displayEstimate ?? ScanLedger.absent
             let deck = asset.deckLine ?? ScanLedger.absent
             let layoutRowString = "\"\(asset.scanId)\",\"\(asset.displayTimestamp)\",\"\(asset.name)\",\"\(asset.setName)\",\"\(asset.lrCenteringResult)\",\"\(asset.tbCenteringResult)\",\"\(asset.displayEngineGrade)\",\"\(assisted)\",\"\(asset.displayValue)\",\"\(asset.familyId ?? ScanLedger.absent)\",\"\(assignedFolderName)\",\"\(deck)\"\n"
             csvStringDocumentPayload.append(layoutRowString)

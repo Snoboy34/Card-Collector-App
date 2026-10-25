@@ -565,7 +565,13 @@ struct CardScannerView: View {
                                         }
                                     }
                                     Spacer()
-                                    VStack(alignment: .trailing) { Text(card.displayValue).bold().foregroundColor(.green); Text(card.displayGrade).font(.caption2).padding(4).background(Color.blue.opacity(0.1)).cornerRadius(4) }
+                                    VStack(alignment: .trailing) {
+                                        Text(card.displayValue).bold().foregroundColor(.green)
+                                        Text(card.displayGrade).font(.caption2).padding(4).background(Color.blue.opacity(0.1)).cornerRadius(4)
+                                        if let estimate = card.displayEstimate {
+                                            Text(estimate).font(.caption2).foregroundColor(.orange).multilineTextAlignment(.trailing)
+                                        }
+                                    }
                                 }
                             }
                             .listRowBackground(Color(.secondarySystemBackground))
@@ -648,6 +654,9 @@ struct CardScannerView: View {
                                 VStack(alignment: .leading) {
                                     Text(card.name).bold()
                                     Text(card.displayGrade).font(.caption2)
+                                    if let estimate = card.displayEstimate {
+                                        Text(estimate).font(.caption2).foregroundColor(.orange)
+                                    }
                                 }
                                 Spacer()
                                 Text(card.displayValue).foregroundColor(.green)
@@ -1142,26 +1151,17 @@ struct ScanLedgerRows: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal)
         VStack(spacing: 12) {
-            if ledger.centeringAssist?.displayLine != nil {
-                HStack {
-                    Text("Prediction")
-                    Spacer()
-                    Text(ledger.displayEngineGrade).bold().foregroundColor(.purple)
-                }
-                HStack {
-                    Text("Centering")
-                    Spacer()
-                    Text(ledger.displayGrade)
-                        .bold()
-                        .foregroundColor(.orange)
-                        .multilineTextAlignment(.trailing)
-                }
-            } else {
-                HStack {
-                    Text("Prediction")
-                    Spacer()
-                    Text(ledger.displayGrade).bold().foregroundColor(.purple)
-                }
+            HStack {
+                Text("Prediction")
+                Spacer()
+                Text(ledger.displayGrade).bold().foregroundColor(.purple)
+            }
+            if let estimate = ledger.displayEstimate {
+                Text(estimate)
+                    .font(.footnote)
+                    .foregroundColor(.orange)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .multilineTextAlignment(.trailing)
             }
             Divider()
             HStack {
