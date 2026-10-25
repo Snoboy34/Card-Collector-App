@@ -94,10 +94,10 @@ const storage = multer.diskStorage({
     cb(null, `${ts}_${safe}`);
   }
 });
-const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
+const upload = multer({ storage: storage, limits: { fileSize: 20 * 1024 * 1024 } }); // 20MB
 
 // Memory storage for the primary grading route (req.file.buffer expected)
-const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 /* =========================
    In-memory store (Phase 1)
@@ -154,6 +154,11 @@ function parseGradingOptions(body) {
   if (body.quadImageWidth) opts.quadImageWidth = Number(body.quadImageWidth);
   if (body.quadImageHeight) opts.quadImageHeight = Number(body.quadImageHeight);
   if (body.quadConfidence) opts.quadConfidence = Number(body.quadConfidence);
+  // 'full' is the 70 px/mm crop-then-warp. Anything else, including a missing
+  // field, keeps the capped native warp so saved scans grade as before.
+  if (body.centeringResolution === 'full' || body.centeringResolution === 'standard') {
+    opts.centeringResolution = body.centeringResolution;
+  }
   // Only a back changes the report. side=front is stored on the item and
   // is not passed into the grader, so a front grade matches a request with
   // no side field.
@@ -504,6 +509,8 @@ app.get('/api/stats', (req, res) => {
  *   scanId    optional client UUID (echoed on item.scanId and logged)
  *   cardQuad  optional JSON {tl,tr,br,bl} card corners in image pixels
  *             (quadImageWidth / quadImageHeight / quadConfidence alongside)
+ *   centeringResolution  optional "full" (70 px/mm crop-then-warp) or
+ *             "standard" (643×900). Omitted grades the capped native warp.
  *   name      ignored for identity (title is Unidentified until family match)
  *   cardType  optional SPORTS | TCG (reserved for Phase 3 corner templates)
  *   debug     optional "true" to attach metrology dumps

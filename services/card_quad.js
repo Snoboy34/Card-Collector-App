@@ -307,7 +307,11 @@ const REFINE_EXPAND_FRAC = 0.02;
  * @returns {{ quad: object, shiftPx: object, cutSteps: object }} cutSteps per edge:
  *   stepSize, runnerUpRatio (strongest separate step / chosen), runnerUpOffsetPx (output px)
  */
-function refineQuadToCut(src, quad, outW, outH) {
+function refineQuadToCut(src, quad, outW, outH, options) {
+  const refineOpts = options || {};
+  // Default 2 samples is the historical exclusion. A caller measuring at a
+  // finer warp passes a physical distance in that warp's pixels instead.
+  const runnerSep = refineOpts.runnerUpSeparationPx > 0 ? refineOpts.runnerUpSeparationPx : 2;
   const ex = Math.max(4, Math.round(outW * REFINE_EXPAND_FRAC));
   const ey = Math.max(4, Math.round(outH * REFINE_EXPAND_FRAC));
   const bigW = outW + 2 * ex;
@@ -355,12 +359,14 @@ function refineQuadToCut(src, quad, outW, outH) {
       if (step > bestStep) { bestStep = step; best = i; }
     }
     // Runner-up = strongest separate peak of |step| (a local maximum at
-    // least 2 samples from the chosen one), so the blurred shoulder of the
-    // chosen edge never counts as a second edge.
+    // least runnerSep samples from the chosen one), so the blurred shoulder
+    // of the chosen edge never counts as a second edge. The default
+    // separation is 2 samples. A finer warp passes the same 0.2 mm in its
+    // own pixels.
     let runner = -1;
     let runnerStep = 0;
     for (let i = 0; i < steps.length; i++) {
-      if (Math.abs(i - best) < 2) continue;
+      if (Math.abs(i - best) < runnerSep) continue;
       const left = i > 0 ? steps[i - 1] : -Infinity;
       const right = i < steps.length - 1 ? steps[i + 1] : -Infinity;
       if (steps[i] >= left && steps[i] >= right && steps[i] > runnerStep) { runnerStep = steps[i]; runner = i; }
@@ -406,7 +412,7 @@ function refineQuadToCut(src, quad, outW, outH) {
   const x1 = bigW - 1 - rightCut;
   const y0 = topCut;
   const y1 = bigH - 1 - bottomCut;
-  return {
+  const result = {
     quad: {
       tl: applyHomography(Hin, x0, y0),
       tr: applyHomography(Hin, x1, y0),
@@ -422,6 +428,27 @@ function refineQuadToCut(src, quad, outW, outH) {
     },
     cutSteps: cutSteps
   };
+  if (refineOpts.keepWarp) {
+    result.warp = big;
+    result.edgePx = { left: leftCut, right: rightCut, top: topCut, bottom: bottomCut };
+  }
+  return result;
+}
+
+/** Half-turn the already-rectified card so a 180° photo keeps its pixels. */
+function rotate180(src) {
+  const w = src.width;
+  const h = src.height;
+  const ch = src.channels || 1;
+  const out = Buffer.alloc(w * h * ch);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const s = ((h - 1 - y) * w + (w - 1 - x)) * ch;
+      const d = (y * w + x) * ch;
+      for (let c = 0; c < ch; c++) out[d + c] = src.data[s + c];
+    }
+  }
+  return { data: out, width: w, height: h, channels: ch };
 }
 
 function scaleQuad(points, sx, sy) {
@@ -452,6 +479,7 @@ module.exports = {
   warpPerspective,
   warpWithHomography,
   refineQuadToCut,
+  rotate180,
   REFINE_EXPAND_FRAC,
   scaleQuad,
   quadToJSON
