@@ -154,8 +154,9 @@ function parseGradingOptions(body) {
   if (body.quadImageWidth) opts.quadImageWidth = Number(body.quadImageWidth);
   if (body.quadImageHeight) opts.quadImageHeight = Number(body.quadImageHeight);
   if (body.quadConfidence) opts.quadConfidence = Number(body.quadConfidence);
-  // 'full' is the 70 px/mm crop-then-warp. Anything else, including a missing
-  // field, keeps the capped native warp so saved scans grade as before.
+  // 'full' measures the card at its own pixel height in the upload. Anything
+  // else, including a missing field, keeps the capped native warp so saved
+  // scans grade as before.
   if (body.centeringResolution === 'full' || body.centeringResolution === 'standard') {
     opts.centeringResolution = body.centeringResolution;
   }
@@ -216,6 +217,7 @@ function respondCardNotFound(res, args) {
     debugDir: report.debugArtifacts && report.debugArtifacts.dir ? report.debugArtifacts.dir : null,
     captureTilt: report.captureTilt || null,
     captureMetadata: args.captureMetadata || null,
+    capture: scanMetadata.captureFacts(args.body, args.captureMetadata, report),
     serverMetadata: args.serverMetadata || null,
     diagnostics: report.cardDetection || null
   });
@@ -509,13 +511,20 @@ app.get('/api/stats', (req, res) => {
  *   scanId    optional client UUID (echoed on item.scanId and logged)
  *   cardQuad  optional JSON {tl,tr,br,bl} card corners in image pixels
  *             (quadImageWidth / quadImageHeight / quadConfidence alongside)
- *   centeringResolution  optional "full" (70 px/mm crop-then-warp) or
- *             "standard" (643×900). Omitted grades the capped native warp.
+ *   centeringResolution  optional "full" (card's own pixels) or "standard"
+ *             (643×900). Omitted grades the capped native warp.
+ *   deviceModel, camera, captureWidth, captureHeight
+ *             optional flat fields from any phone app (see
+ *             docs/capture_contract.md). Stored on item.capture with the
+ *             px/mm measured here. A client px/mm is ignored.
+ *   capturePitch, captureRoll, captureLevel, side, deckId
+ *             tilt, which face, and the deck card, when the app has them.
  *   name      ignored for identity (title is Unidentified until family match)
  *   cardType  optional SPORTS | TCG (reserved for Phase 3 corner templates)
  *   debug     optional "true" to attach metrology dumps
- *   captureMetadata optional JSON {schema, app, device, camera, capture} from
- *             the native app; stored as item.captureMetadata (never graded).
+ *   captureMetadata optional JSON {schema, app, device, camera, capture};
+ *             stored as item.captureMetadata (never graded). The grade does
+ *             not read this JSON. Flat fields above are the contract.
  *             The server adds item.serverMetadata itself.
  *
  * Response: { ok: true, item } where item.gradingReport is the Judge payload
@@ -594,6 +603,7 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
       gradingReport: report,
       engine: ENGINE,
       captureMetadata: meta.captureMetadata,
+      capture: scanMetadata.captureFacts(req.body, meta.captureMetadata, report),
       serverMetadata: meta.serverMetadata,
       side: pair.side,
       pairId: pair.pairId,
@@ -661,6 +671,7 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
       gradingReport: report,
       engine: ENGINE,
       captureMetadata: meta.captureMetadata,
+      capture: scanMetadata.captureFacts(req.body, meta.captureMetadata, report),
       serverMetadata: meta.serverMetadata,
       side: pair.side,
       pairId: pair.pairId,

@@ -167,21 +167,26 @@ function mmDelta(got, keyMm) {
 /**
  * A front with approved answer-key millimetres is scored against those
  * millimetres. A missing phone edge is withheld and is not a wrong grade.
- * A published edge has to land within 0.1 mm, or 0.2 mm when the key marks
- * that edge fine-print. Null when this side is not judged by the key.
+ * Unknown px/mm keeps 0.1 mm, or 0.2 mm when the key marks that edge
+ * fine-print. A known capture uses the looser of that rule and what its
+ * pixels can support. A withheld resolution is not a wrong grade.
+ * Null when this side is not judged by the key.
  */
 function tdKeyFailure(cardId, side, result) {
   if (side !== 'front') return null;
   const sides = approvedKeySides(cardId);
   if (!sides) return null;
   const mm = (result && result.mm) || {};
+  const px = result && result.pxPerMm;
+  const scoreTol = require('../services/grading_engine').edgeScoreToleranceMm;
   const problems = [];
   KEY_EDGES.forEach(function (edge) {
     const row = sides[edge];
     if (!row) return;
     const got = mm[edge];
     if (got == null || !isFinite(Number(got))) return;
-    const tol = row.finePrint === true ? FINE_PRINT_TOLERANCE_MM : SOLID_TOLERANCE_MM;
+    const tol = scoreTol(px, row.finePrint === true);
+    if (tol == null) return;
     const delta = mmDelta(got, row.mm);
     if (delta > tol) {
       problems.push(edge + ' ' + Number(got).toFixed(3) + ' mm vs key ' + row.mm.toFixed(3) + ' (±' + tol.toFixed(1) + ')');
@@ -310,7 +315,9 @@ async function deckStep(o) {
     step: 'deck_report',
     status: failures.length ? 'FAIL' : 'PASS',
     detail: scanned.length + ' deck cards scanned · pass stored ' + stored + ' / candidate ' + cand + ' of ' + judged.length +
-      ' · low-confidence cut ' + rep.lowConfidenceCut.length,
+      ' · low-confidence cut ' + rep.lowConfidenceCut.length +
+      ' · capture groups ' + ((rep.captureGroups && rep.captureGroups.length) || 0),
+    notes: (rep.captureGroups || []).map(function (g) { return g.line; }),
     failures: failures
   };
 }
@@ -353,6 +360,7 @@ async function gate(options) {
   steps.forEach(function (s) {
     // Indented so a suite that prints a gate table is not miscounted as PASS/FAIL lines.
     lines.push('  ' + pad(s.status, 5) + pad(s.step, 28) + s.detail);
+    (s.notes || []).forEach(function (n) { lines.push('        ' + n); });
     (s.failures || []).forEach(function (f) { lines.push('        ' + f); });
   });
   lines.push(ok ? 'GATE PASS' : 'GATE FAIL');
