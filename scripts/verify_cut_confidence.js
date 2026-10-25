@@ -2,8 +2,9 @@
  * scripts/verify_cut_confidence.js
  * Cut-edge confidence. An edge is marked low-confidence, in the grade output
  * and the deck report, when its runner-up is either ≥60% of the chosen step
- * within 3 px, or ≥80% anywhere in the refine search. Flag only: the chosen
- * cut, widths, CEN, and final score are computed exactly as before.
+ * within 3 px, or ≥80% anywhere in the refine search. Within 3 px the width
+ * stays and CEN is the normal lookup. Farther than 3 px, that edge's width
+ * is withheld and CEN is not scored from it.
  * Run: node scripts/verify_cut_confidence.js
  */
 'use strict';
@@ -97,10 +98,15 @@ async function run() {
   assert('0.6 mm band flag names the edge', (wide.centeringDiagnostics.edgeFlags || []).some(function (f) {
     return /^right: cut edge low confidence/.test(f);
   }), wide.centeringDiagnostics.edgeFlags);
-  assert('flag only: 0.6 mm band still reports the measured right border and CEN',
-    wide.centeringMetrics.borderWidthsMm.right != null && wide.subGrades.centering != null &&
-    wide.subGrades.centering === g.scoreCenteringPhase(wide.centeringMetrics.leftRightRatio, wide.centeringMetrics.topBottomRatio).score,
+  assert('a second cut farther than 3 px withholds that border',
+    wide.centeringMetrics.borderWidthsMm.right == null && wide.subGrades.centering == null,
     { right: wide.centeringMetrics.borderWidthsMm.right, cen: wide.subGrades.centering });
+  assert('the withhold names the second edge', (wide.centeringDiagnostics.edgeFlags || []).some(function (f) {
+    return /^right: border withheld/.test(f);
+  }), wide.centeringDiagnostics.edgeFlags);
+  assert('the other borders stay on the 0.6 mm band', ['left', 'top', 'bottom'].every(function (e) {
+    return Math.abs(wide.centeringMetrics.borderWidthsMm[e] - clean.centeringMetrics.borderWidthsMm[e]) < 0.05;
+  }), { wide: wide.centeringMetrics.borderWidthsMm, clean: clean.centeringMetrics.borderWidthsMm });
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cut-conf-'));
   const dataDir = path.join(root, 'data');
