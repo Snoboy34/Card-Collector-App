@@ -9,7 +9,8 @@ import CoreImage
 /// The hosting UIView does not take hits so ScrollView and tab bar stay tappable.
 /// `AVCapturePhotoOutput` is a separate still path — one JPEG per tap.
 /// The still is the wide camera at 1×, JPEG, quality priority, at the
-/// largest still size that camera reports.
+/// largest still size that camera reports. The iPhone 13 Pro wide camera
+/// reports 4032×3024. A larger still is used when this camera offers one.
 public struct LiveCameraView: UIViewRepresentable {
 
     public struct StillCapture {
@@ -114,8 +115,8 @@ public struct LiveCameraView: UIViewRepresentable {
             recordingSession.beginConfiguration()
             recordingSession.sessionPreset = .photo
 
-            // Physical wide camera, not the virtual multi-camera whose 1× is
-            // the ultrawide. The still uses the largest size this sensor offers.
+            // Physical wide camera. The still uses the largest size this
+            // sensor offers. On the iPhone 13 Pro that size is 4032×3024.
             guard let primaryBackCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
                   let hardwareInputNode = try? AVCaptureDeviceInput(device: primaryBackCamera) else {
                 print("Failed to acquire connection to rear camera hardware.")
@@ -263,6 +264,8 @@ public struct LiveCameraView: UIViewRepresentable {
         }
 
         /// Raise the output cap to the largest size this wide camera offers.
+        /// The list comes from the camera. iPhone 13 Pro (`iPhone14,2`)
+        /// reports 4032×3024 as that maximum.
         private func applyMaximumStillSize(to output: AVCapturePhotoOutput) {
             let sizes = output.supportedMaxPhotoDimensions.map {
                 StillPhotoSize.Pixels(width: Int($0.width), height: Int($0.height))

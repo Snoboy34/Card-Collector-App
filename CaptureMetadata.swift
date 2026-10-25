@@ -216,7 +216,8 @@ enum CaptureMetadata {
         return root
     }
 
-    /// e.g. "iPhone15,2" — the marketing name is not available on device.
+    /// e.g. "iPhone14,2". The server maps a known identifier to a marketing
+    /// name. That name is not available on the phone.
     static func hardwareModel() -> String {
         var info = utsname()
         uname(&info)
@@ -248,12 +249,20 @@ enum CaptureMetadata {
         expect(CameraFacts.codecName(Data([0xFF, 0xD8, 0xFF, 0xE0])) == "jpeg", "JPEG magic is jpeg")
         expect(CameraFacts.codecName(Data([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63])) == "heif", "ftyp marks heif")
         expect(CameraFacts.codecName(Data([0x89, 0x50])) == "unknown", "a short header is unknown")
+        // iPhone 13 Pro (iPhone14,2) wide camera. 4032×3024 is its largest still.
         let offered = [
+            StillPhotoSize.Pixels(width: 1920, height: 1440),
+            StillPhotoSize.Pixels(width: 4032, height: 3024)
+        ]
+        let deviceMax = StillPhotoSize.largest(offered)
+        expect(deviceMax?.width == 4032 && deviceMax?.height == 3024, "iPhone 13 Pro maximum is 4032×3024")
+        // 8064×6048 is the iPhone 14 Pro 48 MP still. It wins only when this camera offers it.
+        let pro = [
             StillPhotoSize.Pixels(width: 4032, height: 3024),
             StillPhotoSize.Pixels(width: 8064, height: 6048)
         ]
-        let deviceMax = StillPhotoSize.largest(offered)
-        expect(deviceMax?.width == 8064 && deviceMax?.height == 6048, "device maximum is the larger still")
+        let proMax = StillPhotoSize.largest(pro)
+        expect(proMax?.width == 8064 && proMax?.height == 6048, "a camera that offers 8064×6048 uses that still")
         expect(StillPhotoSize.largest([]) == nil, "no offered size leaves the maximum unset")
 
         let facts = CameraFacts(
