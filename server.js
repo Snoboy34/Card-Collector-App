@@ -206,7 +206,7 @@ function respondCardNotFound(res, args) {
   const report = args.report;
   const reason = report.cardNotFoundReason || 'card not found';
   const label = labelFromCapture(args.scanId, args.body);
-  logFailedScan({
+  const entry = {
     scanId: args.scanId,
     timestamp: new Date().toISOString(),
     engine: ENGINE,
@@ -220,7 +220,9 @@ function respondCardNotFound(res, args) {
     capture: scanMetadata.captureFacts(args.body, args.captureMetadata, report),
     serverMetadata: args.serverMetadata || null,
     diagnostics: report.cardDetection || null
-  });
+  };
+  scanMetadata.applyStoredDeviceName(entry);
+  logFailedScan(entry);
   console.log('[grade] scanId=' + args.scanId + ' card not found: ' + reason);
   return res.status(422).json({
     ok: false,
@@ -610,6 +612,7 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
       createdAt: new Date().toISOString()
     };
     scanMetadata.stampCaptureTime(item);
+    scanMetadata.applyStoredDeviceName(item);
 
     console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
     const label = labelFromCapture(scanId, req.body);
@@ -678,6 +681,7 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
       createdAt: new Date().toISOString()
     };
     scanMetadata.stampCaptureTime(item);
+    scanMetadata.applyStoredDeviceName(item);
 
     console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
     const label = labelFromCapture(scanId, req.body);
@@ -1221,8 +1225,9 @@ function refreshStoredAssists() {
   const repaired = centeringAssist.repairRecord366A0E19(db, console.log, backup);
   repairKnownLabels();
   const stamped = scanMetadata.stampStoredCaptureTimes(db, console.log);
+  const named = scanMetadata.stampStoredDeviceNames(db, console.log);
   const changed = centeringAssist.rescoreDatabase(db);
-  if (!repaired && !changed && !stamped) return;
+  if (!repaired && !changed && !stamped && !named) return;
   saveDatabase(db);
   if (changed) {
     console.log('[centering-assist] rescored ' + changed + ' stored assist' + (changed === 1 ? '' : 's'));

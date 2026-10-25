@@ -53,8 +53,13 @@ The phone shows this guidance:
 4. Do not use a pattern or a glossy surface. Patterns and glare look like extra edges.
 - **Lighting:** same room, same lamps, diffuse, no direct glare on the card.
   Note anything that changed.
-- **Phone:** same phone, held level (green bubble), card flat and taped, the
-  whole card inside the neon frame with background showing on every side.
+- **Phone:** same phone, held level (green bubble), card flat and taped.
+  The scanning phone is an iPhone 13 Pro (`iPhone14,2`), wide camera,
+  4032×3024. Hold it so the card nearly fills the neon frame and background
+  still shows on every side. That upload is 1748×2448. A card filling it is
+  27.5 px/mm, the ±0.2 mm tier. A card filling the 4032 px long side is
+  45.4 px/mm and clears 30 px/mm. The window is 2448 px tall, short of the
+  2667 px that line needs, so a closer hold stays on ±0.2 mm.
 
 Per card:
 

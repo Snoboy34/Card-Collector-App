@@ -42,6 +42,8 @@ async function cardJpeg(noCard) {
   return { jpeg: jpeg, cardQuad: noCard ? null : JSON.stringify(quad) };
 }
 
+// iPhone15,2 is an iPhone 14 Pro. 8064×6048 is that phone's 48 MP still.
+// The scanning phone is iPhone14,2 (iPhone 13 Pro) at 4032×3024.
 const NATIVE_META = {
   schema: 1,
   app: { version: '1.4', build: '57', bundleId: 'com.example.judge' },
@@ -90,8 +92,37 @@ async function run() {
     facts.captureHeight === 3000 && facts.pxPerMm == null, facts);
   const fromMeta = sm.captureFacts({}, p.metadata, null);
   assert('captureMetadata fills a missing flat field',
-    fromMeta.deviceModel === 'iPhone15,2' && fromMeta.camera === 'builtInWideAngleCamera' &&
+    fromMeta.deviceModel === 'iPhone 14 Pro' && fromMeta.camera === 'builtInWideAngleCamera' &&
     fromMeta.captureWidth === 3024 && fromMeta.captureHeight === 4032, fromMeta);
+  assert('iPhone14,2 is the iPhone 13 Pro', sm.deviceName('iPhone14,2') === 'iPhone 13 Pro');
+  assert('iPhone15,2 is the iPhone 14 Pro', sm.deviceName('iPhone15,2') === 'iPhone 14 Pro');
+  assert('an Android marketing name passes through', sm.deviceName('Pixel 8') === 'Pixel 8');
+  assert('an unmapped Android model code passes through', sm.deviceName('SM-S911U') === 'SM-S911U');
+  const owner = { captureMetadata: { device: { model: 'iPhone14,2', systemName: 'iOS' } } };
+  assert('stamp writes the iPhone 13 Pro name and keeps the identifier',
+    sm.applyStoredDeviceName(owner) === true &&
+    owner.captureMetadata.device.model === 'iPhone 13 Pro' &&
+    owner.captureMetadata.device.modelIdentifier === 'iPhone14,2' &&
+    owner.capture.deviceModel === 'iPhone 13 Pro', owner);
+  assert('stamp is a no-op the second time', sm.applyStoredDeviceName(owner) === false);
+  const android = { captureMetadata: { device: { model: 'Pixel 8' } }, capture: { deviceModel: 'Pixel 8' } };
+  assert('a stored Android name is left as reported',
+    sm.applyStoredDeviceName(android) === false && android.capture.deviceModel === 'Pixel 8' &&
+    android.captureMetadata.device.model === 'Pixel 8' && !android.captureMetadata.device.modelIdentifier, android);
+  const code = { capture: { deviceModel: 'SM-S911U' } };
+  assert('an Android model code stays on the scan',
+    sm.applyStoredDeviceName(code) === false && code.capture.deviceModel === 'SM-S911U', code);
+  const namedDb = { inventory: [
+    { scanId: 'a', captureMetadata: { device: { model: 'iPhone14,2' } } },
+    { scanId: 'b', captureMetadata: { device: { model: 'SM-S911U' } }, capture: { deviceModel: 'SM-S911U' } }
+  ] };
+  assert('inventory stamp renames the known phone once', sm.stampStoredDeviceNames(namedDb, function () {}) === 1 &&
+    namedDb.inventory[0].capture.deviceModel === 'iPhone 13 Pro' &&
+    namedDb.inventory[0].captureMetadata.device.modelIdentifier === 'iPhone14,2');
+  assert('a second inventory stamp changes nothing', sm.stampStoredDeviceNames(namedDb, function () {}) === 0);
+  assert('an Android inventory row stays as reported',
+    namedDb.inventory[1].capture.deviceModel === 'SM-S911U' &&
+    namedDb.inventory[1].captureMetadata.device.model === 'SM-S911U');
   const measured = sm.captureFacts({ pxPerMm: '70' }, null, {
     cardDetection: { achievedPxPerMm: 22.4, cardSizePx: { heightPx: 1991 } }
   });
@@ -196,17 +227,24 @@ async function run() {
     assert('422 path: failed-scans line carries both metadata blocks', noCard.status === 422 && failed.scanId === noCard.body.scanId &&
       failed.captureMetadata && failed.captureMetadata.app.build === '57' && failed.serverMetadata &&
       failed.serverMetadata.uploadBytes > 0, failed);
-    assert('422 path stores capture facts from metadata', failed.capture && failed.capture.deviceModel === 'iPhone15,2' &&
+    assert('422 path stores capture facts from metadata', failed.capture && failed.capture.deviceModel === 'iPhone 14 Pro' &&
       failed.capture.camera === 'builtInWideAngleCamera', failed.capture);
+    assert('422 path keeps the identifier beside the marketing name',
+      failed.captureMetadata.device.model === 'iPhone 14 Pro' &&
+      failed.captureMetadata.device.modelIdentifier === 'iPhone15,2', failed.captureMetadata.device);
 
     const dump = require('./dump_scans');
     const text = dump.formatGraded(saved);
-    assert('dump shows the capture line', /capture iPhone15,2 iOS 18\.1  app 1\.4 \(57\)  photo 3024×4032 of max 6048×8064 \(12mp, jpeg\)  ISO 80 1\/120s  zoom 1\.00  auto  background unspecified/.test(text), text);
+    assert('saved scan keeps the identifier beside the marketing name',
+      saved.captureMetadata.device.model === 'iPhone 14 Pro' &&
+      saved.captureMetadata.device.modelIdentifier === 'iPhone15,2' &&
+      saved.capture.deviceModel === 'iPhone 14 Pro', saved.captureMetadata.device);
+    assert('dump shows the capture line', /capture iPhone 14 Pro iOS 18\.1  app 1\.4 \(57\)  photo 3024×4032 of max 6048×8064 \(12mp, jpeg\)  ISO 80 1\/120s  zoom 1\.00  auto  background unspecified/.test(text), text);
     assert('dump shows a recorded surface', /background pink/.test(dump.formatGraded(
       JSON.parse(fs.readFileSync(DB_PATH, 'utf8')).inventory.find(function (x) { return x.scanId === pinkGrade.body.item.scanId; })
     )));
     assert('dump shows the server line', /server  \d+\.\d\d MB jpeg 803×1060 .*grade \d+ms  sha [0-9a-f]{12}  LAN/.test(text), text);
-    assert('dump of a failed scan shows metadata too', /capture iPhone15,2/.test(dump.formatFailed(failed)));
+    assert('dump of a failed scan shows the marketing name', /capture iPhone 14 Pro/.test(dump.formatFailed(failed)));
   } finally {
     server.close();
     fs.rmSync(tmp, { recursive: true, force: true });

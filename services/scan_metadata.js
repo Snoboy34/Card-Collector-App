@@ -188,6 +188,41 @@ function textField(v) {
   return s.slice(0, MAX_STRING);
 }
 
+/**
+ * Machine identifier → the name an operator reads. Apple's identifier is
+ * not the marketing generation: iPhone14,2 is the iPhone 13 Pro. A string
+ * that is not in this table is stored as the operating system reported it.
+ * Android model names (Pixel 8, SM-S911U) are already that report, so they
+ * pass through until a code needs a row of its own.
+ */
+const DEVICE_NAMES = {
+  'iPhone14,2': 'iPhone 13 Pro',
+  'iPhone14,3': 'iPhone 13 Pro Max',
+  'iPhone14,4': 'iPhone 13 mini',
+  'iPhone14,5': 'iPhone 13',
+  'iPhone14,6': 'iPhone SE (3rd generation)',
+  'iPhone14,7': 'iPhone 14',
+  'iPhone14,8': 'iPhone 14 Plus',
+  'iPhone15,2': 'iPhone 14 Pro',
+  'iPhone15,3': 'iPhone 14 Pro Max',
+  'iPhone15,4': 'iPhone 15',
+  'iPhone15,5': 'iPhone 15 Plus',
+  'iPhone16,1': 'iPhone 15 Pro',
+  'iPhone16,2': 'iPhone 15 Pro Max',
+  'iPhone17,1': 'iPhone 16 Pro',
+  'iPhone17,2': 'iPhone 16 Pro Max',
+  'iPhone17,3': 'iPhone 16',
+  'iPhone17,4': 'iPhone 16 Plus',
+  'iPhone17,5': 'iPhone 16e'
+};
+
+/** Marketing name when the table knows the identifier, otherwise the OS string. */
+function deviceName(reported) {
+  const raw = textField(reported);
+  if (!raw) return null;
+  return DEVICE_NAMES[raw] || raw;
+}
+
 function positiveInt(v) {
   const n = Number(v);
   if (!isFinite(n) || n < 1) return null;
@@ -212,7 +247,8 @@ function captureFacts(body, metadata, report, stored) {
   const capture = meta.capture && typeof meta.capture === 'object' ? meta.capture : {};
   const b = body && typeof body === 'object' ? body : {};
   const keep = stored && typeof stored === 'object' ? stored : {};
-  const deviceModel = textField(b.deviceModel) || textField(keep.deviceModel) || textField(device.model);
+  const deviceModel = deviceName(b.deviceModel) || deviceName(keep.deviceModel) ||
+    deviceName(device.modelIdentifier) || deviceName(device.model);
   const cameraName = textField(b.camera) || textField(keep.camera) || textField(camera.deviceType);
   const captureWidth = positiveInt(b.captureWidth) || positiveInt(keep.captureWidth) ||
     positiveInt(capture.uploadWidth) || positiveInt(camera.photoWidth);
@@ -233,8 +269,56 @@ function captureFacts(body, metadata, report, stored) {
   };
 }
 
+/**
+ * Store the operator-facing name. A known identifier moves to
+ * device.modelIdentifier and device.model becomes the name. item.capture
+ * gets that same name. An Android string that is already a name stays.
+ * A flat capture.deviceModel that is already a name is left alone.
+ * @returns {boolean} true when this item changed
+ */
+function applyStoredDeviceName(item) {
+  if (!item || typeof item !== 'object') return false;
+  let changed = false;
+  const meta = item.captureMetadata;
+  const device = meta && meta.device && typeof meta.device === 'object' ? meta.device : null;
+  if (device && DEVICE_NAMES[device.model]) {
+    if (!device.modelIdentifier) device.modelIdentifier = device.model;
+    const named = deviceName(device.modelIdentifier) || deviceName(device.model);
+    if (named && device.model !== named) {
+      device.model = named;
+      changed = true;
+    }
+  }
+  const reported = (item.capture && item.capture.deviceModel) ||
+    (device && (device.modelIdentifier || device.model));
+  const name = deviceName(reported);
+  if (!name) return changed;
+  if (!item.capture || typeof item.capture !== 'object') item.capture = {};
+  if (item.capture.deviceModel !== name) {
+    item.capture.deviceModel = name;
+    changed = true;
+  }
+  return changed;
+}
+
+/**
+ * Correct device names already on disk. A second pass logs nothing.
+ */
+function stampStoredDeviceNames(db, emit) {
+  const log = typeof emit === 'function' ? emit : function () {};
+  let count = 0;
+  ((db && db.inventory) || []).forEach(function (item) {
+    if (!applyStoredDeviceName(item)) return;
+    count += 1;
+    const name = item.capture && item.capture.deviceModel;
+    log('[capture] device scanId=' + (item.scanId || item.id || '') + ' model ' + name);
+  });
+  return count;
+}
+
 module.exports = {
   parseCaptureMetadata, buildServerMetadata, normalizeBackground, captureFacts,
+  deviceName, applyStoredDeviceName, stampStoredDeviceNames,
   isCaptureInstant, captureInstantFrom, stampCaptureTime, stampStoredCaptureTimes,
-  CAPTURE_GROUPS, BACKGROUNDS, MAX_JSON_BYTES
+  CAPTURE_GROUPS, BACKGROUNDS, MAX_JSON_BYTES, DEVICE_NAMES
 };
