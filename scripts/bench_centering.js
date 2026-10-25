@@ -7,7 +7,9 @@
  *   warp       warpPerspective alone: 643×900 vs the native centering size
  *   refine     refineQuadToCut at 643×900 vs at native size
  *   locate     locateCard (decode + quad + refine + warp[s])
- *   grade      full gradeBuffer, centeringResolution standard vs native
+ *   grade      full gradeBuffer, centeringResolution standard vs native vs full
+ * `full` is the opt-in 70 px/mm crop-then-warp (one shared warp). The default
+ * grade path is still native. Time that column on the iMac before a rescan.
  * Read-only: no scanId/scans root is passed; database.json and uploads are
  * only read.
  *
@@ -117,8 +119,11 @@ async function benchCentering(options) {
     const refStd = await timeIt(reps, function () { return cardQuad.refineQuadToCut(decoded, quad, cardQuad.WARP_WIDTH, cardQuad.WARP_HEIGHT); });
     const refNat = await timeIt(reps, function () { return cardQuad.refineQuadToCut(decoded, quad, cw.width, cw.height); });
 
+    const locFull = await timeIt(reps, function () { return engine.locateCard(buffer, optsFor('full')); });
     const gradeStd = await timeIt(reps, function () { return quietly(function () { return engine.gradeBuffer(buffer, Object.assign({ alignmentCrop: true, debug: false }, optsFor('standard'))); }); });
     const gradeNat = await timeIt(reps, function () { return quietly(function () { return engine.gradeBuffer(buffer, Object.assign({ alignmentCrop: true, debug: false }, optsFor('native'))); }); });
+    const gradeFull = await timeIt(reps, function () { return quietly(function () { return engine.gradeBuffer(buffer, Object.assign({ alignmentCrop: true, debug: false }, optsFor('full'))); }); });
+    const fullWarp = locFull.result && locFull.result.detection && locFull.result.detection.centeringWarp;
 
     rows.push({
       scanId: id,
@@ -126,8 +131,9 @@ async function benchCentering(options) {
       warpSize: cw.width + '×' + cw.height,
       warpMs: { standard: warpStd.ms, native: warpNat.ms },
       refineMs: { standard: refStd.ms, native: refNat.ms },
-      locateMs: { standard: locStd.ms, native: locNat.ms },
-      gradeMs: { standard: gradeStd.ms, native: gradeNat.ms }
+      locateMs: { standard: locStd.ms, native: locNat.ms, full: locFull.ms },
+      gradeMs: { standard: gradeStd.ms, native: gradeNat.ms, full: gradeFull.ms },
+      fullWarp: fullWarp ? (fullWarp.mode + ' ' + fullWarp.width + '×' + fullWarp.height + ' ' + fullWarp.pxPerMm + ' px/mm') : 'full locate failed'
     });
   }
 
@@ -147,6 +153,7 @@ async function benchCentering(options) {
       pad(ms(r.locateMs.standard) + ' / ' + ms(r.locateMs.native), 13) +
       pad(ms(r.gradeMs.standard) + ' / ' + ms(r.gradeMs.native), 13) +
       '+' + ms(r.gradeMs.native - r.gradeMs.standard));
+    lines.push(pad('', 10) + 'full ' + pad(ms(r.locateMs.full) + ' / ' + ms(r.gradeMs.full), 16) + 'locate / grade ms   ' + r.fullWarp);
   });
   skipped.forEach(function (s) { lines.push(pad(s.scanId.slice(0, 8).toUpperCase(), 10) + 'skipped: ' + s.reason); });
 
@@ -155,6 +162,8 @@ async function benchCentering(options) {
   ['warpMs', 'refineMs', 'locateMs', 'gradeMs'].forEach(function (k) {
     summary[k] = { standard: med(k, 'standard'), native: med(k, 'native') };
   });
+  summary.locateMs.full = med('locateMs', 'full');
+  summary.gradeMs.full = med('gradeMs', 'full');
   summary.gradeExtraMs = median(rows.map(function (r) { return r.gradeMs.native - r.gradeMs.standard; }));
   summary.warpSize = rows.length ? rows[Math.floor(rows.length / 2)].warpSize : null;
   lines.push('');
@@ -163,7 +172,11 @@ async function benchCentering(options) {
     '   locate ' + ms(summary.locateMs.standard) + ' → ' + ms(summary.locateMs.native) +
     '   grade ' + ms(summary.gradeMs.standard) + ' → ' + ms(summary.gradeMs.native) +
     '  (+' + ms(summary.gradeExtraMs) + ' per scan)');
+  lines.push('FULL 70 px/mm shared warp, median ms:  locate ' + ms(summary.locateMs.full) +
+    '   grade ' + ms(summary.gradeMs.full) +
+    '  (default grade path is still the native column)');
   lines.push('Native locate = standard locate + native-size refine + one extra native-size warp.');
+  lines.push('Full locate = native locate without its second warp, then one 70 px/mm warp of the card crop.');
   return { text: lines.join('\n'), rows: rows, skipped: skipped, summary: summary };
 }
 

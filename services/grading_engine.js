@@ -77,7 +77,7 @@ const phoneFrame = require('./phone_frame');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.24-thin-cut';
+const ENGINE_VERSION = '2026.10.24-full-res';
 const FINE_PRINT_LABEL = 'fine-print, ±0.2 mm';
 const FINE_PRINT_TOLERANCE_MM = 0.2;
 const SOLID_EDGE_TOLERANCE_MM = 0.1;
@@ -2455,6 +2455,13 @@ const CARD_HEIGHT_MM = 88.9;
 // (≈10.1 px/mm). Other detectors keep 643×900: their thresholds are tuned there.
 const CENTERING_WARP_MIN_HEIGHT = 900;
 const CENTERING_WARP_MAX_HEIGHT = 2400;
+// Opt-in centering warp. 70 px/mm on the nominal 88.9 mm card is 6223 px
+// tall. Old uploads stay on the capped native warp unless the request asks
+// for this. The runner-up cut must sit 0.2 mm off the chosen step: at 70
+// px/mm the historical 2-sample exclusion would be 0.03 mm and the blur of
+// the real edge would count as a second edge.
+const FULL_CENTERING_PX_PER_MM = 70;
+const REFINE_RUNNER_UP_SEPARATION_MM = 0.2;
 // A second cut-like step means the refined cut could be either one. Flag the
 // edge (the chosen cut and every measured value stay as they are) when:
 //   close — runner-up ≥ 60% of the chosen step and within 3 px, or
@@ -2670,7 +2677,175 @@ async function serverDetectQuad(decoded) {
  *
  * @returns {Promise<{ found: boolean, detection: object, warped?: object }>}
  */
+function swapEdgeName(name) {
+  if (name === 'left') return 'right';
+  if (name === 'right') return 'left';
+  if (name === 'top') return 'bottom';
+  if (name === 'bottom') return 'top';
+  return name;
+}
+
+function swapEdges180(obj) {
+  if (!obj) return obj;
+  const out = {};
+  Object.keys(obj).forEach(function (k) { out[swapEdgeName(k)] = obj[k]; });
+  return out;
+}
+
+/** Copy the tightened card out of the one expanded warp. Integer crop: the
+ *  half-level cut is within half a pixel, about 0.007 mm at 70 px/mm. */
+function extractTightCard(warp, edgePx) {
+  const x0 = Math.max(0, Math.min(warp.width - 2, Math.round(edgePx.left)));
+  const y0 = Math.max(0, Math.min(warp.height - 2, Math.round(edgePx.top)));
+  const x1 = Math.max(x0 + 1, Math.min(warp.width - 1, Math.round(warp.width - 1 - edgePx.right)));
+  const y1 = Math.max(y0 + 1, Math.min(warp.height - 1, Math.round(warp.height - 1 - edgePx.bottom)));
+  const w = x1 - x0 + 1;
+  const h = y1 - y0 + 1;
+  const ch = warp.channels || 3;
+  const out = Buffer.alloc(w * h * ch);
+  const row = w * ch;
+  for (let y = 0; y < h; y++) {
+    const src = ((y0 + y) * warp.width + x0) * ch;
+    warp.data.copy(out, y * row, src, src + row);
+  }
+  return { data: out, width: w, height: h, channels: ch };
+}
+
+/**
+ * Card bounding box, plus the refine margin, from the upright full-resolution
+ * photo. The returned buffer is only that crop.
+ */
+async function uprightCardCrop(buffer, photoQuad, photoW, photoH) {
+  const xs = [photoQuad.tl[0], photoQuad.tr[0], photoQuad.br[0], photoQuad.bl[0]];
+  const ys = [photoQuad.tl[1], photoQuad.tr[1], photoQuad.br[1], photoQuad.bl[1]];
+  const minX = Math.min.apply(null, xs);
+  const maxX = Math.max.apply(null, xs);
+  const minY = Math.min.apply(null, ys);
+  const maxY = Math.max.apply(null, ys);
+  const padX = Math.max(8, (maxX - minX) * cardQuad.REFINE_EXPAND_FRAC);
+  const padY = Math.max(8, (maxY - minY) * cardQuad.REFINE_EXPAND_FRAC);
+  let left = Math.floor(minX - padX);
+  let top = Math.floor(minY - padY);
+  let right = Math.ceil(maxX + padX);
+  let bottom = Math.ceil(maxY + padY);
+  left = Math.max(0, Math.min(photoW - 1, left));
+  top = Math.max(0, Math.min(photoH - 1, top));
+  right = Math.max(left + 1, Math.min(photoW, right));
+  bottom = Math.max(top + 1, Math.min(photoH, bottom));
+  const width = right - left;
+  const height = bottom - top;
+  if (width < 8 || height < 8) return null;
+  const extracted = await sharp(buffer, { failOnError: false })
+    .rotate()
+    .extract({ left: left, top: top, width: width, height: height })
+    .removeAlpha()
+    .toColourspace('srgb')
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return {
+    data: extracted.data,
+    width: extracted.info.width,
+    height: extracted.info.height,
+    channels: extracted.info.channels,
+    left: left,
+    top: top
+  };
+}
+
+/**
+ * One perspective warp at 70 px/mm. The cut is found on that warp and the
+ * centering raster is the tightened card cropped out of it.
+ * @returns {Promise<object|null>}
+ */
+async function buildFullCenteringWarp(buffer, located) {
+  const photoQ = located.detection && located.detection.quad;
+  const photoW = located.detection.photoWidth;
+  const photoH = located.detection.photoHeight;
+  if (!photoQ || !photoW || !photoH) return null;
+  const crop = await uprightCardCrop(buffer, photoQ, photoW, photoH);
+  if (!crop) return null;
+  const centerH = Math.round(CARD_HEIGHT_MM * FULL_CENTERING_PX_PER_MM);
+  const centerW = Math.round(centerH * cardQuad.WARP_WIDTH / cardQuad.WARP_HEIGHT);
+  const q = {
+    tl: [photoQ.tl[0] - crop.left, photoQ.tl[1] - crop.top],
+    tr: [photoQ.tr[0] - crop.left, photoQ.tr[1] - crop.top],
+    br: [photoQ.br[0] - crop.left, photoQ.br[1] - crop.top],
+    bl: [photoQ.bl[0] - crop.left, photoQ.bl[1] - crop.top]
+  };
+  const separationPx = REFINE_RUNNER_UP_SEPARATION_MM * (centerH / CARD_HEIGHT_MM);
+  const refined = cardQuad.refineQuadToCut(crop, q, centerW, centerH, {
+    runnerUpSeparationPx: separationPx,
+    keepWarp: true
+  });
+  if (!refined.warp || !refined.edgePx) return null;
+  const image = extractTightCard(refined.warp, refined.edgePx);
+  const minH = Math.round(centerH * 0.9);
+  if (image.height < minH || image.width < 8) return null;
+  const scale = image.height / cardQuad.WARP_HEIGHT;
+  const edgeRefinementPx = {
+    left: round2(refined.shiftPx.left / scale),
+    right: round2(refined.shiftPx.right / scale),
+    top: round2(refined.shiftPx.top / scale),
+    bottom: round2(refined.shiftPx.bottom / scale)
+  };
+  const edgeCutConfidence = cutConfidence(refined.cutSteps, scale);
+  const lowConfidenceEdges = ['left', 'right', 'top', 'bottom'].filter(function (e) {
+    return edgeCutConfidence[e].lowConfidence;
+  });
+  return {
+    image: image,
+    edgeRefinementPx: edgeRefinementPx,
+    edgeCutConfidence: edgeCutConfidence,
+    lowConfidenceEdges: lowConfidenceEdges,
+    warpInfo: {
+      mode: 'full',
+      width: image.width,
+      height: image.height,
+      pxPerMm: round2(image.height / CARD_HEIGHT_MM),
+      scale: Math.round(scale * 10000) / 10000,
+      sharedWarp: true,
+      runnerUpSeparationMm: REFINE_RUNNER_UP_SEPARATION_MM
+    }
+  };
+}
+
+async function locateCardFull(buffer, options) {
+  const located = await locateCardResolved(buffer, Object.assign({}, options, {
+    centeringResolution: 'native',
+    skipCenteringWarp: true
+  }));
+  if (!located.found) return located;
+  const nativeWarp = located.detection.centeringWarp;
+  try {
+    const full = await buildFullCenteringWarp(buffer, located);
+    if (full) {
+      located.centeringWarped = full.image;
+      located.detection.centeringWarp = full.warpInfo;
+      located.detection.edgeRefinementPx = full.edgeRefinementPx;
+      located.detection.edgeCutConfidence = full.edgeCutConfidence;
+      located.detection.lowConfidenceEdges = full.lowConfidenceEdges;
+      located.detection.fullCentering = 'shared-warp';
+      return located;
+    }
+    located.detection.fullCentering = 'native fallback';
+  } catch (err) {
+    located.detection.fullCentering = 'native fallback: ' + (err && err.message ? err.message : String(err));
+  }
+  if (!located.centeringWarped) {
+    located.centeringWarped = (nativeWarp.width === located.warped.width && nativeWarp.height === located.warped.height)
+      ? located.warped
+      : cardQuad.warpPerspective(located.decoded, located.quad, nativeWarp.width, nativeWarp.height);
+  }
+  return located;
+}
+
 async function locateCard(buffer, options) {
+  const opts = options || {};
+  if (opts.centeringResolution === 'full') return locateCardFull(buffer, opts);
+  return locateCardResolved(buffer, options);
+}
+
+async function locateCardResolved(buffer, options) {
   const opts = options || {};
   const decoded = await decodeUprightRgb(buffer);
   const detection = {
@@ -2788,7 +2963,7 @@ async function locateCard(buffer, options) {
   const warped = cardQuad.warpPerspective(decoded, q, cardQuad.WARP_WIDTH, cardQuad.WARP_HEIGHT);
   const centeringWarped = centerH === cardQuad.WARP_HEIGHT
     ? warped
-    : cardQuad.warpPerspective(decoded, q, centerW, centerH);
+    : (opts.skipCenteringWarp === true ? null : cardQuad.warpPerspective(decoded, q, centerW, centerH));
   detection.centeringWarp = {
     mode: nativeRes ? 'native' : 'standard',
     width: centerW,
@@ -3121,9 +3296,16 @@ async function gradeBuffer(buffer, options) {
         located.warped = cardQuad.warpPerspective(
           located.decoded, flipped, cardQuad.WARP_WIDTH, cardQuad.WARP_HEIGHT
         );
-        located.centeringWarped = (cw === located.warped.width && ch === located.warped.height)
-          ? located.warped
-          : cardQuad.warpPerspective(located.decoded, flipped, cw, ch);
+        if (cardDetection.centeringWarp && cardDetection.centeringWarp.mode === 'full' && located.centeringWarped) {
+          located.centeringWarped = cardQuad.rotate180(located.centeringWarped);
+          cardDetection.edgeRefinementPx = swapEdges180(cardDetection.edgeRefinementPx);
+          cardDetection.edgeCutConfidence = swapEdges180(cardDetection.edgeCutConfidence);
+          cardDetection.lowConfidenceEdges = (cardDetection.lowConfidenceEdges || []).map(swapEdgeName);
+        } else {
+          located.centeringWarped = (cw === located.warped.width && ch === located.warped.height)
+            ? located.warped
+            : cardQuad.warpPerspective(located.decoded, flipped, cw, ch);
+        }
       }
     }
 
@@ -3464,6 +3646,9 @@ module.exports = {
   SURFACE_DETECTOR_TRUSTED,
   EDGE_DETECTOR_TRUSTED,
   MAX_DECODE_DIM,
+  FULL_CENTERING_PX_PER_MM,
+  REFINE_RUNNER_UP_SEPARATION_MM,
+  uprightCardCrop,
   BORDER_SAMPLE_SPREAD_MAX_PX,
   BORDER_SAMPLE_MIN_HITS,
   BORDER_MIN_MEDIAN_MM,

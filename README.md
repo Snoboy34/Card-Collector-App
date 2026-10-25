@@ -99,8 +99,12 @@ the warp so they keep the same physical size, widths are reported in
 (`centeringMetrics.borderWidthsMm`, card = 63.5 × 88.9 mm), and the cut is
 tightened with sub-pixel precision at that resolution. Pass
 `centeringResolution: 'standard'` to force the 643×900 path.
-`node scripts/verify_centering_precision.js` compares both on 12 synthetic
-phone-like captures.
+`centeringResolution: 'full'` crops the card from the upright photo and
+warps that crop once at 70 px/mm (the cut refine and the border measure
+share that warp; the runner-up exclusion stays 0.2 mm). The default is the
+capped warp, so a request that omits the field grades the old way.
+`node scripts/verify_centering_precision.js` compares standard and native
+on 12 synthetic phone-like captures. Uploads up to 20 MB are accepted.
 
 Test deck: a fixed benchmark deck (`TD-01`…) registered on `/deck`
 (`data/test_deck.json`) with per-scan labels in `data/scan_labels.json`
