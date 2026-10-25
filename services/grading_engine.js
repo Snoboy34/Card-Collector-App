@@ -77,7 +77,7 @@ const phoneFrame = require('./phone_frame');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.24-fine-print';
+const ENGINE_VERSION = '2026.10.24-ink-dark';
 const FINE_PRINT_LABEL = 'fine-print, ±0.2 mm';
 const FINE_PRINT_TOLERANCE_MM = 0.2;
 const SOLID_EDGE_TOLERANCE_MM = 0.1;
@@ -99,6 +99,13 @@ function applyFinePrintLabel(report, edges) {
   metrics.borderToleranceMm = tol;
   return report;
 }
+// A border step has to reach ink. On the saved scans a faint shade in a
+// plain border is at most 0.08 of the border brightness, and the shallowest
+// real border is 0.16. The gap between those populations is the test.
+const INK_STEP_CONTRAST = 0.12;
+// Shallowest real border on the saved scans. A replacement has to clear
+// this. The open interval under it is a shade or the same ramp remeasured.
+const INK_BORDER_CONTRAST = 0.16;
 
 let sharp = null;
 try {
@@ -812,8 +819,10 @@ function edgeSampler(getPixel, edge, cardWidth, cardHeight) {
  * First sustained step away from the border's own brightness, located at
  * half the step height (not at the trigger), within maxDepth. Returns the
  * border width in pixels (crossing + 0.5, i.e. count of border pixels).
+ * `minContrast` skips a step that does not fall that far from the border,
+ * so a faint shade is not returned as the line.
  */
-function detectBorderStep(profile, trigger, maxDepth, params) {
+function detectBorderStep(profile, trigger, maxDepth, params, minContrast) {
   const pr = params || edgeParams(1);
   const b0 = pr.minInward;
   const b1 = pr.minInward + pr.baselinePx;
@@ -849,6 +858,11 @@ function detectBorderStep(profile, trigger, maxDepth, params) {
     } else {
       while (j < k0 + 2 && (profile[j] - half) * sign <= 0) j += 1;
     }
+    const contrast = Math.abs(plateau - baseline) / Math.max(1e-6, Math.abs(baseline));
+    if (minContrast && contrast < minContrast) {
+      i = Math.max(i, k0);
+      continue;
+    }
     const before = profile[j - 1];
     const after = profile[j];
     const step = after - before;
@@ -856,6 +870,22 @@ function detectBorderStep(profile, trigger, maxDepth, params) {
     return { width: (j - 1) + frac + 0.5, baseline: baseline, plateau: plateau };
   }
   return null;
+}
+
+/**
+ * A printed line in a plain border comes back toward the border brightness
+ * within a fraction of a millimetre. Artwork past a pale edge stays dark.
+ */
+function borderLineReturns(profile, width, baseline, plateau, scale) {
+  const span = Math.abs(baseline - plateau);
+  if (!(span > 1)) return false;
+  const s = scale > 0 ? scale : 1;
+  const start = Math.min(profile.length - 1, Math.ceil(width));
+  const reach = Math.min(profile.length - 1, start + Math.max(16, Math.round(8 * s)));
+  for (let d = start; d <= reach; d++) {
+    if (Math.abs(profile[d] - baseline) <= span * 0.45) return true;
+  }
+  return false;
 }
 
 function linearProfile(sample, along, halfWidth, alongMax, length) {
@@ -992,8 +1022,51 @@ function findBorderWidthAtScale(getPixel, edge, cardWidth, cardHeight, getPaperP
   }
   group.forEach(function (h) { h.line.inGroup = true; });
   const widths = group.map(function (h) { return h.width; });
-  const width = median(widths);
-  const outliers = hits.length - group.length;
+  let width = median(widths);
+  // A faint shade in a plain border is not a border line. When the vote sits
+  // on one, the outermost group of lines that reach ink darkness replaces it,
+  // and only when that group is still this border. A darker step further in
+  // is the design, so the shade vote stays.
+  if (profileHit && profileHit.baseline) {
+    const shade = Math.abs(profileHit.plateau - profileHit.baseline) / Math.abs(profileHit.baseline);
+    if (shade < INK_STEP_CONTRAST && Math.abs(width - profileHit.width) <= pr.groupGap) {
+      const inkHits = [];
+      for (let k = 0; k < EDGE_LINE_COUNT; k++) {
+        const along = a0 + Math.round(k * (a1 - 1 - a0) / (EDGE_LINE_COUNT - 1));
+        const lineProfile = linearProfile(sample, along, pr.lineHalfWidth, alongMax, length);
+        const hit = detectBorderStep(lineProfile, trigger, maxDepth, pr, INK_STEP_CONTRAST);
+        if (!hit || !hit.baseline) continue;
+        const inkContrast = Math.abs(hit.plateau - hit.baseline) / Math.abs(hit.baseline);
+        // The shallowest real border on the saved scans is 0.16. A slightly
+        // darker reading of the same faint ramp is not a new line.
+        if (inkContrast < INK_BORDER_CONTRAST) continue;
+        inkHits.push({ width: hit.width, line: lines[k], contrast: inkContrast, plateau: hit.plateau });
+      }
+      inkHits.sort(function (x, y) { return x.width - y.width; });
+      let inkStart = 0;
+      let inkGroup = null;
+      for (let i = 1; i <= inkHits.length; i++) {
+        if (i === inkHits.length || inkHits[i].width - inkHits[i - 1].width > pr.groupGap) {
+          if (i - inkStart >= minGroup) { inkGroup = inkHits.slice(inkStart, i); break; }
+          inkStart = i;
+        }
+      }
+      if (inkGroup) {
+        const inkWidth = median(inkGroup.map(function (h) { return h.width; }));
+        const inkPlateau = median(inkGroup.map(function (h) { return h.plateau; }));
+        const returns = borderLineReturns(medianProfile, inkWidth, profileHit.baseline, inkPlateau, pr.scale);
+        if (returns && inkWidth > width && Math.abs(inkWidth - width) <= pr.profileAgree) {
+          group.forEach(function (h) { h.line.inGroup = false; });
+          inkGroup.forEach(function (h) { h.line.inGroup = true; });
+          widths.length = 0;
+          inkGroup.forEach(function (h) { widths.push(h.width); });
+          width = inkWidth;
+          flags.push(edge + ': faint shade skipped; the ink line is the border');
+        }
+      }
+    }
+  }
+  const outliers = lines.filter(function (l) { return l.pos != null && !l.inGroup; }).length;
   if (outliers > 0) flags.push(edge + ': ' + outliers + ' line(s) outside the agreeing group');
   const profileDisagrees = profileWidth != null && Math.abs(profileWidth - width) > pr.profileAgree;
   if (profileDisagrees) {
@@ -3325,6 +3398,8 @@ module.exports = {
   applyFinePrintLabel,
   FINE_PRINT_LABEL,
   FINE_PRINT_TOLERANCE_MM,
+  INK_STEP_CONTRAST,
+  INK_BORDER_CONTRAST,
   scoreSurfacePhase,
   scoreEdgesPhase,
   scoreCornersPhase,
