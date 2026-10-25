@@ -104,8 +104,11 @@ warps that crop once at the card's own pixel height (the cut refine and
 the border measure share that warp; the runner-up exclusion stays 0.2 mm).
 The ±0.1 mm label is used only when that card reaches 30 px/mm. 15 px/mm
 supports ±0.2 mm. Below that the edge is withheld. A fine-print edge stays
-at least ±0.2 mm. Phone apps upload the still described in
-`docs/capture_contract.md`. The default is the capped warp, so a request
+at least ±0.2 mm. On the iPhone 13 Pro the wide still is 4032×3024. A card
+filling that long side is 45.4 px/mm and clears 30 px/mm. The neon window
+uploaded from that phone is 2448 px tall, so a card filling the window is
+about 27.5 px/mm and stays at ±0.2 mm. Phone apps upload the still described
+in `docs/capture_contract.md`. The default is the capped warp, so a request
 that omits the field grades the old way.
 `node scripts/verify_centering_precision.js` compares standard and native
 on 12 synthetic phone-like captures. Uploads up to 20 MB are accepted.
