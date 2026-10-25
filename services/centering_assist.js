@@ -6,8 +6,9 @@
  * centering sub-grade are copied through untouched. A user line is either:
  *   assisted      — the engine withheld that side
  *   disagreement  — the engine measured it, and the user placed a different line
- * Both are labelled source "assisted" on the grade that uses the user's line.
- * Nothing here is written back into subGrades.centering or borderWidthsMm.
+ * Both are labelled source "assisted" on the estimate. That number is not
+ * an input to the predicted grade. Nothing here is written back into
+ * finalScore, subGrades.centering, or borderWidthsMm.
  *
  * Examples live in data/centering_examples.jsonl on this machine. consent
  * defaults to false. examplesClearedToLeave() is empty until accounts, a
@@ -251,8 +252,9 @@ function rescoreDatabase(db, emit) {
  * Assisted centering from the placed widths. Fronts use the engine's front
  * table (scoreCenteringPhase). Backs use the published back table in
  * back_scan.js: 10 = 75/25, 9 = 90/10. A back share past 90/10 matches no
- * row, so the score and the label stay null. This never writes
- * subGrades.centering.
+ * row, so the score and the label stay null. This is your estimate only.
+ * Callers must not copy it onto finalScore, subGrades.centering, or
+ * borderWidthsMm.
  */
 function scoreAssistedCentering(side, ratios) {
   if (side !== 'front' && side !== 'back') return { score: null, label: null };

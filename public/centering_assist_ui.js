@@ -96,7 +96,7 @@
     wrap.appendChild(actions);
 
     var legend = el('p', 'muted assist-legend');
-    legend.textContent = 'Amber is your line. A saved result is labelled assisted. The engine\'s measurement stays as it was.';
+    legend.textContent = 'Amber is your line. A saved result is your estimate. It does not change the predicted grade.';
     wrap.appendChild(legend);
 
     var statusMap = g.sideStatus(report);
@@ -373,7 +373,7 @@
             save.disabled = !dirty || placedCount() === 0;
             return;
           }
-          status.textContent = 'Saved. This centering is assisted.';
+          status.textContent = 'Saved. This is your estimate. The predicted grade is unchanged.';
           if (options.onSaved) options.onSaved(result.body.item);
         })
         .catch(function () {
