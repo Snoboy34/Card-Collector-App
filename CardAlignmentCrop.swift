@@ -59,8 +59,8 @@ enum CardAlignmentCrop {
     }
 
     /// Crops a camera JPEG to the neon window as seen in `previewSize` (aspect-fill).
-    /// The crop is a pixel subset of the still. It does not resize, so a 48 MP
-    /// still stays at the still's own pixels inside the window.
+    /// The crop is a pixel subset of the still. It does not resize, so the
+    /// window keeps the still's own pixels.
     static func cropJPEG(_ data: Data, previewSize: CGSize) throws -> Data {
         guard previewSize.width > 0, previewSize.height > 0 else {
             throw CropError.previewNotLaidOut

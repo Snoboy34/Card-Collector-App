@@ -1020,6 +1020,7 @@ struct CardScannerView: View {
         )
         Task {
             do {
+                let uploaded = CaptureMetadata.pixelSize(levelJPEG)
                 let report = try await JudgeAPIClient.shared.grade(
                     jpeg: levelJPEG,
                     baseURL: judgeServerURL,
@@ -1035,7 +1036,13 @@ struct CardScannerView: View {
                     side: side,
                     pairId: pairId,
                     captureMetadata: captureMetadata,
-                    scanId: pendingScanId
+                    scanId: pendingScanId,
+                    capture: JudgeAPIClient.CaptureContract(
+                        deviceModel: CaptureMetadata.hardwareModel(),
+                        camera: pendingLevelCamera?.deviceType ?? "unknown",
+                        captureWidth: uploaded?.width ?? 0,
+                        captureHeight: uploaded?.height ?? 0
+                    )
                 )
                 await MainActor.run {
                     isRemoteGrading = false
