@@ -425,6 +425,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         }
         appendField("alignmentCrop", "true")
         appendField("debug", "true")
+        // Device-maximum stills are measured on the server's 70 px/mm warp.
+        // A request that omits this field stays on the capped warp.
+        appendField("centeringResolution", "full")
         appendField("captureMode", sweepFrames.isEmpty ? "native-still" : "native-sweep")
         if let cardType, !cardType.isEmpty {
             appendField("cardType", cardType)
@@ -751,6 +754,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         }
         let sent = text(grader: "BGS")
         expect(sent.contains("name=\"deckId\""), "multipart form keeps deckId beside the JPEG bytes")
+        expect(sent.contains("name=\"centeringResolution\""), "a still asks for the full-resolution warp")
+        expect(sent.contains("\r\n\r\nfull\r\n"), "centeringResolution value is full")
         expect(sent.contains("name=\"preSubmission\""), "pre-submission flag is a form field")
         expect(sent.contains("name=\"intendedGrader\""), "a known grader is a form field")
         expect(sent.contains("\r\n\r\nBGS\r\n"), "intended grader value is BGS")

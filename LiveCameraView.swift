@@ -8,6 +8,8 @@ import CoreImage
 /// Framing is the SwiftUI neon 2.5×3.5 — no live Vision quad (it flickered).
 /// The hosting UIView does not take hits so ScrollView and tab bar stay tappable.
 /// `AVCapturePhotoOutput` is a separate still path — one JPEG per tap.
+/// The still is the wide camera at 1×, JPEG, quality priority, at that
+/// camera's largest photo size (48 MP on the phones that offer it).
 public struct LiveCameraView: UIViewRepresentable {
 
     public struct StillCapture {
@@ -79,6 +81,7 @@ public struct LiveCameraView: UIViewRepresentable {
         private let recordingSession = AVCaptureSession()
         private var photoOutput: AVCapturePhotoOutput?
         private var captureDevice: AVCaptureDevice?
+        private var requestedPhoto = StillPhotoSize.Pixels(width: 0, height: 0)
         private var didStartSession = false
         private var didLockExposure = false
         private var captureInFlight = false
@@ -111,6 +114,8 @@ public struct LiveCameraView: UIViewRepresentable {
             recordingSession.beginConfiguration()
             recordingSession.sessionPreset = .photo
 
+            // Physical wide camera, not the virtual multi-camera whose 1× is
+            // the ultrawide. 48 MP lives on this sensor.
             guard let primaryBackCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
                   let hardwareInputNode = try? AVCaptureDeviceInput(device: primaryBackCamera) else {
                 print("Failed to acquire connection to rear camera hardware.")
@@ -138,9 +143,13 @@ public struct LiveCameraView: UIViewRepresentable {
                 stillOutput.maxPhotoQualityPrioritization = .quality
                 applyPortraitRotation(stillOutput.connection(with: .video))
                 photoOutput = stillOutput
+                applyMaximumStillSize(to: stillOutput)
             }
 
             recordingSession.commitConfiguration()
+            if let stillOutput = photoOutput {
+                applyMaximumStillSize(to: stillOutput)
+            }
             beginContinuousAE(on: primaryBackCamera)
             publishLockStatus("Point at empty mat — AE settling…")
             recordingSession.startRunning()
@@ -163,6 +172,9 @@ public struct LiveCameraView: UIViewRepresentable {
                 }
                 if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
                     device.whiteBalanceMode = .continuousAutoWhiteBalance
+                }
+                if device.minAvailableVideoZoomFactor <= 1, device.maxAvailableVideoZoomFactor >= 1 {
+                    device.videoZoomFactor = 1
                 }
                 device.isSubjectAreaChangeMonitoringEnabled = false
                 device.unlockForConfiguration()
@@ -223,11 +235,41 @@ public struct LiveCameraView: UIViewRepresentable {
                     return
                 }
                 self.captureInFlight = true
-                let settings = AVCapturePhotoSettings()
-                settings.flashMode = .off
-                settings.photoQualityPrioritization = .quality
+                guard let settings = self.jpegStillSettings(on: photoOutput) else {
+                    self.captureInFlight = false
+                    self.failStill(CaptureError.jpegUnavailable)
+                    return
+                }
                 photoOutput.capturePhoto(with: settings, delegate: self)
             }
+        }
+
+        /// JPEG at the device-maximum size, quality priority. Nil when this
+        /// camera cannot deliver JPEG.
+        private func jpegStillSettings(on output: AVCapturePhotoOutput) -> AVCapturePhotoSettings? {
+            guard output.availablePhotoCodecTypes.contains(.jpeg) else { return nil }
+            let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
+            settings.flashMode = output.supportedFlashModes.contains(.off) ? .off : settings.flashMode
+            settings.photoQualityPrioritization = output.maxPhotoQualityPrioritization == .quality
+                ? .quality
+                : output.maxPhotoQualityPrioritization
+            if requestedPhoto.width > 0, requestedPhoto.height > 0 {
+                settings.maxPhotoDimensions = CMVideoDimensions(
+                    width: Int32(requestedPhoto.width),
+                    height: Int32(requestedPhoto.height)
+                )
+            }
+            return settings
+        }
+
+        /// Raise the output cap to the largest size this wide camera offers.
+        private func applyMaximumStillSize(to output: AVCapturePhotoOutput) {
+            let sizes = output.supportedMaxPhotoDimensions.map {
+                StillPhotoSize.Pixels(width: Int($0.width), height: Int($0.height))
+            }
+            guard let largest = StillPhotoSize.largest(sizes) else { return }
+            output.maxPhotoDimensions = CMVideoDimensions(width: Int32(largest.width), height: Int32(largest.height))
+            requestedPhoto = largest
         }
 
         public func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
@@ -240,16 +282,30 @@ public struct LiveCameraView: UIViewRepresentable {
                 failStill(CaptureError.missingJPEG)
                 return
             }
+            guard CameraFacts.codecName(jpeg) == "jpeg" else {
+                failStill(CaptureError.notJPEG)
+                return
+            }
             var previewSize = CGSize.zero
             if Thread.isMainThread {
                 previewSize = previewLayerAnchor?.bounds.size ?? .zero
             } else {
                 previewSize = DispatchQueue.main.sync { previewLayerAnchor?.bounds.size ?? .zero }
             }
+            var camera = CameraFacts.read(device: captureDevice, photo: photo, fileData: jpeg)
+            if requestedPhoto.width > 0 {
+                camera.maxPhotoWidth = requestedPhoto.width
+                camera.maxPhotoHeight = requestedPhoto.height
+                camera.requestedWidth = requestedPhoto.width
+                camera.requestedHeight = requestedPhoto.height
+                camera.photoSizeSetting = "max"
+            } else {
+                camera.photoSizeSetting = "default"
+            }
             let payload = StillCapture(
                 jpeg: jpeg,
                 previewSize: previewSize,
-                camera: CameraFacts.read(device: captureDevice, photo: photo, fileData: jpeg),
+                camera: camera,
                 capturedAt: Date()
             )
             DispatchQueue.main.async { [weak self] in
@@ -290,6 +346,8 @@ public struct LiveCameraView: UIViewRepresentable {
             case exposureNotLocked
             case captureInFlight
             case missingJPEG
+            case jpegUnavailable
+            case notJPEG
 
             var errorDescription: String? {
                 switch self {
@@ -301,6 +359,10 @@ public struct LiveCameraView: UIViewRepresentable {
                     return "A still is already being captured."
                 case .missingJPEG:
                     return "PhotoOutput returned no JPEG bytes."
+                case .jpegUnavailable:
+                    return "This camera cannot deliver a JPEG still."
+                case .notJPEG:
+                    return "The still was not a JPEG. Nothing was uploaded."
                 }
             }
         }

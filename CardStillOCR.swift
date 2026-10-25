@@ -33,8 +33,9 @@ enum CardStillOCR {
 }
 
 /// Vision rectangle on the same upright still that is uploaded, so the quad
-/// is in that JPEG's pixel coordinates (top-left origin). Nil when Vision
-/// finds no card; the server then runs its own detector or returns 422.
+/// is in that JPEG's pixel coordinates (top-left origin), not the preview's.
+/// `imageWidth` / `imageHeight` are the uploaded JPEG. Nil when Vision finds
+/// no card; the server then runs its own detector or returns 422.
 enum CardStillQuad {
     static func detect(in jpeg: Data) -> JudgeAPIClient.CardQuad? {
         guard let source = UIImage(data: jpeg) else { return nil }
