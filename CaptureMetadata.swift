@@ -3,6 +3,20 @@ import AVFoundation
 import ImageIO
 import UIKit
 
+/// One still size the camera offered. Pixel count picks the device maximum.
+enum StillPhotoSize {
+    struct Pixels: Equatable {
+        var width: Int
+        var height: Int
+        var count: Int { width * height }
+    }
+
+    /// Largest offered still. Nil when the camera offered none.
+    static func largest(_ sizes: [Pixels]) -> Pixels? {
+        sizes.max { $0.count < $1.count }
+    }
+}
+
 /// Camera state read at the moment a still was taken. Recorded with the scan
 /// (`captureMetadata` upload field); the server stores it and never grades it.
 struct CameraFacts {
@@ -19,6 +33,11 @@ struct CameraFacts {
     var focusMode: String
     var exposureMode: String
     var whiteBalanceMode: String
+    var maxPhotoWidth: Int? = nil
+    var maxPhotoHeight: Int? = nil
+    var requestedWidth: Int? = nil
+    var requestedHeight: Int? = nil
+    var photoSizeSetting: String? = nil
 
     static func read(device: AVCaptureDevice?, photo: AVCapturePhoto, fileData: Data) -> CameraFacts {
         let dims = photo.resolvedSettings.photoDimensions
@@ -166,6 +185,11 @@ enum CaptureMetadata {
             cam["focusMode"] = camera.focusMode
             cam["exposureMode"] = camera.exposureMode
             cam["whiteBalanceMode"] = camera.whiteBalanceMode
+            if let maxPhotoWidth = camera.maxPhotoWidth { cam["maxPhotoWidth"] = maxPhotoWidth }
+            if let maxPhotoHeight = camera.maxPhotoHeight { cam["maxPhotoHeight"] = maxPhotoHeight }
+            if let requestedWidth = camera.requestedWidth { cam["requestedWidth"] = requestedWidth }
+            if let requestedHeight = camera.requestedHeight { cam["requestedHeight"] = requestedHeight }
+            if let photoSizeSetting = camera.photoSizeSetting { cam["photoSizeSetting"] = photoSizeSetting }
         }
         for (key, value) in extraCamera { cam[key] = value }
 
@@ -224,6 +248,13 @@ enum CaptureMetadata {
         expect(CameraFacts.codecName(Data([0xFF, 0xD8, 0xFF, 0xE0])) == "jpeg", "JPEG magic is jpeg")
         expect(CameraFacts.codecName(Data([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63])) == "heif", "ftyp marks heif")
         expect(CameraFacts.codecName(Data([0x89, 0x50])) == "unknown", "a short header is unknown")
+        let offered = [
+            StillPhotoSize.Pixels(width: 4032, height: 3024),
+            StillPhotoSize.Pixels(width: 8064, height: 6048)
+        ]
+        let deviceMax = StillPhotoSize.largest(offered)
+        expect(deviceMax?.width == 8064 && deviceMax?.height == 6048, "device maximum is the larger still")
+        expect(StillPhotoSize.largest([]) == nil, "no offered size leaves the maximum unset")
 
         let facts = CameraFacts(
             deviceType: "AVCaptureDeviceTypeBuiltInWideAngleCamera", position: "back",
