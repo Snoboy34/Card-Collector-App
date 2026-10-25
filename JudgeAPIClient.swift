@@ -45,6 +45,14 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var rollDeg: Double
     }
 
+    /// Flat capture fields from docs/capture_contract.md. The server measures px/mm.
+    struct CaptureContract {
+        var deviceModel: String
+        var camera: String
+        var captureWidth: Int
+        var captureHeight: Int
+    }
+
     /// Card corners on the uploaded still, in that JPEG's pixels (top-left origin).
     struct CardQuad {
         var tl: [Double]
@@ -156,7 +164,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         side: String? = nil,
         pairId: String? = nil,
         captureMetadata: String? = nil,
-        scanId: String
+        scanId: String,
+        capture: CaptureContract? = nil
     ) async throws -> RemoteReport {
         guard let root = Self.normalizedBaseURL(baseURL) else {
             throw APIError.invalidServerURL
@@ -182,7 +191,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             side: side,
             pairId: pairId,
             captureMetadata: captureMetadata,
-            scanId: scanId
+            scanId: scanId,
+            capture: capture
         )
 
         let result: (Data, URLResponse)
@@ -393,7 +403,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         side: String?,
         pairId: String?,
         captureMetadata: String?,
-        scanId: String
+        scanId: String,
+        capture: CaptureContract? = nil
     ) -> Data {
         var body = Data()
         func appendField(_ name: String, _ value: String) {
@@ -425,7 +436,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         }
         appendField("alignmentCrop", "true")
         appendField("debug", "true")
-        // Device-maximum stills are measured on the server's 70 px/mm warp.
+        // The still is measured at the card's own pixels.
         // A request that omits this field stays on the capped warp.
         appendField("centeringResolution", "full")
         appendField("captureMode", sweepFrames.isEmpty ? "native-still" : "native-sweep")
@@ -476,6 +487,16 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         }
         if let captureMetadata, !captureMetadata.isEmpty {
             appendField("captureMetadata", captureMetadata)
+        }
+        if let capture {
+            appendField("deviceModel", capture.deviceModel)
+            appendField("camera", capture.camera)
+            if capture.captureWidth > 0 {
+                appendField("captureWidth", String(capture.captureWidth))
+            }
+            if capture.captureHeight > 0 {
+                appendField("captureHeight", String(capture.captureHeight))
+            }
         }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         return body
@@ -769,6 +790,24 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         expect(back.contains("\r\n\r\nfront-scan-1\r\n"), "pairId is the front scan id")
         expect(!text(grader: nil, side: "top", pairId: "").contains("name=\"side\""), "side other than front or back is omitted")
         expect(!text(grader: nil).contains("name=\"pairId\""), "a missing pairId is omitted")
+        let contracted = multipartBody(
+            boundary: "B", jpeg: jpeg, name: "unknown", cardType: nil, tilt: nil,
+            ocrLines: [], sweepFrames: [], cardQuad: nil, deckId: "TD-07",
+            preSubmission: false, intendedGrader: nil, side: "front", pairId: nil,
+            captureMetadata: nil, scanId: "scan",
+            capture: CaptureContract(deviceModel: "Pixel 8", camera: "back", captureWidth: 4000, captureHeight: 3000)
+        )
+        let contractText = String(decoding: contracted, as: UTF8.self)
+        expect(contractText.contains("name=\"deviceModel\""), "the capture contract sends the device model")
+        expect(contractText.contains("\r\n\r\nPixel 8\r\n"), "device model is the flat field")
+        expect(contractText.contains("name=\"camera\""), "the capture contract sends the camera")
+        expect(contractText.contains("\r\n\r\nback\r\n"), "camera is the flat field")
+        expect(contractText.contains("name=\"captureWidth\""), "the capture contract sends the still width")
+        expect(contractText.contains("\r\n\r\n4000\r\n"), "capture width is the uploaded still")
+        expect(contractText.contains("name=\"captureHeight\""), "the capture contract sends the still height")
+        expect(contractText.contains("\r\n\r\n3000\r\n"), "capture height is the uploaded still")
+        expect(!contractText.contains("pxPerMm"), "the phone does not send a px/mm")
+        expect(!text(grader: nil).contains("name=\"deviceModel\""), "a still with no capture object omits the device field")
 
         let linePositions: [String: [String: Double]] = [
             "left": ["positionPx": 40, "warpWidth": 643, "warpHeight": 900]

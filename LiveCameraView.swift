@@ -8,8 +8,8 @@ import CoreImage
 /// Framing is the SwiftUI neon 2.5×3.5 — no live Vision quad (it flickered).
 /// The hosting UIView does not take hits so ScrollView and tab bar stay tappable.
 /// `AVCapturePhotoOutput` is a separate still path — one JPEG per tap.
-/// The still is the wide camera at 1×, JPEG, quality priority, at that
-/// camera's largest photo size (48 MP on the phones that offer it).
+/// The still is the wide camera at 1×, JPEG, quality priority, at the
+/// largest still size that camera reports.
 public struct LiveCameraView: UIViewRepresentable {
 
     public struct StillCapture {
@@ -115,7 +115,7 @@ public struct LiveCameraView: UIViewRepresentable {
             recordingSession.sessionPreset = .photo
 
             // Physical wide camera, not the virtual multi-camera whose 1× is
-            // the ultrawide. 48 MP lives on this sensor.
+            // the ultrawide. The still uses the largest size this sensor offers.
             guard let primaryBackCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
                   let hardwareInputNode = try? AVCaptureDeviceInput(device: primaryBackCamera) else {
                 print("Failed to acquire connection to rear camera hardware.")
