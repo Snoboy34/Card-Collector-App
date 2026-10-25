@@ -77,7 +77,7 @@ const phoneFrame = require('./phone_frame');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.25-device-res';
+const ENGINE_VERSION = '2026.10.25-distant-cut';
 const FINE_PRINT_LABEL = 'fine-print, ±0.2 mm';
 const FINE_PRINT_TOLERANCE_MM = 0.2;
 const SOLID_EDGE_TOLERANCE_MM = 0.1;
@@ -2525,12 +2525,12 @@ const CENTERING_WARP_MAX_HEIGHT = 2400;
 // delivered. Old uploads stay on the capped native warp unless the request
 // asks for this. The runner-up cut stays 0.2 mm off the chosen step.
 const REFINE_RUNNER_UP_SEPARATION_MM = 0.2;
-// A second cut-like step means the refined cut could be either one. Flag the
-// edge (the chosen cut and every measured value stay as they are) when:
-//   close — runner-up ≥ 60% of the chosen step and within 3 px, or
-//   strong — runner-up ≥ 80% anywhere in the refine search (the 2% expanded
-//   margin, at least 4 px). The 0.6 mm outer band is this second case:
-//   about 90% as strong, about 6 px away, so the 3 px window missed it.
+// A second cut-like step means the refined cut could be either one.
+//   close — runner-up ≥ 60% of the chosen step and within 3 px. Flag the
+//     edge. A border past the floor stays published.
+//   strong — runner-up ≥ 80% and farther than 3 px (the 2% expanded margin).
+//     The width on that edge is withheld. The 0.6 mm outer band is this
+//     case: about 90% as strong, about 6 px away. The cut is not moved.
 const CUT_RUNNER_UP_RATIO = 0.6;
 const CUT_RUNNER_UP_MAX_PX = 3;
 const CUT_RUNNER_UP_WIDE_RATIO = 0.8;
@@ -2627,22 +2627,34 @@ function withholdUntrustedBorderVote(report, measurement) {
 /**
  * An under-floor border is published only because the other three sides are
  * past 1.185 mm. When that edge's cut has a second edge, the thin reading
- * is the uncertain cut, not a border to publish. A side past the floor keeps
- * its width. The low-confidence flag on that side stays a flag.
+ * is the uncertain cut, not a border to publish.
+ *
+ * A side past the floor keeps its width when that second step sits inside
+ * the 3 px shoulder window. A second step farther than that window is
+ * another edge, so the width measured from the chosen cut is withheld even
+ * though it clears the floor and the straight-edge profile. The reading is
+ * not replaced. The low-confidence flag on that side stays a flag.
  */
-function withholdThinUncertainCut(measurement, lowEdges) {
+function withholdThinUncertainCut(measurement, lowEdges, cutConfidence) {
   const names = ['left', 'right', 'top', 'bottom'];
   const low = lowEdges || [];
+  const cuts = cutConfidence || {};
   let dropped = false;
   names.forEach(function (edge) {
     const mm = measurement.widthsMm && measurement.widthsMm[edge];
-    if (mm == null || !(mm < BORDER_MIN_MEDIAN_MM)) return;
+    if (mm == null || !isFinite(mm)) return;
     if (low.indexOf(edge) < 0) return;
+    const cut = cuts[edge];
+    const offset = cut && cut.runnerUpOffsetPx;
+    const distant = offset != null && isFinite(offset) && Math.abs(offset) > CUT_RUNNER_UP_MAX_PX;
+    const underFloor = mm < BORDER_MIN_MEDIAN_MM;
+    if (!underFloor && !distant) return;
     measurement.widthsMm[edge] = null;
     if (measurement.widths) measurement.widths[edge] = null;
     dropped = true;
     measurement.edgeFlags = measurement.edgeFlags || [];
-    measurement.edgeFlags.push(edge + ': thin border withheld — the cut has a second edge');
+    measurement.edgeFlags.push(edge + ': ' + (underFloor ? 'thin border' : 'border') +
+      ' withheld — the cut has a second edge');
   });
   if (!dropped) return measurement;
   const widths = measurement.widths || {};
@@ -2664,7 +2676,7 @@ function withholdThinUncertainCut(measurement, lowEdges) {
   return measurement;
 }
 
-/** Low-confidence cut edges → edge flags and centeringMetrics. A side past the floor is untouched. */
+/** Low-confidence cut edges → edge flags and centeringMetrics. */
 function applyCutConfidence(centeringMeasurement, detection) {
   const low = (detection && detection.lowConfidenceEdges) || [];
   centeringMeasurement.edgeFlags = centeringMeasurement.edgeFlags || [];
@@ -3450,7 +3462,7 @@ async function gradeBuffer(buffer, options) {
       centeringMeasurement.orientationWithheld = true;
     }
     const lowConfidenceEdges = applyCutConfidence(centeringMeasurement, cardDetection);
-    withholdThinUncertainCut(centeringMeasurement, lowConfidenceEdges);
+    withholdThinUncertainCut(centeringMeasurement, lowConfidenceEdges, cardDetection.edgeCutConfidence);
     const interiorGrey = measureInteriorGrey(
       getPaperPixel, centeringBox.width, centeringBox.height, centeringMeasurement.widths
     );
