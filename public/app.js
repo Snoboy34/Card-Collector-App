@@ -1005,7 +1005,10 @@ function openReportModal(item) {
   function mmBit(edge, letter) {
     const v = borderMm ? borderMm[edge] : null;
     const shown = v == null || !isFinite(Number(v)) ? '—' : Number(v).toFixed(3);
-    const note = fineEdges.indexOf(edge) >= 0 ? ' (' + fineLabel + ')' : '';
+    const resolved = metrics && metrics.edgeResolution && metrics.edgeResolution[edge];
+    const note = resolved && resolved.label
+      ? ' (' + resolved.label + ')'
+      : (fineEdges.indexOf(edge) >= 0 ? ' (' + fineLabel + ')' : '');
     return letter + ' ' + shown + note;
   }
   const borderMmHtml = borderMm

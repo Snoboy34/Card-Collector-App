@@ -8,8 +8,9 @@
  *   refine     refineQuadToCut at 643×900 vs at native size
  *   locate     locateCard (decode + quad + refine + warp[s])
  *   grade      full gradeBuffer, centeringResolution standard vs native vs full
- * `full` is the opt-in 70 px/mm crop-then-warp (one shared warp). The default
- * grade path is still native. Time that column on the iMac before a rescan.
+ * `full` is the opt-in warp at the card's own pixel height (one shared warp).
+ * The default grade path is still native. Time that column on the iMac
+ * before a rescan. The full column is the cost of the pixels in the file.
  * Read-only: no scanId/scans root is passed; database.json and uploads are
  * only read.
  *
@@ -172,11 +173,11 @@ async function benchCentering(options) {
     '   locate ' + ms(summary.locateMs.standard) + ' → ' + ms(summary.locateMs.native) +
     '   grade ' + ms(summary.gradeMs.standard) + ' → ' + ms(summary.gradeMs.native) +
     '  (+' + ms(summary.gradeExtraMs) + ' per scan)');
-  lines.push('FULL 70 px/mm shared warp, median ms:  locate ' + ms(summary.locateMs.full) +
+  lines.push('FULL card-pixel shared warp, median ms:  locate ' + ms(summary.locateMs.full) +
     '   grade ' + ms(summary.gradeMs.full) +
     '  (default grade path is still the native column)');
   lines.push('Native locate = standard locate + native-size refine + one extra native-size warp.');
-  lines.push('Full locate = native locate without its second warp, then one 70 px/mm warp of the card crop.');
+  lines.push('Full locate = native locate without its second warp, then one warp of the card crop at the card\'s own pixel height.');
   return { text: lines.join('\n'), rows: rows, skipped: skipped, summary: summary };
 }
 

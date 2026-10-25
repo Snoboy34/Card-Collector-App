@@ -77,7 +77,7 @@ const phoneFrame = require('./phone_frame');
 
 // Bump on any change that can move a saved number. Stamped on every report
 // so the deck report and re-grades can tell engines apart.
-const ENGINE_VERSION = '2026.10.24-full-res';
+const ENGINE_VERSION = '2026.10.25-device-res';
 const FINE_PRINT_LABEL = 'fine-print, ±0.2 mm';
 const FINE_PRINT_TOLERANCE_MM = 0.2;
 const SOLID_EDGE_TOLERANCE_MM = 0.1;
@@ -98,6 +98,71 @@ function applyFinePrintLabel(report, edges) {
   });
   metrics.borderToleranceMm = tol;
   return report;
+}
+
+// A claimed tolerance has to cover at least 3 pixels. That is the smallest
+// separation the border finder treats as a different line. 0.1 mm needs
+// 30 px/mm. 0.2 mm needs 15 px/mm. Below that the edge is withheld.
+const RESOLUTION_DISTINCT_PX = 3;
+const RESOLUTION_WITHHELD_LABEL = 'withheld, resolution';
+
+function resolutionToleranceMm(pxPerMm) {
+  const px = Number(pxPerMm);
+  if (!(px > 0) || !isFinite(px)) return null;
+  if (SOLID_EDGE_TOLERANCE_MM * px >= RESOLUTION_DISTINCT_PX) return SOLID_EDGE_TOLERANCE_MM;
+  if (FINE_PRINT_TOLERANCE_MM * px >= RESOLUTION_DISTINCT_PX) return FINE_PRINT_TOLERANCE_MM;
+  return null;
+}
+
+function resolutionEdgeLabel(toleranceMm, finePrint) {
+  if (toleranceMm == null) return RESOLUTION_WITHHELD_LABEL;
+  if (finePrint) return FINE_PRINT_LABEL;
+  if (toleranceMm >= FINE_PRINT_TOLERANCE_MM) return '±0.2 mm';
+  return '±0.1 mm';
+}
+
+/**
+ * Score tolerance for one edge. Unknown px/mm keeps the flatbed rule
+ * (0.1 mm, or 0.2 mm on a fine-print edge). A known capture uses the
+ * looser of that rule and what its pixels can support. Null means withhold.
+ */
+function edgeScoreToleranceMm(pxPerMm, finePrint) {
+  const legacy = finePrint ? FINE_PRINT_TOLERANCE_MM : SOLID_EDGE_TOLERANCE_MM;
+  if (pxPerMm == null || !isFinite(Number(pxPerMm))) return legacy;
+  const res = resolutionToleranceMm(pxPerMm);
+  if (res == null) return null;
+  return finePrint ? Math.max(res, FINE_PRINT_TOLERANCE_MM) : res;
+}
+
+function applyEdgeResolution(report) {
+  if (!report || !report.centeringMetrics) return report;
+  const det = report.cardDetection || {};
+  if (det.achievedPxPerMm == null || !isFinite(Number(det.achievedPxPerMm))) return report;
+  const px = Number(det.achievedPxPerMm);
+  const metrics = report.centeringMetrics;
+  const fine = metrics.finePrintEdges || [];
+  const edges = {};
+  const tol = {};
+  ['left', 'right', 'top', 'bottom'].forEach(function (edge) {
+    const isFine = fine.indexOf(edge) >= 0;
+    const edgeTol = edgeScoreToleranceMm(px, isFine);
+    edges[edge] = { toleranceMm: edgeTol, label: resolutionEdgeLabel(edgeTol, isFine), finePrint: isFine };
+    tol[edge] = edgeTol;
+  });
+  metrics.achievedPxPerMm = px;
+  metrics.edgeResolution = edges;
+  metrics.borderToleranceMm = tol;
+  return report;
+}
+
+function achievedPxPerMmFromReport(report) {
+  const det = report && report.cardDetection;
+  if (det && det.achievedPxPerMm != null && isFinite(Number(det.achievedPxPerMm))) return Number(det.achievedPxPerMm);
+  const h = det && det.cardSizePx && det.cardSizePx.heightPx;
+  if (h > 0) return Math.round((h / CARD_HEIGHT_MM) * 100) / 100;
+  const warp = report && report.centeringMetrics && report.centeringMetrics.centeringWarp;
+  if (warp && warp.pxPerMm > 0) return warp.pxPerMm;
+  return null;
 }
 // A border step has to reach ink. On the saved scans a faint shade in a
 // plain border is at most 0.08 of the border brightness, and the shallowest
@@ -2455,12 +2520,10 @@ const CARD_HEIGHT_MM = 88.9;
 // (≈10.1 px/mm). Other detectors keep 643×900: their thresholds are tuned there.
 const CENTERING_WARP_MIN_HEIGHT = 900;
 const CENTERING_WARP_MAX_HEIGHT = 2400;
-// Opt-in centering warp. 70 px/mm on the nominal 88.9 mm card is 6223 px
-// tall. Old uploads stay on the capped native warp unless the request asks
-// for this. The runner-up cut must sit 0.2 mm off the chosen step: at 70
-// px/mm the historical 2-sample exclusion would be 0.03 mm and the blur of
-// the real edge would count as a second edge.
-const FULL_CENTERING_PX_PER_MM = 70;
+// Opt-in centering warp. The card is cropped from the upload and warped at
+// the card's own pixel height, so px/mm is whatever that phone actually
+// delivered. Old uploads stay on the capped native warp unless the request
+// asks for this. The runner-up cut stays 0.2 mm off the chosen step.
 const REFINE_RUNNER_UP_SEPARATION_MM = 0.2;
 // A second cut-like step means the refined cut could be either one. Flag the
 // edge (the chosen cut and every measured value stay as they are) when:
@@ -2693,7 +2756,7 @@ function swapEdges180(obj) {
 }
 
 /** Copy the tightened card out of the one expanded warp. Integer crop: the
- *  half-level cut is within half a pixel, about 0.007 mm at 70 px/mm. */
+ *  cut stays within half a pixel of the half-level line. */
 function extractTightCard(warp, edgePx) {
   const x0 = Math.max(0, Math.min(warp.width - 2, Math.round(edgePx.left)));
   const y0 = Math.max(0, Math.min(warp.height - 2, Math.round(edgePx.top)));
@@ -2753,8 +2816,8 @@ async function uprightCardCrop(buffer, photoQuad, photoW, photoH) {
 }
 
 /**
- * One perspective warp at 70 px/mm. The cut is found on that warp and the
- * centering raster is the tightened card cropped out of it.
+ * One perspective warp at the card's own pixel height. The cut is found on
+ * that warp and the centering raster is the tightened card cropped out of it.
  * @returns {Promise<object|null>}
  */
 async function buildFullCenteringWarp(buffer, located) {
@@ -2764,7 +2827,11 @@ async function buildFullCenteringWarp(buffer, located) {
   if (!photoQ || !photoW || !photoH) return null;
   const crop = await uprightCardCrop(buffer, photoQ, photoW, photoH);
   if (!crop) return null;
-  const centerH = Math.round(CARD_HEIGHT_MM * FULL_CENTERING_PX_PER_MM);
+  const cardPx = located.detection.cardSizePx && located.detection.cardSizePx.heightPx;
+  if (!(cardPx > 0)) return null;
+  let centerH = Math.round(cardPx);
+  if (centerH < CENTERING_WARP_MIN_HEIGHT) centerH = CENTERING_WARP_MIN_HEIGHT;
+  if (centerH > photoH) centerH = photoH;
   const centerW = Math.round(centerH * cardQuad.WARP_WIDTH / cardQuad.WARP_HEIGHT);
   const q = {
     tl: [photoQ.tl[0] - crop.left, photoQ.tl[1] - crop.top],
@@ -2804,7 +2871,8 @@ async function buildFullCenteringWarp(buffer, located) {
       pxPerMm: round2(image.height / CARD_HEIGHT_MM),
       scale: Math.round(scale * 10000) / 10000,
       sharedWarp: true,
-      runnerUpSeparationMm: REFINE_RUNNER_UP_SEPARATION_MM
+      runnerUpSeparationMm: REFINE_RUNNER_UP_SEPARATION_MM,
+      achievedPxPerMm: located.detection.achievedPxPerMm
     }
   };
 }
@@ -2957,6 +3025,9 @@ async function locateCardResolved(buffer, options) {
   detection.rawQuad = accepted.source === 'native' ? detection.nativeQuadRaw : detection.serverQuadRaw;
   detection.quad = toPhoto(q);
   detection.cardSizePx = sidesPx(q);
+  detection.achievedPxPerMm = detection.cardSizePx && detection.cardSizePx.heightPx > 0
+    ? round2(detection.cardSizePx.heightPx / CARD_HEIGHT_MM)
+    : null;
   detection.cardBoxPctOfPhoto = accepted.check.areaPct;
   detection.aspect = accepted.check.aspect;
   detection.rotatedToPortrait = q.rotatedToPortrait;
@@ -3249,6 +3320,7 @@ async function gradeBuffer(buffer, options) {
   async function deliver(report, ctx) {
     if (options.side === 'back') backScan.unscoreBack(report);
     if (Array.isArray(options.finePrintEdges)) applyFinePrintLabel(report, options.finePrintEdges);
+    applyEdgeResolution(report);
     return returnGrade(await attachScanDebug(report, ctx));
   }
 
@@ -3619,6 +3691,12 @@ module.exports = {
   scoreCenteringPhase,
   PSA_FRONT_CENTERING_TABLE,
   applyFinePrintLabel,
+  applyEdgeResolution,
+  resolutionToleranceMm,
+  edgeScoreToleranceMm,
+  achievedPxPerMmFromReport,
+  RESOLUTION_DISTINCT_PX,
+  RESOLUTION_WITHHELD_LABEL,
   FINE_PRINT_LABEL,
   FINE_PRINT_TOLERANCE_MM,
   INK_STEP_CONTRAST,
@@ -3646,7 +3724,6 @@ module.exports = {
   SURFACE_DETECTOR_TRUSTED,
   EDGE_DETECTOR_TRUSTED,
   MAX_DECODE_DIM,
-  FULL_CENTERING_PX_PER_MM,
   REFINE_RUNNER_UP_SEPARATION_MM,
   uprightCardCrop,
   BORDER_SAMPLE_SPREAD_MAX_PX,

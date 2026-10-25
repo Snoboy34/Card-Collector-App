@@ -82,6 +82,21 @@ async function run() {
   assert('unknown background is dropped', droppedBg.metadata.capture && !('background' in droppedBg.metadata.capture), droppedBg.metadata.capture);
   assert('empty background is unspecified', sm.normalizeBackground('') === null && sm.normalizeBackground(null) === null);
 
+  const facts = sm.captureFacts({
+    deviceModel: 'Pixel 8', camera: 'back', captureWidth: '4000', captureHeight: '3000', pxPerMm: '70'
+  }, p.metadata, null);
+  assert('flat capture fields win and a client px/mm is ignored',
+    facts.deviceModel === 'Pixel 8' && facts.camera === 'back' && facts.captureWidth === 4000 &&
+    facts.captureHeight === 3000 && facts.pxPerMm == null, facts);
+  const fromMeta = sm.captureFacts({}, p.metadata, null);
+  assert('captureMetadata fills a missing flat field',
+    fromMeta.deviceModel === 'iPhone15,2' && fromMeta.camera === 'builtInWideAngleCamera' &&
+    fromMeta.captureWidth === 3024 && fromMeta.captureHeight === 4032, fromMeta);
+  const measured = sm.captureFacts({ pxPerMm: '70' }, null, {
+    cardDetection: { achievedPxPerMm: 22.4, cardSizePx: { heightPx: 1991 } }
+  });
+  assert('stored px/mm is the server measurement', measured.pxPerMm === 22.4 && measured.deviceModel == null, measured);
+
   // ---- server ----
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'judge-meta-'));
   process.env.JUDGE_DATA_DIR = path.join(tmp, 'data');
@@ -115,6 +130,15 @@ async function run() {
     const withMeta = await post(card, { captureMetadata: JSON.stringify(NATIVE_META) });
     const item = withMeta.body.item;
     assert('graded with metadata → 200', withMeta.status === 200 && item, withMeta.body);
+    const flat = await post(card, {
+      deviceModel: 'Pixel 8', camera: 'back', captureWidth: '4000', captureHeight: '3000', pxPerMm: '70',
+      captureMetadata: JSON.stringify(NATIVE_META)
+    });
+    const flatCapture = flat.body.item && flat.body.item.capture;
+    assert('item.capture stores the flat device and the server px/mm',
+      flat.status === 200 && flatCapture && flatCapture.deviceModel === 'Pixel 8' && flatCapture.camera === 'back' &&
+      flatCapture.captureWidth === 4000 && flatCapture.captureHeight === 3000 &&
+      flatCapture.pxPerMm > 0 && flatCapture.pxPerMm !== 70, flatCapture);
     assert('item.captureMetadata stored (sanitized)', item.captureMetadata && item.captureMetadata.camera.codec === 'jpeg' &&
       item.captureMetadata.device.systemVersion === '18.1' && !('sneaky' in item.captureMetadata), item.captureMetadata);
     const s = item.serverMetadata;
@@ -172,6 +196,8 @@ async function run() {
     assert('422 path: failed-scans line carries both metadata blocks', noCard.status === 422 && failed.scanId === noCard.body.scanId &&
       failed.captureMetadata && failed.captureMetadata.app.build === '57' && failed.serverMetadata &&
       failed.serverMetadata.uploadBytes > 0, failed);
+    assert('422 path stores capture facts from metadata', failed.capture && failed.capture.deviceModel === 'iPhone15,2' &&
+      failed.capture.camera === 'builtInWideAngleCamera', failed.capture);
 
     const dump = require('./dump_scans');
     const text = dump.formatGraded(saved);
