@@ -1,5 +1,5 @@
 {
-  "noted": "2026-10-03 phone photos, in the order they were sent, read as TD-01 through TD-06. Correct a title on /deck if an ID is different. The gate uses these expect values for a scan that is labeled with the ID. A card.expect set on /deck is what deck_report uses; this file is the TD check in npm run gate.",
+  "noted": "2026-10-03 phone photos, in the order they were sent, read as TD-01 through TD-06. Correct a title on /deck if an ID is different. A front with an approved answer-key millimetre is scored against that key (0.1 mm, or 0.2 mm on a fine-print edge). These expect values cover the back, and any side that has no approved key millimetre. A card.expect set on /deck is what deck_report uses.",
   "cards": [
     {
       "id": "TD-01",

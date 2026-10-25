@@ -2,7 +2,8 @@
  * scripts/verify_gate.js
  * Checks scripts/gate.js. Data steps only (--skip-suites), so the gate can
  * run this file as one of its suites without recursing:
- *   - a synthetic data dir with two deck scans → PASS, same-engine runs identical
+ *   - a synthetic data dir with two deck scans → compare_finders and deck_report PASS.
+ *     td_deck FAIL: those borders are not the answer-key millimetres.
  *   - a candidate that loses centering → compare_finders and deck_report FAIL
  *   - no data → SKIP (gate passes), or FAIL with --require-data
  *   - suite discovery; CLI exit codes
@@ -82,13 +83,14 @@ async function run() {
 
   const ok = await gate({ skipSuites: true, dataDir: d.dataDir, uploadsDir: d.uploadsDir });
   console.log(ok.text);
-  assert('good data → GATE PASS', ok.ok === true, ok.steps);
   assert('compare_finders PASS with identical same-engine runs', step(ok, 'compare_finders').status === 'PASS' &&
     /runs identical/.test(step(ok, 'compare_finders').detail), step(ok, 'compare_finders'));
   assert('deck_report PASS, 2 of 2 kept', step(ok, 'deck_report').status === 'PASS' &&
     /candidate 2 of 2/.test(step(ok, 'deck_report').detail), step(ok, 'deck_report'));
-  assert('td_deck PASS for the two white cards that measure', step(ok, 'td_deck').status === 'PASS' &&
-    /2 of 6/.test(step(ok, 'td_deck').detail), step(ok, 'td_deck'));
+  assert('td_deck FAIL when synthetic borders are not the answer-key millimetres', step(ok, 'td_deck').status === 'FAIL' &&
+    /TD-01 front /.test(step(ok, 'td_deck').failures.join(' ')) &&
+    /vs key /.test(step(ok, 'td_deck').failures.join(' ')) &&
+    /TD-02 front /.test(step(ok, 'td_deck').failures.join(' ')), step(ok, 'td_deck'));
 
   const broken = makeBrokenCandidate(root);
   const bad = await gate({ skipSuites: true, dataDir: d.dataDir, uploadsDir: d.uploadsDir, candidateDir: broken, currentDir: ROOT });
@@ -141,8 +143,56 @@ async function run() {
     tdSideFailure('TD-02', 'front', ['measured', 'withheld'], withheld) == null, withheld);
   const wBad = tdSideFailure('TD-02', 'front', ['measured', 'withheld'], forced);
   assert('td_deck rule FAIL when a low-confidence TD-02 front still has a centering number', wBad &&
-    /TD-02 front expected measured or withheld, low-confidence edge/.test(wBad) &&
     /CEN 9 on a low-confidence edge \(left\)/.test(wBad), wBad);
+
+  const wrongBottom = {
+    measured: true, status: 'offcenter', cen: 6, lr: 52, tb: 70,
+    mm: { top: 3.41, bottom: 1.152, left: null, right: null }
+  };
+  const wrongLine = tdSideFailure('TD-04', 'front', 'offcenter', wrongBottom);
+  assert('td_deck scores a published edge against the answer key, not the offcenter label', wrongLine &&
+    wrongLine === 'TD-04 front bottom 1.152 mm vs key 1.416 (±0.1)', wrongLine);
+  const withheldBottom = {
+    measured: false, status: 'undetectable', cen: null, lr: null, tb: null,
+    mm: { top: null, bottom: null, left: null, right: null }
+  };
+  assert('td_deck accepts a withheld edge when the published reading was not the key',
+    tdSideFailure('TD-04', 'front', 'offcenter', withheldBottom) == null);
+  const onTolerance = {
+    measured: true, status: 'measured', cen: 8, lr: 50, tb: 55,
+    mm: { top: 3.41, bottom: 1.516, left: null, right: null }
+  };
+  assert('td_deck accepts a solid edge 0.1 mm from the key',
+    tdSideFailure('TD-04', 'front', 'offcenter', onTolerance) == null);
+  const pastTolerance = {
+    measured: true, status: 'measured', cen: 8, lr: 50, tb: 55,
+    mm: { top: 3.41, bottom: 1.517, left: null, right: null }
+  };
+  const pastLine = tdSideFailure('TD-04', 'front', 'offcenter', pastTolerance);
+  assert('td_deck rejects a solid edge past 0.1 mm', pastLine &&
+    /bottom 1.517 mm vs key 1.416 \(±0.1\)/.test(pastLine), pastLine);
+  const fineOk = {
+    measured: true, status: 'measured', cen: 9, lr: 50, tb: 50,
+    mm: { top: 3.535, bottom: null, left: null, right: null }
+  };
+  assert('td_deck accepts a fine-print edge 0.2 mm from the key',
+    tdSideFailure('TD-02', 'front', 'measured', fineOk) == null);
+  const fineFar = {
+    measured: true, status: 'measured', cen: 9, lr: 50, tb: 50,
+    mm: { top: 3.556, bottom: null, left: null, right: null }
+  };
+  const fineLine = tdSideFailure('TD-02', 'front', 'measured', fineFar);
+  assert('td_deck rejects a fine-print edge past 0.2 mm', fineLine &&
+    /top 3.556 mm vs key 3.345 \(±0.2\)/.test(fineLine), fineLine);
+  const solidFar = {
+    measured: true, status: 'measured', cen: 9, lr: 50, tb: 50,
+    mm: { top: null, bottom: 4.049, left: null, right: null }
+  };
+  const solidLine = tdSideFailure('TD-02', 'front', 'measured', solidFar);
+  assert('td_deck keeps a solid edge at 0.1 mm when another edge on the card is fine-print', solidLine &&
+    /bottom 4.049 mm vs key 3.899 \(±0.1\)/.test(solidLine), solidLine);
+  assert('td_deck still uses the label on a back', 
+    /TD-04 back expected measured/.test(tdSideFailure('TD-04', 'back', 'measured', withheldBottom) || ''));
 
   const staleRoot = path.join(root, 'stale');
   const staleData = path.join(staleRoot, 'data');
@@ -161,14 +211,16 @@ async function run() {
   fs.writeFileSync(path.join(staleData, 'database.json'), JSON.stringify(staleDb));
   const stale = await gate({ skipSuites: true, dataDir: staleData, uploadsDir: staleUploads });
   console.log(stale.text);
-  assert('td_deck follows the re-grade when the stored report is from an old engine', stale.ok === true &&
-    step(stale, 'td_deck').status === 'PASS' && /2 of 6/.test(step(stale, 'td_deck').detail), step(stale, 'td_deck'));
+  assert('td_deck follows the re-grade when the stored report is from an old engine',
+    step(stale, 'td_deck').status === 'FAIL' &&
+    /vs key /.test(step(stale, 'td_deck').failures.join(' ')) &&
+    /expected undetectable/.test(step(stale, 'td_deck').failures.join(' ')) === false, step(stale, 'td_deck'));
   const req = await gate({ skipSuites: true, dataDir: empty, requireData: true });
   assert('no data + --require-data → GATE FAIL', req.ok === false && step(req, 'compare_finders').status === 'FAIL', req.steps);
 
-  const cliOk = spawnSync(process.execPath, [path.join(__dirname, 'gate.js'), '--skip-suites', '--data', d.dataDir, '--uploads', d.uploadsDir],
+  const cliOk = spawnSync(process.execPath, [path.join(__dirname, 'gate.js'), '--skip-suites', '--data', empty],
     { encoding: 'utf8' });
-  assert('CLI exit 0 and prints GATE PASS', cliOk.status === 0 && /GATE PASS\s*$/.test(cliOk.stdout), cliOk.stdout + cliOk.stderr);
+  assert('CLI exit 0 and prints GATE PASS when the deck is absent', cliOk.status === 0 && /GATE PASS\s*$/.test(cliOk.stdout), cliOk.stdout + cliOk.stderr);
   const cliBad = spawnSync(process.execPath, [path.join(__dirname, 'gate.js'), '--skip-suites', '--data', d.dataDir, '--uploads', d.uploadsDir,
     '--candidate', broken, '--current', ROOT], { encoding: 'utf8' });
   assert('CLI exit 1 and prints GATE FAIL', cliBad.status === 1 && /GATE FAIL\s*$/.test(cliBad.stdout), cliBad.stdout + cliBad.stderr);

@@ -130,11 +130,81 @@ function tdExpectPass(expect, result) {
   });
 }
 
+const SOLID_TOLERANCE_MM = 0.1;
+const FINE_PRINT_TOLERANCE_MM = 0.2;
+const KEY_EDGES = ['left', 'right', 'top', 'bottom'];
+
+let answerKeyCache = null;
+function loadAnswerKey() {
+  if (answerKeyCache) return answerKeyCache;
+  try {
+    answerKeyCache = JSON.parse(fs.readFileSync(path.join(ROOT, 'reference', 'answer_key.json'), 'utf8'));
+  } catch (err) {
+    answerKeyCache = { cards: {} };
+  }
+  return answerKeyCache;
+}
+
+/** Approved key millimetres for this card. Null when the key has none. */
+function approvedKeySides(cardId) {
+  const card = loadAnswerKey().cards && loadAnswerKey().cards[cardId];
+  if (!card || !card.sides) return null;
+  const sides = {};
+  let any = false;
+  KEY_EDGES.forEach(function (edge) {
+    const row = card.sides[edge];
+    if (!row || row.approved !== true || typeof row.mm !== 'number' || !isFinite(row.mm)) return;
+    sides[edge] = row;
+    any = true;
+  });
+  return any ? sides : null;
+}
+
+function mmDelta(got, keyMm) {
+  return Math.abs(Math.round((Number(got) - keyMm) * 1000) / 1000);
+}
+
+/**
+ * A front with approved answer-key millimetres is scored against those
+ * millimetres. A missing phone edge is withheld and is not a wrong grade.
+ * A published edge has to land within 0.1 mm, or 0.2 mm when the key marks
+ * that edge fine-print. Null when this side is not judged by the key.
+ */
+function tdKeyFailure(cardId, side, result) {
+  if (side !== 'front') return null;
+  const sides = approvedKeySides(cardId);
+  if (!sides) return null;
+  const mm = (result && result.mm) || {};
+  const problems = [];
+  KEY_EDGES.forEach(function (edge) {
+    const row = sides[edge];
+    if (!row) return;
+    const got = mm[edge];
+    if (got == null || !isFinite(Number(got))) return;
+    const tol = row.finePrint === true ? FINE_PRINT_TOLERANCE_MM : SOLID_TOLERANCE_MM;
+    const delta = mmDelta(got, row.mm);
+    if (delta > tol) {
+      problems.push(edge + ' ' + Number(got).toFixed(3) + ' mm vs key ' + row.mm.toFixed(3) + ' (±' + tol.toFixed(1) + ')');
+    }
+  });
+  if (!problems.length) return null;
+  return cardId + ' ' + side + ' ' + problems.join('; ');
+}
+
 /**
  * One side of the TD check. Null when the re-graded result matches.
  * `result` is the shape from deck_report.resultFromReport.
+ * A front that has approved key millimetres is judged by those millimetres.
+ * The measured/offcenter label is not used for that side.
  */
 function tdSideFailure(cardId, side, expect, result) {
+  if (side === 'front' && approvedKeySides(cardId)) {
+    const low = ((result && result.borderVoteLowConfidenceEdges) || []).length > 0;
+    if (low && result.cen != null) {
+      return cardId + ' ' + side + ' got ' + tdGot(result);
+    }
+    return tdKeyFailure(cardId, side, result);
+  }
   if (tdExpectPass(expect, result)) return null;
   return cardId + ' ' + side + ' expected ' + tdExpectLabel(expect) + ', got ' + tdGot(result);
 }
@@ -152,10 +222,11 @@ function tdScored(stored, regrade) {
 }
 
 /**
- * TD-01..TD-06 outcomes from fixtures/td_expectations.json. Scores the
- * candidate engine's re-grade of the saved upload (deck_report row.candidate
- * and row.backCandidate), not the grade stored by an older engine. A data
- * dir that has none of these cards skips, so synthetic gate fixtures are not
+ * TD-01..TD-06 outcomes. A front with approved answer-key millimetres is
+ * scored against that key. Other sides use fixtures/td_expectations.json.
+ * Scores the candidate engine's re-grade of the saved upload (deck_report
+ * row.candidate and row.backCandidate), not the grade stored by an older
+ * engine. A data dir that has none of these cards skips, so synthetic gate fixtures are not
  * required to be the phone deck. --require-data fails a missing card.
  */
 function tdStep(o) {
