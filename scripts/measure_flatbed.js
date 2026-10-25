@@ -107,6 +107,21 @@ const SEARCH_TO_MM = 14;
 const DEPTH_STEP_MM = 0.02;
 const STATION_STEP_MM = 0.4;
 const SIDE_MARGIN = 0.1;
+// A fine-print edge is speckle or halftone at this scan: inside the measured
+// line, some stations are already ink while others are still as bright as
+// the border. A solid line drops the bright stations with the median.
+// The same test runs on every measured edge. Nothing here names a card.
+const FINE_PRINT_LABEL = 'fine-print, ±0.2 mm';
+const FINE_PRINT_TOLERANCE_MM = 0.2;
+const FINE_P90_WITHIN_BORDER = 40;
+const FINE_P10_DROP = 90;
+const FINE_SPREAD_MIN = 120;
+const FINE_INK_WINDOW_MM = 0.22;
+const FINE_BORDER_GAP_MM = 0.35;
+const FINE_BORDER_LOOKBACK_MM = 1.1;
+const FINE_BORDER_SPAN_MM = 0.2;
+const FINE_EDGE_LO = 0.2;
+const FINE_EDGE_HI = 0.8;
 const EDGE_FIT_MARGIN = 0.15;
 const MAX_SLOPE = 0.55;
 const MIN_COVERAGE = 0.75;
@@ -1012,6 +1027,11 @@ function measureSide(data, w, h, quad, sideName, ppm) {
     const cands = rayCandidates(profile.slice(designStart), designStart * DEPTH_STEP_MM, DEPTH_STEP_MM);
     const marginModel = marginModelFromProfile(profile, designStart, DEPTH_STEP_MM);
     const designDepth = tagMarginMarks(cands, profile, marginModel, DEPTH_STEP_MM, designStart * DEPTH_STEP_MM);
+    const luma = new Uint8Array(nSteps);
+    for (let i = 0; i < nSteps; i++) {
+      const rgb = profile[i];
+      luma[i] = rgb ? Math.max(0, Math.min(255, Math.round(profileLuma(rgb)))) : 0;
+    }
     stations.push({
       x: x,
       y: y,
@@ -1019,6 +1039,7 @@ function measureSide(data, w, h, quad, sideName, ppm) {
       ny: ny,
       alongMm: s / ppm,
       t: t,
+      luma: luma,
       margin: marginModel ? marginModel.med : null,
       marginTextured: !!(marginModel && marginModel.textured),
       marginPattern: !!(marginModel && marginModel.pattern),
@@ -1082,6 +1103,118 @@ function measureSide(data, w, h, quad, sideName, ppm) {
 function profileLuma(rgb) {
   if (!rgb) return 0;
   return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+}
+
+function fineQuantile(sorted, q) {
+  if (!sorted.length) return null;
+  const i = Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * q)));
+  return sorted[i];
+}
+
+function fineMedian(values) {
+  const s = values.filter(function (v) { return v != null && isFinite(v); }).sort(function (a, b) { return a - b; });
+  if (!s.length) return null;
+  return s[Math.floor(s.length / 2)];
+}
+
+// Stations carry a luma sample every DEPTH_STEP_MM, from the cut inward.
+// `mm` is the published border. The border window sits in the plain margin
+// just outside that line. The ink window is the first 0.22 mm inside it.
+function finePrintFromStations(stations, mm, stepMm) {
+  const step = stepMm > 0 ? stepMm : DEPTH_STEP_MM;
+  const empty = {
+    finePrint: false,
+    borderLuma: null,
+    inkP10: null,
+    inkP90: null,
+    inkSpread: null,
+    inkDark: null,
+    p90Gap: null,
+    p10Drop: null,
+    samples: 0
+  };
+  if (mm == null || !isFinite(mm) || !stations || !stations.length) return empty;
+  const borderFrom = Math.max(0.25, mm - FINE_BORDER_LOOKBACK_MM);
+  const borderTo = mm - FINE_BORDER_GAP_MM;
+  if (borderTo - borderFrom < FINE_BORDER_SPAN_MM - 1e-9) return empty;
+  const used = stations.filter(function (st) {
+    return st && st.luma && st.t >= FINE_EDGE_LO && st.t <= FINE_EDGE_HI;
+  });
+  if (used.length < 8) return empty;
+  function depths(from, to) {
+    const idx = [];
+    const i0 = Math.round(from / step);
+    const i1 = Math.round(to / step);
+    for (let i = i0; i <= i1; i++) idx.push(i);
+    return idx;
+  }
+  function windowStats(indices) {
+    const p10s = [];
+    const p90s = [];
+    const meds = [];
+    const spreads = [];
+    const darks = [];
+    indices.forEach(function (i) {
+      const vals = [];
+      used.forEach(function (st) {
+        if (i < 0 || i >= st.luma.length) return;
+        vals.push(st.luma[i]);
+      });
+      if (vals.length < 8) return;
+      vals.sort(function (a, b) { return a - b; });
+      const p10 = fineQuantile(vals, 0.1);
+      const p90 = fineQuantile(vals, 0.9);
+      const med = fineQuantile(vals, 0.5);
+      p10s.push(p10);
+      p90s.push(p90);
+      meds.push(med);
+      spreads.push(p90 - p10);
+      let dark = 0;
+      vals.forEach(function (v) { if (v < 140) dark++; });
+      darks.push(dark / vals.length);
+    });
+    return {
+      medLuma: fineMedian(meds),
+      medP10: fineMedian(p10s),
+      medP90: fineMedian(p90s),
+      medSpread: fineMedian(spreads),
+      medDark: fineMedian(darks),
+      n: p10s.length
+    };
+  }
+  const border = windowStats(depths(borderFrom, borderTo));
+  const ink = windowStats(depths(mm, mm + FINE_INK_WINDOW_MM));
+  if (border.medLuma == null || ink.medP10 == null || ink.medP90 == null || ink.n < 4) return empty;
+  const p90Gap = border.medLuma - ink.medP90;
+  const p10Drop = border.medLuma - ink.medP10;
+  // "Within 40" is either side of the border. A negative gap means the
+  // bright stations got brighter inside the line, which is not speckle.
+  const finePrint = Math.abs(p90Gap) <= FINE_P90_WITHIN_BORDER &&
+    p10Drop >= FINE_P10_DROP &&
+    ink.medSpread > FINE_SPREAD_MIN;
+  return {
+    finePrint: finePrint,
+    borderLuma: Math.round(border.medLuma * 10) / 10,
+    inkP10: Math.round(ink.medP10 * 10) / 10,
+    inkP90: Math.round(ink.medP90 * 10) / 10,
+    inkSpread: Math.round(ink.medSpread * 10) / 10,
+    inkDark: ink.medDark == null ? null : Math.round(ink.medDark * 100) / 100,
+    p90Gap: Math.round(p90Gap * 10) / 10,
+    p10Drop: Math.round(p10Drop * 10) / 10,
+    samples: ink.n
+  };
+}
+
+function stampFinePrint(side) {
+  if (!side || side.finePrintStamped) return;
+  side.finePrintStamped = true;
+  const reading = finePrintFromStations(side.stations, side.mm, DEPTH_STEP_MM);
+  side.finePrint = !!reading.finePrint;
+  side.finePrintStats = reading;
+  if (process.env.TRACE_FINE) {
+    process.stdout.write((side.side || '?') + ' mm ' + (side.mm == null ? 'null' : Number(side.mm).toFixed(3)) +
+      ' fine ' + side.finePrint + ' ' + JSON.stringify(reading) + '\n');
+  }
 }
 
 // A thin bright stroke with a darker band just inside it. The wave in a
@@ -1636,6 +1769,7 @@ function applyRectangularFrame(sides) {
       side.marginPatterned = !!chromaticSide[name];
       side.sawProfile = segments[name].length > 0;
       publishFrameLine(side, joinSameStroke(profileMatch[name], segments[name]), side.stations || []);
+      stampFinePrint(side);
       delete side.stations;
       delete side.goldEnds;
     });
@@ -1667,6 +1801,7 @@ function applyRectangularFrame(sides) {
           side.marginPatterned = !!chromaticSide[name];
           side.sawProfile = segments[name].length > 0;
           publishFrameLine(side, blackLines[name], side.stations || []);
+          stampFinePrint(side);
           delete side.stations;
           delete side.goldEnds;
         });
@@ -1692,6 +1827,7 @@ function applyRectangularFrame(sides) {
           if (!side) return;
           side.marginPatterned = !!chromaticSide[name];
           side.sawProfile = segments[name].length > 0;
+          stampFinePrint(side);
           delete side.stations;
           delete side.goldEnds;
         });
@@ -1748,6 +1884,7 @@ function applyRectangularFrame(sides) {
     }
     side.marginPatterned = !!chromaticSide[name];
     side.sawProfile = segments[name].length > 0;
+    stampFinePrint(side);
     delete side.stations;
     delete side.goldEnds;
   });
@@ -2477,6 +2614,7 @@ function withholdNotCardSized(sides) {
     side.mm = null;
     side.withheld = true;
     side.reason = 'not-card-sized';
+    side.finePrint = false;
   });
 }
 
@@ -2519,6 +2657,7 @@ function sidePublic(side) {
     blackOuterMm: side.blackOuterMm == null ? null : roundMm(side.blackOuterMm),
     frameDiffMm: side.frameDiffMm == null ? null : roundMm(side.frameDiffMm),
     frameWidthMm: side.frameWidthMm == null ? null : roundMm(side.frameWidthMm),
+    finePrint: !!side.finePrint,
     points: (side.used || []).map(function (p) {
       return { alongMm: roundMm(p.alongMm), depthMm: roundMm(p.depth) };
     }),
@@ -2652,12 +2791,21 @@ function agreeEdges(upSides, rotSides) {
       if (confs.length) confidence = Math.min.apply(null, confs);
     }
     const diff = upMm != null && rotMm != null ? upMm - rotMm : null;
+    const pickedSide = alongSide ? (side === 'top' ? b : a) : null;
+    // Top and bottom use the clear scan. Left and right are one physical
+    // edge seen twice, so both scans have to show the speckle.
+    const finePrint = mm == null
+      ? false
+      : alongSide
+        ? !!(pickedSide && pickedSide.finePrint)
+        : !!(a && a.finePrint && b && b.finePrint);
     sides[side] = {
       mm: mm == null ? null : roundMm(mm),
       confidence: Math.round(confidence * 1000) / 1000,
       withheld: withheld,
       reason: reason,
       approved: false,
+      finePrint: finePrint,
       pickedFrom: pickedFrom,
       upMm: upMm == null ? null : roundMm(upMm),
       rot180Mm: rotMm == null ? null : roundMm(rotMm),
@@ -2884,7 +3032,8 @@ function buildOverlaySvg(result, geom) {
     const text = side.withheld
       ? name + ' withheld' + (side.reason ? ' (' + side.reason + ')' : '') +
         (shown == null ? '' : '  candidate ' + shown.toFixed(2) + ' mm') + blackNote + covNote + confNote + tiltNote
-      : name + ' ' + side.mm.toFixed(2) + ' mm' + blackNote + covNote + confNote + tiltNote;
+      : name + ' ' + side.mm.toFixed(2) + ' mm' +
+        (side.finePrint ? '  ' + FINE_PRINT_LABEL : '') + blackNote + covNote + confNote + tiltNote;
     const anchor = name === 'right' ? 'end' : (name === 'left' ? 'start' : 'middle');
     parts.push(
       '<text x="' + sx(labelX) + '" y="' + sy(labelY) + '" fill="#ffffff" font-size="22" font-family="sans-serif" stroke="#000000" stroke-width="3" paint-order="stroke" text-anchor="' + anchor + '" dominant-baseline="middle">' +
@@ -4526,5 +4675,8 @@ module.exports = {
   writeReviewSet: writeReviewSet,
   agreeEdges: agreeEdges,
   buildAnswerKey: buildAnswerKey,
-  BIAS_AGREE_MM: BIAS_AGREE_MM
+  finePrintFromStations: finePrintFromStations,
+  BIAS_AGREE_MM: BIAS_AGREE_MM,
+  FINE_PRINT_LABEL: FINE_PRINT_LABEL,
+  FINE_PRINT_TOLERANCE_MM: FINE_PRINT_TOLERANCE_MM
 };

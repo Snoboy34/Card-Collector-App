@@ -127,6 +127,25 @@ function backgroundOf(meta) {
   return value || null;
 }
 
+let finePrintKey = null;
+function finePrintNote(deckId) {
+  if (!finePrintKey) {
+    try {
+      finePrintKey = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'reference', 'answer_key.json'), 'utf8'));
+    } catch (err) {
+      finePrintKey = { cards: {} };
+    }
+  }
+  const key = finePrintKey;
+  const card = key.cards && key.cards[deckId];
+  if (!card || !card.sides) return '';
+  const edges = ['left', 'right', 'top', 'bottom'].filter(function (edge) {
+    return card.sides[edge] && card.sides[edge].finePrint === true;
+  });
+  if (!edges.length) return '';
+  return edges.join(', ') + '  fine-print, ±0.2 mm';
+}
+
 function resultLine(label, res, extra) {
   let line = '  ' + pad(label, 10) + pad(res.status, 15);
   if (res.measured) {
@@ -233,6 +252,8 @@ async function buildDeckReport(opts) {
       '  expect ' + (expect || '—') +
       (ruler ? '  ruler L/R ' + fmt(ruler.lr) + ' T/B ' + fmt(ruler.tb) : '') +
       (known ? '  known ' + deck.formatGradeShort(known) : ''));
+    const fineNote = finePrintNote(deckId);
+    if (fineNote) lines.push('  ' + fineNote);
     const row = { deckId: deckId, category: card.category || null, expect: expect, latest: null, previous: null, candidate: null, back: null, backCandidate: null };
     if (!latest && !latestBack) {
       lines.push('  not scanned yet');

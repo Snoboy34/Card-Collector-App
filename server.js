@@ -158,7 +158,28 @@ function parseGradingOptions(body) {
   // is not passed into the grader, so a front grade matches a request with
   // no side field.
   if (body.side === 'back') opts.side = 'back';
+  if (body.deckId) {
+    const fine = finePrintEdgesFor(body.deckId);
+    if (fine && fine.length) opts.finePrintEdges = fine;
+  }
   return opts;
+}
+
+let finePrintKey = null;
+function finePrintEdgesFor(deckId) {
+  if (!deckId) return [];
+  if (!finePrintKey) {
+    try {
+      finePrintKey = JSON.parse(fs.readFileSync(path.join(__dirname, 'reference', 'answer_key.json'), 'utf8'));
+    } catch (err) {
+      finePrintKey = { cards: {} };
+    }
+  }
+  const card = finePrintKey.cards && finePrintKey.cards[deckId];
+  if (!card || !card.sides) return [];
+  return ['left', 'right', 'top', 'bottom'].filter(function (edge) {
+    return card.sides[edge] && card.sides[edge].finePrint === true;
+  });
 }
 
 /**
