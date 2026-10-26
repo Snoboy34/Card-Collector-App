@@ -4,6 +4,9 @@ scans/
 data/regrades/
 data/centering_examples.jsonl
 data/assist_settings.json
+data/beta_flags.json
+data/accounts.json
+data/sessions.json
 .env
 .DS_Store
 .vscode/

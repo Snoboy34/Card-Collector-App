@@ -322,6 +322,7 @@ function renderSettings() {
       </label>
       <p class="muted">Off by default. When it is off, a border correction is saved with consent turned off and is not sent anywhere else. Turning this on applies only to corrections you save after that. Corrections already saved stay as they were.</p>
       <p id="settingsStatus" class="muted"></p>
+      <div id="shopBetaSettings"></div>
     </section>
   `;
   const box = document.getElementById('helpImprove');
@@ -349,6 +350,7 @@ function renderSettings() {
     }
     box.disabled = false;
   });
+  if (window.ShopBeta) ShopBeta.mountSettings();
 }
 
 /* Scan view (for hash navigation) */
@@ -360,6 +362,7 @@ function renderScanView() {
       <div style="margin-top:12px;">
         <input id="scanName" placeholder="Card name (optional)" style="padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inherit; min-width:200px;" />
       </div>
+      <div id="shopBetaGuide"></div>
       <div id="scanViewportMount"></div>
       <div id="previewArea" style="margin-top:14px;"></div>
     </section>
@@ -373,6 +376,7 @@ function renderScanView() {
   } else {
     mount.innerHTML = '<p class="muted">Alignment viewport unavailable. Use Upload Photo.</p>';
   }
+  if (window.ShopBeta) ShopBeta.mountScan();
 }
 
 /**
@@ -1118,6 +1122,10 @@ function openReportModal(item) {
     </div>
   `;
   document.body.appendChild(modal);
+  if (window.ShopBeta) {
+    ShopBeta.noteScan(item);
+    ShopBeta.mountReport(modal, item);
+  }
   modal.querySelector('#closeModal').addEventListener('click', () => modal.remove());
   const copyBtn = modal.querySelector('#copyDiagnostics');
   if (copyBtn) {

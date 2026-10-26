@@ -47,6 +47,7 @@ const testDeck = require('./services/test_deck');
 const scanMetadata = require('./services/scan_metadata');
 const backScan = require('./services/back_scan');
 const centeringAssist = require('./services/centering_assist');
+const shopBeta = require('./services/shop_beta');
 const deckReport = require('./scripts/deck_report');
 const childProcess = require('child_process');
 
@@ -221,6 +222,7 @@ function respondCardNotFound(res, args) {
     serverMetadata: args.serverMetadata || null,
     diagnostics: report.cardDetection || null
   };
+  if (args.accountId) entry.accountId = args.accountId;
   scanMetadata.applyStoredDeviceName(entry);
   logFailedScan(entry);
   console.log('[grade] scanId=' + args.scanId + ' card not found: ' + reason);
@@ -345,6 +347,32 @@ function assistStore() {
   return centeringAssist.createStore(DATA_DIR);
 }
 
+function betaApi() {
+  return shopBeta.create({
+    dataDir: DATA_DIR,
+    uploadsDir: uploadsDir,
+    scansDir: SCANS_DIR,
+    loadDatabase: loadDatabase,
+    saveDatabase: saveDatabase
+  });
+}
+
+function dropScansFromMemory(scanIds) {
+  const wanted = {};
+  (scanIds || []).forEach(function (id) { if (id) wanted[id] = true; });
+  inventory = inventory.filter(function (item) { return !item || !wanted[item.scanId]; });
+}
+
+function scopedInventory(req) {
+  const db = loadDatabase();
+  const items = Array.isArray(db.inventory) ? db.inventory : [];
+  const beta = betaApi();
+  if (!beta.flags().accounts) return { items: items };
+  const gate = beta.sessionOrReject(req);
+  if (gate.error) return gate;
+  return { items: beta.filterItems(items, gate.session) };
+}
+
 function labelFromCapture(scanId, body) {
   const fields = captureLabelFields(body);
   if (!Object.keys(fields).length) return null;
@@ -412,7 +440,9 @@ function statsFor(inventoryArray, categoryCounts, walletStats) {
 function broadcastStats() {
   try {
     const db = loadDatabase();
-    const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
+    const beta = betaApi();
+    let inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
+    if (beta.flags().accounts) inventoryArray = beta.filterItems(inventoryArray, null);
     const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
     const walletStats = wallet.portfolioStats(inventoryArray);
     const payload = { ok: true, stats: statsFor(inventoryArray, categoryCounts, walletStats) };
@@ -435,7 +465,9 @@ app.get('/api/events', (req, res) => {
 
   try {
     const db = loadDatabase();
-    const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
+    const scoped = scopedInventory(req);
+    if (scoped.error) return;
+    const inventoryArray = scoped.items;
     const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
     const walletStats = wallet.portfolioStats(inventoryArray);
     const payload = { ok: true, stats: statsFor(inventoryArray, categoryCounts, walletStats) };
@@ -467,7 +499,50 @@ app.post('/api/auth/signup', handleAuth);
 app.post('/api/auth/login', handleAuth);
 
 app.get('/api/inventory', (req, res) => {
-  res.json({ ok: true, inventory });
+  const beta = betaApi();
+  if (!beta.flags().accounts) return res.json({ ok: true, inventory });
+  const scoped = scopedInventory(req);
+  if (scoped.error) return res.status(scoped.status).json({ ok: false, error: scoped.error });
+  return res.json({ ok: true, inventory: scoped.items });
+});
+
+app.get('/api/beta', (req, res) => {
+  const beta = betaApi();
+  const current = beta.flags();
+  res.json({
+    ok: true,
+    accounts: current.accounts,
+    manualEntry: current.manualEntry,
+    firstRunGuide: current.firstRunGuide,
+    appleAudience: current.appleAudience
+  });
+});
+
+app.get('/api/beta/guide', (req, res) => {
+  const beta = betaApi();
+  const tier = beta.tierForPxPerMm(req.query && req.query.pxPerMm);
+  res.json({ ok: true, tier: tier, text: beta.guideText(tier) });
+});
+
+app.post('/api/auth/apple', (req, res) => {
+  const beta = betaApi();
+  const body = req.body || {};
+  beta.signIn(body.identityToken, body.nonce).then(function (session) {
+    res.json(session);
+  }).catch(function (err) {
+    const status = err && err.status ? err.status : 401;
+    res.status(status).json({ ok: false, error: err && err.message ? err.message : 'sign in failed' });
+  });
+});
+
+app.delete('/api/account', (req, res) => {
+  const beta = betaApi();
+  if (!beta.flags().accounts) return res.status(403).json({ ok: false, error: 'accounts are off' });
+  const session = beta.readSession(req);
+  if (!session) return res.status(401).json({ ok: false, error: 'sign in required' });
+  const result = beta.deleteAccount(session.accountId);
+  dropScansFromMemory(result.scanIds);
+  res.json({ ok: true, deletedScans: result.deletedScans, deletedExamples: result.deletedExamples });
 });
 
 app.get('/api/categories', (req, res) => {
@@ -481,8 +556,9 @@ app.get('/api/categories', (req, res) => {
 
 app.get('/api/wallet/stats', (req, res) => {
   try {
-    const db = loadDatabase();
-    const items = Array.isArray(db.inventory) ? db.inventory : [];
+    const scoped = scopedInventory(req);
+    if (scoped.error) return res.status(scoped.status).json({ ok: false, error: scoped.error });
+    const items = scoped.items;
     const stats = wallet.portfolioStats(items);
     return res.json({ ok: true, stats });
   } catch (e) {
@@ -494,7 +570,9 @@ app.get('/api/wallet/stats', (req, res) => {
 app.get('/api/stats', (req, res) => {
   try {
     const db = loadDatabase();
-    const inventoryArray = Array.isArray(db.inventory) ? db.inventory : [];
+    const scoped = scopedInventory(req);
+    if (scoped.error) return res.status(scoped.status).json({ ok: false, error: scoped.error });
+    const inventoryArray = scoped.items;
     const categoryCounts = db.categoryCounts || { SPORTS: 0, TCG: 0, UNKNOWN: 0 };
     const walletStats = wallet.portfolioStats(inventoryArray);
     return res.json({ ok: true, stats: statsFor(inventoryArray, categoryCounts, walletStats) });
@@ -542,6 +620,8 @@ const gradeUpload = memoryUpload.fields([
 
 app.post('/api/grade', gradeUpload, async (req, res) => {
   try {
+    const gate = betaApi().authorizeGrade(req);
+    if (gate.error) return res.status(gate.status).json({ ok: false, error: gate.error });
     const receivedAt = new Date().toISOString();
     const imageFile = req.files && req.files.image && req.files.image[0];
     if (!imageFile || !imageFile.buffer) return res.status(400).json({ error: 'image buffer required' });
@@ -572,7 +652,8 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
     report.scanId = scanId;
     if (report.cardNotFound) {
       return respondCardNotFound(res, Object.assign({
-        report: report, scanId: scanId, route: '/api/grade', imagePath: `/uploads/${filename}`, body: req.body
+        report: report, scanId: scanId, route: '/api/grade', imagePath: `/uploads/${filename}`, body: req.body,
+        accountId: gate.accountId || null
       }, meta));
     }
 
@@ -613,6 +694,8 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
     };
     scanMetadata.stampCaptureTime(item);
     scanMetadata.applyStoredDeviceName(item);
+    if (gate.accountId) item.accountId = gate.accountId;
+    betaApi().attachTier(item);
 
     console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
     const label = labelFromCapture(scanId, req.body);
@@ -633,6 +716,8 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
  */
 app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
   try {
+    const gate = betaApi().authorizeGrade(req);
+    if (gate.error) return res.status(gate.status).json({ ok: false, error: gate.error });
     const receivedAt = new Date().toISOString();
     if (!req.file) return res.status(400).json({ error: 'image file is required' });
     const opts = parseGradingOptions(req.body);
@@ -653,7 +738,8 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     if (report.cardNotFound) {
       return respondCardNotFound(res, Object.assign({
         report: report, scanId: scanId, route: '/api/grade/upload',
-        imagePath: `/uploads/${path.basename(req.file.path)}`, body: req.body
+        imagePath: `/uploads/${path.basename(req.file.path)}`, body: req.body,
+        accountId: gate.accountId || null
       }, meta));
     }
     await grading.applySurfaceSweep(report, [], {
@@ -682,6 +768,8 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     };
     scanMetadata.stampCaptureTime(item);
     scanMetadata.applyStoredDeviceName(item);
+    if (gate.accountId) item.accountId = gate.accountId;
+    betaApi().attachTier(item);
 
     console.log('[grade] scanId=' + scanId + ' finalScore=' + report.finalScore + ' incomplete=' + Boolean(report.incomplete));
     const label = labelFromCapture(scanId, req.body);
@@ -755,7 +843,51 @@ app.get('/api/scans/:scanId', (req, res) => {
   if (!scanId) return res.status(400).json({ ok: false, error: 'invalid scan id' });
   const item = findGradedItem(scanId);
   if (!item) return res.status(404).json({ ok: false, error: 'scan not found' });
+  const beta = betaApi();
+  const gate = beta.sessionOrReject(req);
+  if (gate.error) return res.status(gate.status).json({ ok: false, error: gate.error });
+  if (!beta.canRead(item, gate.session)) return res.status(404).json({ ok: false, error: 'scan not found' });
   return res.json({ ok: true, item: item });
+});
+
+app.patch('/api/scans/:scanId/card-entry', (req, res) => {
+  const beta = betaApi();
+  if (!beta.flags().manualEntry) return res.status(403).json({ ok: false, error: 'manual entry is off' });
+  const scanId = grading.normalizeScanId(req.params.scanId);
+  if (!scanId) return res.status(400).json({ ok: false, error: 'invalid scan id' });
+  const item = findGradedItem(scanId);
+  if (!item) return res.status(404).json({ ok: false, error: 'scan not found' });
+  const gate = beta.sessionOrReject(req);
+  if (gate.error) return res.status(gate.status).json({ ok: false, error: gate.error });
+  const session = gate.session;
+  if (!beta.canRead(item, session)) return res.status(404).json({ ok: false, error: 'scan not found' });
+  if (!session && !isLocalNetworkAddress(req.socket && req.socket.remoteAddress)) {
+    return res.status(403).json({ ok: false, error: 'bench edits stay on the home network' });
+  }
+  const before = item.gradingReport;
+  beta.applyCardEntry(item, req.body || {});
+  if (item.gradingReport !== before) item.gradingReport = before;
+  persistGradedItem(item, item.category || 'UNKNOWN');
+  return res.json({ ok: true, item: item });
+});
+
+app.delete('/api/scans/:scanId', (req, res) => {
+  const beta = betaApi();
+  if (!beta.flags().accounts) return res.status(403).json({ ok: false, error: 'accounts are off' });
+  const scanId = grading.normalizeScanId(req.params.scanId);
+  if (!scanId) return res.status(400).json({ ok: false, error: 'invalid scan id' });
+  const item = findGradedItem(scanId);
+  if (!item) return res.status(404).json({ ok: false, error: 'scan not found' });
+  const gate = beta.sessionOrReject(req);
+  if (gate.error) return res.status(gate.status).json({ ok: false, error: gate.error });
+  const session = gate.session;
+  if (!beta.canRead(item, session)) return res.status(404).json({ ok: false, error: 'scan not found' });
+  if (!session && !isLocalNetworkAddress(req.socket && req.socket.remoteAddress)) {
+    return res.status(403).json({ ok: false, error: 'bench deletes stay on the home network' });
+  }
+  const result = beta.deleteScan(item);
+  dropScansFromMemory(result.scanIds);
+  return res.json({ ok: true, deletedScans: result.deletedScans, deletedExamples: result.deletedExamples });
 });
 
 app.post('/api/scans/:scanId/centering-assist', (req, res) => {
@@ -763,6 +895,10 @@ app.post('/api/scans/:scanId/centering-assist', (req, res) => {
   if (!scanId) return res.status(400).json({ ok: false, error: 'invalid scan id' });
   const item = findGradedItem(scanId);
   if (!item || !item.gradingReport) return res.status(404).json({ ok: false, error: 'scan not found' });
+  const beta = betaApi();
+  const gate = beta.sessionOrReject(req);
+  if (gate.error) return res.status(gate.status).json({ ok: false, error: gate.error });
+  if (!beta.canRead(item, gate.session)) return res.status(404).json({ ok: false, error: 'scan not found' });
   const body = req.body || {};
   // Deck id, side, and createdAt are the capture's. The body cannot change them.
   const setSide = body.setSide === 'front' || body.setSide === 'back' ? body.setSide : null;

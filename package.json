@@ -17,6 +17,7 @@
     "test:regrade": "node scripts/verify_regrade.js",
     "test:metadata": "node scripts/verify_scan_metadata.js",
     "test:assist": "node scripts/verify_centering_assist.js",
+    "test:beta": "node scripts/verify_beta_accounts.js",
     "regrade": "node scripts/regrade.js",
     "gate": "node scripts/gate.js",
     "test:deck": "node scripts/verify_test_deck.js",
