@@ -111,17 +111,23 @@ function fmt(value) {
   return Number(value).toFixed(3);
 }
 
+function roundingPhrase(rounding) {
+  if (rounding && rounding.label) return rounding.label;
+  if (rounding && rounding.reason) return rounding.reason;
+  if (rounding && rounding.radiusMm != null) return 'radius ' + fmt(rounding.radiusMm) + ' mm';
+  return 'no reading';
+}
+
 function captionLines(tag, corner) {
   const rounding = corner && corner.rounding ? corner.rounding : {};
   const rise = corner && corner.riseMm ? corner.riseMm : {};
   const riseText = Object.keys(rise).map(function (name) {
     return name + ' ' + fmt(rise[name]);
   }).join('  ');
-  const reason = rounding.reason || (rounding.radiusMm != null ? 'radius ' + fmt(rounding.radiusMm) + ' mm' : 'no reading');
   return [
     tag,
     'setback ' + fmt(rounding.setbackMm) + ' mm' + (riseText ? '   rise ' + riseText : ''),
-    reason
+    roundingPhrase(rounding)
   ];
 }
 
@@ -183,7 +189,7 @@ async function annotatedCrop(file, corner, ppm, lines) {
     '<rect width="360" height="72" fill="#161616"/>' +
     '<text x="8" y="22" fill="#ffffff" font-family="sans-serif" font-size="16">' + esc(lines[0]) + '</text>' +
     '<text x="8" y="44" fill="#d5d5d5" font-family="sans-serif" font-size="13">' + esc(lines[1]) + '</text>' +
-    '<text x="8" y="64" fill="#f0c674" font-family="sans-serif" font-size="14">' + esc(lines[2]) + '</text>' +
+    '<text x="8" y="64" fill="#f0c674" font-family="sans-serif" font-size="12">' + esc(lines[2]) + '</text>' +
     '</svg>';
   return sharp({
     create: { width: 360, height: 432, channels: 3, background: { r: 22, g: 22, b: 22 } }
@@ -218,13 +224,13 @@ async function thumbnail(file, reading, label) {
 async function writeSheet(dest, cardId, up, down, paired) {
   const headerBits = NAMES.map(function (name) {
     const rounding = paired.corners[name].rounding;
-    return name.toUpperCase() + ' ' + (rounding.reason || (fmt(rounding.radiusMm) + ' mm'));
+    return name.toUpperCase() + ' ' + roundingPhrase(rounding);
   });
   const header = '<svg width="780" height="78" xmlns="http://www.w3.org/2000/svg">' +
     '<rect width="780" height="78" fill="#111111"/>' +
     '<text x="16" y="28" fill="#ffffff" font-family="sans-serif" font-size="20">' + esc(cardId + ' corners · unapproved') + '</text>' +
-    '<text x="16" y="50" fill="#d5d5d5" font-family="sans-serif" font-size="13">' + esc(headerBits.slice(0, 2).join('    ')) + '</text>' +
-    '<text x="16" y="68" fill="#d5d5d5" font-family="sans-serif" font-size="13">' + esc(headerBits.slice(2).join('    ')) + '</text>' +
+    '<text x="16" y="50" fill="#d5d5d5" font-family="sans-serif" font-size="12">' + esc(headerBits.slice(0, 2).join('    ')) + '</text>' +
+    '<text x="16" y="68" fill="#d5d5d5" font-family="sans-serif" font-size="12">' + esc(headerBits.slice(2).join('    ')) + '</text>' +
     '</svg>';
   const composites = [{ input: Buffer.from(header), top: 0, left: 0 }];
   let y = 86;
@@ -370,7 +376,7 @@ const ids = Object.keys(manifest).filter(corners.isCornerCard).sort(function (a,
     const bytes = await writeSheet(sheet, id, up, down, paired);
     const tl = record.corners.tl.rounding;
     const rise = record.corners.tl.up && record.corners.tl.up.riseMm;
-    console.log(id + '\t' + (tl.reason || tl.radiusMm) + '\t' + JSON.stringify(rise) + '\t' + bytes);
+    console.log(id + '\t' + (tl.label || tl.reason || tl.radiusMm) + '\t' + JSON.stringify(rise) + '\t' + bytes);
   }
   if (!opts.card) {
     const doc = corners.reviewDocument(cards);

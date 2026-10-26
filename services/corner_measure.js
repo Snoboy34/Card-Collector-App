@@ -10,8 +10,9 @@
  * is paper showing against the same border at mid-edge. A ding is a local
  * notch in the cut. Fraying is card-colored fiber outside the cut.
  *
- * A single scan does not publish. pairReadings() keeps a number only when
- * the upright scan and the 180° scan agree. Radius 0 is never published.
+ * A single scan does not publish. pairReadings() keeps a result only when
+ * the upright scan and the 180° scan agree. A setback inside the scanner
+ * limit is the result "sharp", with that limit stated. Radius 0 is never published.
  */
 'use strict';
 
@@ -44,13 +45,14 @@ const STATION_MM = 0.05;
 
 const DEFINITION = [
   'A corner is the cut, where two card edges meet. It is not the printed frame.',
-  'Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm, and the upright and 180° scans must agree within 0.1 mm. A setback inside either edge rise is withheld. Radius 0 is not published.',
-  'Whitening is paper showing against the same border at mid-edge. A border that is already paper-white, or a pale patch that is foil glare, is withheld.',
+  'Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm, and the upright and 180° scans must agree within 0.1 mm. A setback inside the scanner limit is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published.',
+  'Whitening is paper showing against the same border at mid-edge. Whitening on a border that is already paper-white is not applicable. A pale patch that is foil glare is withheld.',
   'A ding is a local notch in the cut. It is withheld when only one orientation shows it.',
   'Fraying is card-colored fiber outside the fitted cut. It is withheld when it does not rotate with the card. Length 0 is published only when both orientations are clean.',
   'A side the centering key has withheld does not grow a corner grade.',
   'TD-12 is excluded. TD-14 through TD-18, the flatbed backs, and the BGS labels are pending and are not measured here.',
-  'Unapproved until the owner checks the overlay. No 0–10 corner score is assigned.'
+  'A disagreement between the two orientations, a quad that is not card-sized, or an unclear step stays withheld.',
+  'Unapproved until the owner checks the overlay. No 0–10 corner score is assigned. This review does not change grading.'
 ].join(' ');
 
 function pxPerMm(dpi) {
@@ -60,6 +62,10 @@ function pxPerMm(dpi) {
 function roundMm(v) {
   if (v == null || !isFinite(v)) return null;
   return Math.round(v * 1000) / 1000;
+}
+
+function sharpLabel(limitMm) {
+  return 'sharp: setback under ' + limitMm.toFixed(3) + ' mm (scanner limit)';
 }
 
 function clamp(v, lo, hi) {
@@ -424,7 +430,14 @@ function whitening(ctx, tip, edges, paperLuma) {
   const distPaper = Math.min(mids[0].distPaper, mids[1].distPaper);
   const ref = mids[0].distPaper <= mids[1].distPaper ? mids[0] : mids[1];
   if (lumaMid >= WHITE_LUMA || distPaper < PAPER_CLOSE) {
-    return { withheld: true, reason: 'white-border', lengthMm: null, areaMm2: null, midLuma: roundMm(lumaMid) };
+    return {
+      withheld: true,
+      reason: 'white-border',
+      label: 'not applicable',
+      lengthMm: null,
+      areaMm2: null,
+      midLuma: roundMm(lumaMid)
+    };
   }
   if (spread > 22) {
     return { withheld: true, reason: 'no-solid-border', lengthMm: null, areaMm2: null, midLuma: roundMm(lumaMid) };
@@ -518,10 +531,14 @@ function blankCorner(name, reason) {
     rounding: {
       withheld: true,
       reason: reason,
+      sharp: false,
+      limitMm: null,
+      label: null,
       setbackMm: null,
       radiusFromSetbackMm: null,
       radiusFitMm: null,
-      residualMm: null
+      residualMm: null,
+      radiusMm: null
     },
     whitening: { withheld: true, reason: reason, lengthMm: null, areaMm2: null },
     ding: { withheld: true, reason: reason, depthMm: null, fromTipMm: null, edge: null },
@@ -593,9 +610,12 @@ function measureCorner(ctx, name) {
   const denom = (1 / sinA) - 1;
   const rSet = setback == null ? null : setback / denom;
   let roundingReason = null;
+  let sharp = false;
   let fit = null;
+  const withinLimit = setback != null && setback <= riseGate && setback >= -riseGate;
   if (setback == null) roundingReason = 'weak-edge';
-  else if (setback <= riseGate) roundingReason = 'inside-scanner-rise';
+  else if (setback < -riseGate) roundingReason = 'unclear';
+  else if (withinLimit) sharp = true;
   else {
     fit = fitRadius(
       [
@@ -604,7 +624,7 @@ function measureCorner(ctx, name) {
       ],
       tip, bisector, alpha, ctx.ppm, riseGate
     );
-    if (!fit) roundingReason = 'inside-scanner-rise';
+    if (!fit) roundingReason = 'not-an-arc';
     else if (fit.residualMm > ARC_GATE_MM) roundingReason = 'not-an-arc';
     else if (Math.abs(fit.radiusMm - rSet) > ARC_GATE_MM) roundingReason = 'not-an-arc';
   }
@@ -630,7 +650,8 @@ function measureCorner(ctx, name) {
     ],
     luma(ctx.paper)
   );
-  const publishedFit = roundingReason ? null : radiusFit;
+  const limitMm = roundMm(riseGate);
+  const publishedFit = roundingReason || sharp ? null : radiusFit;
   return {
     name: name,
     adjacent: sides,
@@ -642,11 +663,25 @@ function measureCorner(ctx, name) {
       [sides[0]]: roundMm(riseA.riseMm),
       [sides[1]]: roundMm(riseB.riseMm)
     },
-    rounding: {
+    rounding: sharp ? {
+      withheld: false,
+      reason: null,
+      sharp: true,
+      limitMm: limitMm,
+      label: sharpLabel(limitMm),
+      setbackMm: roundMm(setback),
+      radiusFromSetbackMm: null,
+      radiusFitMm: null,
+      residualMm: null,
+      radiusMm: null
+    } : {
       withheld: !!roundingReason,
       reason: roundingReason,
+      sharp: false,
+      limitMm: limitMm,
+      label: null,
       setbackMm: roundMm(setback),
-      radiusFromSetbackMm: roundingReason === 'weak-edge' ? null : roundMm(rSet),
+      radiusFromSetbackMm: roundingReason === 'weak-edge' || roundingReason === 'unclear' ? null : roundMm(rSet),
       radiusFitMm: roundMm(radiusFit),
       residualMm: fit ? roundMm(fit.residualMm) : null,
       radiusMm: roundMm(publishedFit)
@@ -654,6 +689,7 @@ function measureCorner(ctx, name) {
     whitening: {
       withheld: white.withheld,
       reason: white.reason,
+      label: white.label || null,
       lengthMm: white.withheld ? null : roundMm(white.lengthMm),
       areaMm2: white.withheld ? null : roundMm(white.areaMm2),
       midLuma: white.midLuma == null ? null : white.midLuma
@@ -682,7 +718,7 @@ function measureCorner(ctx, name) {
       [sides[0]]: silA.map(compactPoint),
       [sides[1]]: silB.map(compactPoint)
     },
-    arc: roundingReason === 'inside-scanner-rise' || roundingReason === 'weak-edge'
+    arc: sharp || roundingReason === 'weak-edge' || roundingReason === 'unclear'
       ? null
       : arcPolyline(tip, bisector, [
         { u: uA, n: nA },
@@ -735,18 +771,49 @@ function meanOrNull(a, b) {
   return roundMm((a + b) / 2);
 }
 
+function withheldRounding(reason) {
+  return {
+    withheld: true,
+    reason: reason,
+    sharp: false,
+    limitMm: null,
+    label: null,
+    radiusMm: null,
+    setbackMm: null,
+    residualMm: null,
+    approved: false
+  };
+}
+
 function pairRounding(a, b) {
-  if (!a || !b) return { withheld: true, reason: 'needs-both-orientations', radiusMm: null, setbackMm: null, residualMm: null, approved: false };
-  if (a.withheld || b.withheld) {
+  if (!a || !b) return withheldRounding('needs-both-orientations');
+  if (a.sharp && b.sharp && !a.withheld && !b.withheld) {
+    const limitMm = roundMm(Math.max(a.limitMm, b.limitMm));
+    return {
+      withheld: false,
+      reason: null,
+      sharp: true,
+      limitMm: limitMm,
+      label: sharpLabel(limitMm),
+      radiusMm: null,
+      setbackMm: null,
+      residualMm: null,
+      approved: false
+    };
+  }
+  if (a.withheld || b.withheld || a.sharp || b.sharp) {
     const reason = a.withheld && b.withheld && a.reason === b.reason ? a.reason : 'orientation-disagreement';
-    return { withheld: true, reason: reason, radiusMm: null, setbackMm: null, residualMm: null, approved: false };
+    return withheldRounding(reason);
   }
   if (!numsAgree(a.radiusMm, b.radiusMm, PAIR_MM) || !numsAgree(a.setbackMm, b.setbackMm, PAIR_MM)) {
-    return { withheld: true, reason: 'orientation-disagreement', radiusMm: null, setbackMm: null, residualMm: null, approved: false };
+    return withheldRounding('orientation-disagreement');
   }
   return {
     withheld: false,
     reason: null,
+    sharp: false,
+    limitMm: null,
+    label: null,
     radiusMm: meanOrNull(a.radiusMm, b.radiusMm),
     setbackMm: meanOrNull(a.setbackMm, b.setbackMm),
     residualMm: meanOrNull(a.residualMm, b.residualMm),
@@ -758,7 +825,14 @@ function pairWhitening(a, b) {
   if (!a || !b) return { withheld: true, reason: 'needs-both-orientations', lengthMm: null, areaMm2: null, approved: false };
   if (a.withheld || b.withheld) {
     const reason = a.withheld && b.withheld && a.reason === b.reason ? a.reason : 'orientation-disagreement';
-    return { withheld: true, reason: reason, lengthMm: null, areaMm2: null, approved: false };
+    return {
+      withheld: true,
+      reason: reason,
+      label: reason === 'white-border' ? 'not applicable' : null,
+      lengthMm: null,
+      areaMm2: null,
+      approved: false
+    };
   }
   const areaTol = Math.max(0.08, 0.5 * Math.abs((a.areaMm2 + b.areaMm2) / 2));
   if (!numsAgree(a.lengthMm, b.lengthMm, PAIR_MM) || !numsAgree(a.areaMm2, b.areaMm2, areaTol)) {
@@ -823,6 +897,8 @@ function blockForCentering(quantity, blocked, fields) {
   if (!out.withheld) {
     out.withheld = true;
     out.reason = 'centering-side-withheld';
+    out.sharp = false;
+    out.label = null;
     fields.forEach(function (name) { out[name] = null; });
   }
   return out;
@@ -835,6 +911,7 @@ function slimCorner(corner) {
     whitening: {
       withheld: corner.whitening.withheld,
       reason: corner.whitening.reason,
+      label: corner.whitening.label || null,
       lengthMm: corner.whitening.lengthMm,
       areaMm2: corner.whitening.areaMm2,
       midLuma: corner.whitening.midLuma
@@ -872,7 +949,7 @@ function pairReadings(up, down, centeringWithheld) {
     let fray;
     if (!upOk || !downOk) {
       const reason = missing ? 'needs-both-orientations' : 'not-card-sized';
-      rounding = { withheld: true, reason: reason, radiusMm: null, setbackMm: null, residualMm: null, approved: false };
+      rounding = withheldRounding(reason);
       whiteningQ = { withheld: true, reason: reason, lengthMm: null, areaMm2: null, approved: false };
       ding = { withheld: true, reason: reason, depthMm: null, fromTipMm: null, approved: false };
       fray = { withheld: true, reason: reason, lengthMm: null, stickOutMm: null, approved: false };
@@ -884,7 +961,7 @@ function pairReadings(up, down, centeringWithheld) {
     }
     const sides = ADJACENT[name];
     const blocked = !!(centeringWithheld && (centeringWithheld[sides[0]] || centeringWithheld[sides[1]]));
-    rounding = blockForCentering(rounding, blocked, ['radiusMm', 'setbackMm', 'residualMm']);
+    rounding = blockForCentering(rounding, blocked, ['radiusMm', 'setbackMm', 'residualMm', 'limitMm']);
     whiteningQ = blockForCentering(whiteningQ, blocked, ['lengthMm', 'areaMm2']);
     ding = blockForCentering(ding, blocked, ['depthMm', 'fromTipMm']);
     fray = blockForCentering(fray, blocked, ['lengthMm', 'stickOutMm']);

@@ -3,8 +3,9 @@
  * scripts/verify_corners.js
  *
  * Synthetic flatbed corners at 1200 dpi. A known radius has to come back
- * within 0.1 mm. A sharp corner, a white border, a one-sided defect, a
- * not-card-sized quad, and TD-12 stay withheld. No scan files and no network.
+ * within 0.1 mm. A setback inside the scanner rise is a sharp result, with
+ * that limit stated. A white border, a one-sided defect, a not-card-sized
+ * quad, and TD-12 stay withheld. No scan files and no network.
  */
 'use strict';
 
@@ -203,8 +204,18 @@ function run() {
   const sharpPaired = measureBoth(sharp, w, h, geom);
   const sharpTl = sharpPaired.corners.tl;
   check(
-    'sharp corner withholds inside the scanner rise',
-    sharpTl.rounding.withheld && sharpTl.rounding.reason === 'inside-scanner-rise' && sharpTl.rounding.radiusMm == null,
+    'sharp corner reports the scanner limit',
+    sharpTl.approved === false &&
+      sharpTl.rounding.withheld === false &&
+      sharpTl.rounding.sharp === true &&
+      sharpTl.rounding.radiusMm == null &&
+      sharpTl.rounding.setbackMm == null &&
+      sharpTl.rounding.limitMm > 0 &&
+      sharpTl.rounding.label === 'sharp: setback under ' + sharpTl.rounding.limitMm.toFixed(3) + ' mm (scanner limit)' &&
+      sharpTl.up.rounding.setbackMm != null &&
+      sharpTl.up.rounding.setbackMm <= sharpTl.up.rounding.limitMm &&
+      sharpTl['180'].rounding.setbackMm != null &&
+      sharpTl['180'].rounding.setbackMm <= sharpTl['180'].rounding.limitMm,
     sharpTl.rounding
   );
   const sharpRise = sharpTl.up && sharpTl.up.riseMm;
@@ -243,6 +254,7 @@ function run() {
   check(
     'white border withholds whitening',
     whitePaired.corners.tl.whitening.withheld && whitePaired.corners.tl.whitening.reason === 'white-border' &&
+      whitePaired.corners.tl.whitening.label === 'not applicable' &&
       whitePaired.corners.tl.whitening.areaMm2 == null,
     whitePaired.corners.tl.whitening
   );
@@ -338,6 +350,21 @@ function run() {
     'a withheld centering side publishes no radius',
     blocked.corners.tl.rounding.radiusMm == null && blocked.corners.tl.rounding.reason === 'centering-side-withheld',
     blocked.corners.tl.rounding
+  );
+
+  const sharpBlocked = corners.pairReadings(
+    sharpPaired.sources.up,
+    sharpPaired.sources['180'],
+    { top: false, bottom: false, left: true, right: false }
+  );
+  check(
+    'a withheld centering side clears a sharp label',
+    sharpBlocked.corners.tl.rounding.reason === 'centering-side-withheld' &&
+      sharpBlocked.corners.tl.rounding.label == null &&
+      sharpBlocked.corners.tl.rounding.radiusMm == null &&
+      sharpBlocked.corners.tl.up.rounding.sharp === true &&
+      sharpBlocked.corners.tl.up.rounding.label.indexOf('sharp: setback under ') === 0,
+    sharpBlocked.corners.tl.rounding
   );
 
   const missing = corners.pairReadings(
