@@ -31,6 +31,21 @@ enum JudgeTestDeck {
 final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate {
     static let shared = JudgeAPIClient()
     static let serverURLDefaultsKey = "judgeServerBaseURL"
+    /// Set by the Apple session. Nil keeps the home bench.
+    static var authorizationToken: String?
+
+    static func authorizationValue(for token: String?) -> String? {
+        guard let token else { return nil }
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return "Bearer " + trimmed
+    }
+
+    static func applyAuthorization(to request: inout URLRequest) {
+        if let header = authorizationValue(for: authorizationToken) {
+            request.setValue(header, forHTTPHeaderField: "Authorization")
+        }
+    }
 
     struct TiltSnapshot {
         var pitchDeg: Double
@@ -108,6 +123,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         /// Phone shutter time, stored on the server at capture. This is the
         /// only scan time the vault shows.
         var capturedAt: Date?
+        var captureTier: CaptureTier? = nil
+        var cardEntry: CardManualEntry? = nil
         var rawJSON: String
         var summaryText: String
     }
@@ -176,6 +193,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        Self.applyAuthorization(to: &request)
         request.httpBody = Self.multipartBody(
             boundary: boundary,
             jpeg: jpeg,
@@ -235,6 +253,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        Self.applyAuthorization(to: &request)
         let body = Self.centeringAssistRequestBody(
             lines: lines,
             consent: consent,
@@ -293,6 +312,7 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             .appendingPathComponent(scanId)
         var request = URLRequest(url: endpoint)
         request.httpMethod = "GET"
+        Self.applyAuthorization(to: &request)
         let data: Data
         let response: URLResponse
         do {
@@ -306,6 +326,98 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             throw APIError.httpFailure(status, snippet)
         }
         return try Self.parseReport(data)
+    }
+
+    struct AppleSession {
+        var token: String
+        var accountId: String
+    }
+
+    func fetchBetaFlags(baseURL: String) async throws -> BetaFlags {
+        let data = try await jsonRequest(baseURL: baseURL, path: "api/beta", method: "GET", body: nil, authorize: false)
+        let root = try JSONSerialization.jsonObject(with: data)
+        return BetaFlags.read(root)
+    }
+
+    func signInWithApple(baseURL: String, identityToken: String, nonce: String) async throws -> AppleSession {
+        let data = try await jsonRequest(
+            baseURL: baseURL,
+            path: "api/auth/apple",
+            method: "POST",
+            body: ["identityToken": identityToken, "nonce": nonce],
+            authorize: false
+        )
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = root["token"] as? String, !token.isEmpty,
+              let accountId = root["accountId"] as? String, !accountId.isEmpty else {
+            throw APIError.undecodableResponse
+        }
+        return AppleSession(token: token, accountId: accountId)
+    }
+
+    func fetchInventory(baseURL: String) async throws -> [ScanLedger] {
+        let data = try await jsonRequest(baseURL: baseURL, path: "api/inventory", method: "GET", body: nil, authorize: true)
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = root["inventory"] as? [[String: Any]] else {
+            throw APIError.undecodableResponse
+        }
+        return rows.compactMap { row in
+            guard let encoded = try? JSONSerialization.data(withJSONObject: ["ok": true, "item": row]) else { return nil }
+            guard let report = try? Self.parseReport(encoded) else { return nil }
+            return Self.ledger(from: report, clientScanId: report.scanId ?? "")
+        }
+    }
+
+    func saveCardEntry(baseURL: String, scanId: String, entry: CardManualEntry) async throws -> RemoteReport {
+        let data = try await jsonRequest(
+            baseURL: baseURL,
+            path: "api/scans/\(scanId)/card-entry",
+            method: "PATCH",
+            body: entry.requestBody,
+            authorize: true
+        )
+        return try Self.parseReport(data)
+    }
+
+    func deleteScan(baseURL: String, scanId: String) async throws {
+        _ = try await jsonRequest(baseURL: baseURL, path: "api/scans/\(scanId)", method: "DELETE", body: nil, authorize: true)
+    }
+
+    func deleteAccount(baseURL: String) async throws -> (deletedScans: Int, deletedExamples: Int) {
+        let data = try await jsonRequest(baseURL: baseURL, path: "api/account", method: "DELETE", body: nil, authorize: true)
+        let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let scans = (root?["deletedScans"] as? NSNumber)?.intValue ?? 0
+        let examples = (root?["deletedExamples"] as? NSNumber)?.intValue ?? 0
+        return (scans, examples)
+    }
+
+    private func jsonRequest(baseURL: String, path: String, method: String, body: [String: String]?, authorize: Bool) async throws -> Data {
+        guard let root = Self.normalizedBaseURL(baseURL) else { throw APIError.invalidServerURL }
+        let parts = path.split(separator: "/").map(String.init)
+        var endpoint = root
+        for part in parts {
+            endpoint = endpoint.appendingPathComponent(part)
+        }
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = method
+        if authorize { Self.applyAuthorization(to: &request) }
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError {
+            throw Self.transportError(error)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200...299).contains(status) else {
+            let snippet = String(data: data, encoding: .utf8) ?? "HTTP \(status)"
+            throw APIError.httpFailure(status, snippet)
+        }
+        return data
     }
 
     func fetch(_ url: URL) async throws -> Data {
@@ -556,6 +668,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         // be earlier than the phone. The scan line is the phone shutter time
         // stored at capture: item.capturedAt, or captureMetadata.capture.capturedAt.
         // adjustedAt is the assist save and stays on its own line.
+        let captureTier = CaptureTier.read(item?["captureTier"])
+        let cardEntry = CardManualEntry.read(item?["cardEntry"])
         let createdAt = (item?["createdAt"] as? String).flatMap { CenteringAssist.parseISO($0) }
         let captureGroup = (item?["captureMetadata"] as? [String: Any])?["capture"] as? [String: Any]
         let capturedAt = (item?["capturedAt"] as? String).flatMap { CenteringAssist.parseISO($0) }
@@ -613,6 +727,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         } else if let headline = centeringAssist?.headline, !headline.isEmpty {
             lines.append("Your estimate: \(headline)")
         }
+        if let captureTier {
+            lines.append(captureTier.line)
+        }
         if lines.isEmpty { lines.append(raw) }
 
         return RemoteReport(
@@ -645,6 +762,8 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             side: side,
             createdAt: createdAt,
             capturedAt: capturedAt,
+            captureTier: captureTier,
+            cardEntry: cardEntry,
             rawJSON: raw,
             summaryText: lines.joined(separator: "\n")
         )
@@ -669,16 +788,20 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
         }
         let identified = familyId != nil || match != nil
         let name: String
-        if identified {
+        let setName: String
+        if let entry = report.cardEntry {
+            name = entry.displayName ?? ScanLedger.unidentified
+            setName = entry.displaySet ?? ScanLedger.absent
+        } else if identified {
             let candidate = report.identityName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? match ?? ""
             name = candidate.isEmpty ? ScanLedger.unidentified : candidate
+            if let set = report.identitySet?.trimmingCharacters(in: .whitespacesAndNewlines), !set.isEmpty {
+                setName = set
+            } else {
+                setName = ScanLedger.absent
+            }
         } else {
             name = ScanLedger.unidentified
-        }
-        let setName: String
-        if identified, let set = report.identitySet?.trimmingCharacters(in: .whitespacesAndNewlines), !set.isEmpty {
-            setName = set
-        } else {
             setName = ScanLedger.absent
         }
         let lr = report.leftRightRatio.map { String(format: "%.1f%%/%.1f%%", $0.left, $0.right) }
@@ -702,7 +825,9 @@ final class JudgeAPIClient: NSObject, URLSessionDelegate, URLSessionTaskDelegate
             debugPath: report.debugPath,
             centeringAssist: report.centeringAssist,
             deckId: report.deckId,
-            side: ScanLedger.knownFace(report.side) ?? ScanLedger.knownFace(report.centeringAssist?.side)
+            side: ScanLedger.knownFace(report.side) ?? ScanLedger.knownFace(report.centeringAssist?.side),
+            cardEntry: report.cardEntry,
+            captureTier: report.captureTier
         )
     }
 

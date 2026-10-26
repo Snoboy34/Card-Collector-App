@@ -27,6 +27,7 @@
 		BB0000000000000000000015 /* CardGradeContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000015 /* CardGradeContractTests.swift */; };
 		BB0000000000000000000017 /* DistanceGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000017 /* DistanceGuide.swift */; };
 		BB0000000000000000000018 /* OuterCut.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000018 /* OuterCut.swift */; };
+		BB000000000000000000001A /* ShopBeta.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000000000000000000001A /* ShopBeta.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -53,6 +54,8 @@
 		AA0000000000000000000017 /* DistanceGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceGuide.swift; sourceTree = "<group>"; };
 		AA0000000000000000000018 /* OuterCut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OuterCut.swift; sourceTree = "<group>"; };
 		AA0000000000000000000016 /* CardGradeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CardGradeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA000000000000000000001A /* ShopBeta.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopBeta.swift; sourceTree = "<group>"; };
+		AA000000000000000000001B /* CardGrade.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CardGrade.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +125,8 @@
 				AA0000000000000000000008 /* PricingEngine.swift */,
 				AA0000000000000000000009 /* The Judge.swift */,
 				AA000000000000000000000A /* UserSecurity.swift */,
+				AA000000000000000000001A /* ShopBeta.swift */,
+				AA000000000000000000001B /* CardGrade.entitlements */,
 				AA000000000000000000000D /* Info.plist */,
 			);
 			name = Sources;
@@ -261,6 +266,7 @@
 				BB0000000000000000000008 /* PricingEngine.swift in Sources */,
 				BB0000000000000000000009 /* The Judge.swift in Sources */,
 				BB000000000000000000000A /* UserSecurity.swift in Sources */,
+				BB000000000000000000001A /* ShopBeta.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -317,6 +323,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = CardGrade.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8R89NQ33MV;
@@ -349,6 +356,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = CardGrade.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8R89NQ33MV;

@@ -25,6 +25,8 @@ public struct ScanLedger: Equatable {
     public let centeringAssist: CenteringAssist.Snapshot?
     public let deckId: String?
     public let side: String?
+    public var cardEntry: CardManualEntry? = nil
+    public var captureTier: CaptureTier? = nil
 
     public var displayCorners: String {
         guard let cornersGrade else { return Self.absent }
@@ -104,7 +106,9 @@ public struct ScanLedger: Equatable {
             debugPath: updated.debugPath,
             centeringAssist: assist,
             deckId: nonempty(existing.deckId) ?? nonempty(updated.deckId),
-            side: keptSide
+            side: keptSide,
+            cardEntry: existing.cardEntry ?? updated.cardEntry,
+            captureTier: updated.captureTier ?? existing.captureTier
         )
         return merged
     }
@@ -124,11 +128,12 @@ public struct ScanLedger: Equatable {
             assist = snap
         }
         let scanTime = server.committedAt == .distantPast ? local.committedAt : server.committedAt
+        let typed = server.cardEntry != nil
         return ScanLedger(
             scanId: nonempty(server.scanId) ?? local.scanId,
             committedAt: scanTime,
-            name: local.name,
-            setName: local.setName,
+            name: typed ? server.name : local.name,
+            setName: typed ? server.setName : local.setName,
             grade: server.grade ?? local.grade,
             lrCentering: server.lrCentering,
             tbCentering: server.tbCentering,
@@ -141,7 +146,9 @@ public struct ScanLedger: Equatable {
             debugPath: server.debugPath ?? local.debugPath,
             centeringAssist: assist,
             deckId: nonempty(server.deckId) ?? nonempty(local.deckId),
-            side: face
+            side: face,
+            cardEntry: server.cardEntry ?? local.cardEntry,
+            captureTier: server.captureTier ?? local.captureTier
         )
     }
 
@@ -221,6 +228,8 @@ public struct SavedCard: Identifiable, Codable {
     public let side: String?
     public var offlineCopy: Bool
     public var targetBatchId: UUID?
+    public var cardEntry: CardManualEntry? = nil
+    public var captureTier: CaptureTier? = nil
 
     public init(
         id: UUID = UUID(),
@@ -240,7 +249,9 @@ public struct SavedCard: Identifiable, Codable {
         deckId: String? = nil,
         side: String? = nil,
         offlineCopy: Bool = false,
-        batchId: UUID? = nil
+        batchId: UUID? = nil,
+        cardEntry: CardManualEntry? = nil,
+        captureTier: CaptureTier? = nil
     ) {
         self.id = id
         self.scanId = scanId
@@ -260,6 +271,8 @@ public struct SavedCard: Identifiable, Codable {
         self.side = side
         self.offlineCopy = offlineCopy
         self.targetBatchId = batchId
+        self.cardEntry = cardEntry
+        self.captureTier = captureTier
     }
 
     public init(ledger: ScanLedger, batchId: UUID? = nil) {
@@ -280,7 +293,9 @@ public struct SavedCard: Identifiable, Codable {
             centeringAssist: ledger.centeringAssist,
             deckId: ledger.deckId,
             side: ledger.side,
-            batchId: batchId
+            batchId: batchId,
+            cardEntry: ledger.cardEntry,
+            captureTier: ledger.captureTier
         )
     }
 
@@ -335,7 +350,9 @@ public struct SavedCard: Identifiable, Codable {
             debugPath: debugPath,
             centeringAssist: centeringAssist,
             deckId: deckId,
-            side: side
+            side: side,
+            cardEntry: cardEntry,
+            captureTier: captureTier
         )
     }
 
@@ -348,7 +365,7 @@ public struct SavedCard: Identifiable, Codable {
     enum CodingKeys: String, CodingKey {
         case id, scanId, committedAt, name, setName
         case lrCenteringResult, tbCenteringResult
-        case predictedGradePSA, calculatedValue, familyId, subGradesLabel, cornersGrade, debugPath, centeringAssist, deckId, side, offlineCopy, targetBatchId
+        case predictedGradePSA, calculatedValue, familyId, subGradesLabel, cornersGrade, debugPath, centeringAssist, deckId, side, offlineCopy, targetBatchId, cardEntry, captureTier
     }
 
     public init(from decoder: Decoder) throws {
@@ -377,6 +394,8 @@ public struct SavedCard: Identifiable, Codable {
         side = try container.decodeIfPresent(String.self, forKey: .side)
         offlineCopy = try container.decodeIfPresent(Bool.self, forKey: .offlineCopy) ?? false
         targetBatchId = try container.decodeIfPresent(UUID.self, forKey: .targetBatchId)
+        cardEntry = try container.decodeIfPresent(CardManualEntry.self, forKey: .cardEntry)
+        captureTier = try container.decodeIfPresent(CaptureTier.self, forKey: .captureTier)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -399,6 +418,8 @@ public struct SavedCard: Identifiable, Codable {
         try container.encodeIfPresent(side, forKey: .side)
         try container.encode(offlineCopy, forKey: .offlineCopy)
         try container.encodeIfPresent(targetBatchId, forKey: .targetBatchId)
+        try container.encodeIfPresent(cardEntry, forKey: .cardEntry)
+        try container.encodeIfPresent(captureTier, forKey: .captureTier)
     }
 }
 
@@ -555,12 +576,13 @@ public class PortfolioState: ObservableObject {
             let explicit = ScanLedger.knownFace(existing.side) == nil ? ledger.side : nil
             merged = ScanLedger.keepingCaptureIdentity(existing: existing.asLedger, updated: ledger, explicitSide: explicit)
         }
+        let typed = merged.cardEntry != nil
         savedCards[index] = SavedCard(
             id: existing.id,
             scanId: existing.scanId,
             committedAt: merged.committedAt,
-            name: existing.name,
-            set: existing.setName,
+            name: typed ? merged.name : existing.name,
+            set: typed ? merged.setName : existing.setName,
             lrCentering: merged.lrCentering,
             tbCentering: merged.tbCentering,
             predictedGrade: merged.grade,
@@ -573,7 +595,9 @@ public class PortfolioState: ObservableObject {
             deckId: merged.deckId,
             side: merged.side,
             offlineCopy: adoptServerRecord ? false : existing.offlineCopy,
-            batchId: existing.targetBatchId
+            batchId: existing.targetBatchId,
+            cardEntry: merged.cardEntry,
+            captureTier: merged.captureTier
         )
         saveDataToPersistentDisk()
     }
@@ -582,6 +606,41 @@ public class PortfolioState: ObservableObject {
         guard let index = savedCards.firstIndex(where: { $0.id == id }) else { return }
         savedCards[index].offlineCopy = true
         saveDataToPersistentDisk()
+    }
+
+    public func deleteCard(scanId: String) {
+        savedCards.removeAll { $0.scanId == scanId }
+        saveDataToPersistentDisk()
+    }
+
+    /// The signed-in vault replaces the list on screen. The home bench is
+    /// stashed once and comes back on sign-out.
+    public func useAccountInventory(_ cards: [SavedCard]) {
+        if UserDefaults.standard.string(forKey: Self.vaultModeKey) != "account" {
+            if let data = try? JSONEncoder().encode(savedCards) {
+                UserDefaults.standard.set(data, forKey: Self.benchStashKey)
+            }
+        }
+        savedCards = cards
+        UserDefaults.standard.set("account", forKey: Self.vaultModeKey)
+        saveDataToPersistentDisk()
+    }
+
+    public func restoreBenchInventory() {
+        if let data = UserDefaults.standard.data(forKey: Self.benchStashKey),
+           let cards = try? JSONDecoder().decode([SavedCard].self, from: data) {
+            savedCards = cards
+        }
+        UserDefaults.standard.removeObject(forKey: Self.benchStashKey)
+        UserDefaults.standard.set("bench", forKey: Self.vaultModeKey)
+        saveDataToPersistentDisk()
+    }
+
+    private static let benchStashKey = "judgeBenchVaultCards"
+    private static let vaultModeKey = "judgeVaultMode"
+
+    public var showsAccountVault: Bool {
+        UserDefaults.standard.string(forKey: Self.vaultModeKey) == "account"
     }
 
     public func deleteCard(at offsets: IndexSet) {
