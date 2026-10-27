@@ -32,10 +32,9 @@ enum CardStillOCR {
     }
 }
 
-/// Vision rectangle on the same upright still that is uploaded, so the quad
-/// is in that JPEG's pixel coordinates (top-left origin), not the preview's.
-/// `imageWidth` / `imageHeight` are the uploaded JPEG. Nil when Vision finds
-/// no card; the server then runs its own detector or returns 422.
+/// Outer cut on the upright still, in that JPEG's pixel coordinates
+/// (top-left origin). Nil when the cut is missing or a second edge makes it
+/// low-confidence; the upload is then the full still and the server detects.
 enum CardStillQuad {
     static func detect(in jpeg: Data) -> JudgeAPIClient.CardQuad? {
         guard let source = UIImage(data: jpeg) else { return nil }
@@ -44,35 +43,10 @@ enum CardStillQuad {
         return detect(cgImage: cgImage)
     }
 
-    static func detect(cgImage: CGImage) -> JudgeAPIClient.CardQuad? {
-        let request = VNDetectRectanglesRequest()
-        request.minimumAspectRatio = 0.55
-        request.maximumAspectRatio = 0.85
-        request.minimumConfidence = 0.8
-        request.minimumSize = 0.3
-        request.maximumObservations = 1
-
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        do {
-            try handler.perform([request])
-        } catch {
-            return nil
-        }
-        guard let rect = request.results?.first else { return nil }
-
-        let width = Double(cgImage.width)
-        let height = Double(cgImage.height)
-        func pixel(_ point: CGPoint) -> [Double] {
-            [Double(point.x) * width, (1.0 - Double(point.y)) * height]
-        }
-        return JudgeAPIClient.CardQuad(
-            tl: pixel(rect.topLeft),
-            tr: pixel(rect.topRight),
-            br: pixel(rect.bottomRight),
-            bl: pixel(rect.bottomLeft),
-            imageWidth: cgImage.width,
-            imageHeight: cgImage.height,
-            confidence: Double(rect.confidence)
-        )
+    /// Outer cut only. A low-confidence cut returns nil so the upload stays
+    /// the full still instead of cropping inside the card.
+    static func detect(cgImage: CGImage, face: CardFaceSize.Millimetres = .sports) -> JudgeAPIClient.CardQuad? {
+        guard let found = OuterCut.find(in: cgImage, face: face), found.confident else { return nil }
+        return found.cardQuad()
     }
 }

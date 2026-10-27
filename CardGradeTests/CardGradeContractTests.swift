@@ -37,6 +37,7 @@ final class CardGradeContractTests: XCTestCase {
         JudgeAPIClient.runContractChecks(report)
         DistanceGuide.runContractChecks(report)
         CardAlignmentCrop.runContractChecks(report)
+        OuterCut.runContractChecks(report)
         #else
         XCTFail("Capture checks are part of the Debug app")
         #endif
