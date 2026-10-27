@@ -25,6 +25,7 @@
 		BB0000000000000000000013 /* CaptureMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000013 /* CaptureMetadata.swift */; };
 		BB0000000000000000000014 /* CenteringAssist.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000014 /* CenteringAssist.swift */; };
 		BB0000000000000000000015 /* CardGradeContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000015 /* CardGradeContractTests.swift */; };
+		BB0000000000000000000017 /* DistanceGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000017 /* DistanceGuide.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +49,7 @@
 		AA0000000000000000000013 /* CaptureMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureMetadata.swift; sourceTree = "<group>"; };
 		AA0000000000000000000014 /* CenteringAssist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenteringAssist.swift; sourceTree = "<group>"; };
 		AA0000000000000000000015 /* CardGradeContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardGradeContractTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000017 /* DistanceGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceGuide.swift; sourceTree = "<group>"; };
 		AA0000000000000000000016 /* CardGradeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CardGradeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -110,6 +112,7 @@
 				AA0000000000000000000014 /* CenteringAssist.swift */,
 				AA0000000000000000000004 /* CenteringAnalyzer.swift */,
 				AA0000000000000000000005 /* DefectAnalyzer.swift */,
+				AA0000000000000000000017 /* DistanceGuide.swift */,
 				AA000000000000000000000C /* JudgeAPIClient.swift */,
 				AA0000000000000000000006 /* LiveCameraView.swift */,
 				AA0000000000000000000007 /* PortfolioState.swift */,
@@ -247,6 +250,7 @@
 				BB0000000000000000000014 /* CenteringAssist.swift in Sources */,
 				BB0000000000000000000004 /* CenteringAnalyzer.swift in Sources */,
 				BB0000000000000000000005 /* DefectAnalyzer.swift in Sources */,
+				BB0000000000000000000017 /* DistanceGuide.swift in Sources */,
 				BB000000000000000000000C /* JudgeAPIClient.swift in Sources */,
 				BB0000000000000000000006 /* LiveCameraView.swift in Sources */,
 				BB0000000000000000000007 /* PortfolioState.swift in Sources */,

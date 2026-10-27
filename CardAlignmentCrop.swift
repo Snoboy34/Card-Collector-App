@@ -1,14 +1,19 @@
 import UIKit
 
-/// Fixed 2.5×3.5 neon-window geometry, ported from `public/scan_level.js`
-/// (`cardFrameRect`, `videoCoverCrop`, `alignmentCropInVideo`) on the Node stack.
-///
-/// The still JPEG is cropped to this window before `POST /api/grade`. The
-/// crop is not the card: the operator leaves background showing, and the
-/// server grades only the card found by `CardStillQuad` (or its own detector).
+/// On-screen 2.5×3.5 frame, the same shape as `cardFrameRect` in
+/// `public/scan_level.js`. It is a composition aid. The upload is the card
+/// quad plus a margin, at the still's own pixels.
 enum CardAlignmentCrop {
     static let cardAspect: CGFloat = 2.5 / 3.5
     static let jpegQuality: CGFloat = 0.92
+    /// Extra still pixels on each side of the quad, as a fraction of that
+    /// side's card span. Background stays in the upload. The crop is not resized.
+    static let quadMarginFraction: Double = 0.08
+
+    struct QuadCrop {
+        var jpeg: Data
+        var quad: JudgeAPIClient.CardQuad?
+    }
 
     struct PixelRect: Equatable {
         var x: CGFloat
@@ -35,81 +40,80 @@ enum CardAlignmentCrop {
         )
     }
 
-    static func videoCoverCrop(videoW: CGFloat, videoH: CGFloat, viewW: CGFloat, viewH: CGFloat) -> PixelRect {
-        let srcAspect = videoW / videoH
-        let viewAspect = viewW / viewH
-        if srcAspect > viewAspect {
-            let cropW = videoH * viewAspect
-            return PixelRect(x: (videoW - cropW) / 2, y: 0, w: cropW, h: videoH)
-        }
-        let cropH = videoW / viewAspect
-        return PixelRect(x: 0, y: (videoH - cropH) / 2, w: videoW, h: cropH)
+    /// Axis-aligned crop around the quad, expanded by `quadMarginFraction`
+    /// and clamped to the still. Integer pixels, no scale.
+    static func marginRect(corners: [(Double, Double)], imageWidth: Int, imageHeight: Int, marginFraction: Double = quadMarginFraction) -> CGRect? {
+        guard imageWidth > 1, imageHeight > 1, corners.count == 4 else { return nil }
+        let xs = corners.map(\.0)
+        let ys = corners.map(\.1)
+        guard let minX = xs.min(), let maxX = xs.max(), let minY = ys.min(), let maxY = ys.max() else { return nil }
+        let spanX = maxX - minX
+        let spanY = maxY - minY
+        guard spanX > 8, spanY > 8 else { return nil }
+        let padX = spanX * marginFraction
+        let padY = spanY * marginFraction
+        let raw = CGRect(
+            x: minX - padX,
+            y: minY - padY,
+            width: spanX + padX * 2,
+            height: spanY + padY * 2
+        )
+        let integral = clampedIntegralRect(raw, in: CGSize(width: imageWidth, height: imageHeight))
+        guard integral.width >= 32, integral.height >= 32 else { return nil }
+        return integral
     }
 
-    static func alignmentCropInVideo(videoW: CGFloat, videoH: CGFloat, viewW: CGFloat, viewH: CGFloat) -> PixelRect? {
-        guard videoW > 0, videoH > 0, viewW > 0, viewH > 0 else { return nil }
-        let cover = videoCoverCrop(videoW: videoW, videoH: videoH, viewW: viewW, viewH: viewH)
-        let frame = cardFrameRect(canvasWidth: viewW, canvasHeight: viewH)
-        return PixelRect(
-            x: cover.x + (frame.x / viewW) * cover.w,
-            y: cover.y + (frame.y / viewH) * cover.h,
-            w: (frame.w / viewW) * cover.w,
-            h: (frame.h / viewH) * cover.h
+    static func shiftedQuad(_ quad: JudgeAPIClient.CardQuad, originX: Double, originY: Double, imageWidth: Int, imageHeight: Int) -> JudgeAPIClient.CardQuad? {
+        func shift(_ point: [Double]) -> [Double]? {
+            guard point.count == 2 else { return nil }
+            return [point[0] - originX, point[1] - originY]
+        }
+        guard let tl = shift(quad.tl), let tr = shift(quad.tr), let br = shift(quad.br), let bl = shift(quad.bl) else {
+            return nil
+        }
+        return JudgeAPIClient.CardQuad(
+            tl: tl, tr: tr, br: br, bl: bl,
+            imageWidth: imageWidth, imageHeight: imageHeight,
+            confidence: quad.confidence
         )
     }
 
-    /// Crops a camera JPEG to the neon window as seen in `previewSize` (aspect-fill).
-    /// The crop is a pixel subset of the still. It does not resize, so the
-    /// window keeps the still's own pixels.
-    static func cropJPEG(_ data: Data, previewSize: CGSize) throws -> Data {
-        guard previewSize.width > 0, previewSize.height > 0 else {
-            throw CropError.previewNotLaidOut
-        }
-        guard let source = UIImage(data: data) else {
-            throw CropError.undecodableJPEG
-        }
+    /// Quad plus margin from the full still, in the still's own pixels.
+    /// No quad: the upright full still, so the server can detect the card.
+    /// This does not cut the preview's 2.5×3.5 window.
+    static func cropToQuadMargin(_ data: Data) throws -> QuadCrop {
+        guard let source = UIImage(data: data) else { throw CropError.undecodableJPEG }
         let upright = uprightImage(source)
-        let pixelSize = CGSize(
-            width: upright.size.width * upright.scale,
-            height: upright.size.height * upright.scale
-        )
-        guard let crop = alignmentCropInVideo(
-            videoW: pixelSize.width,
-            videoH: pixelSize.height,
-            viewW: previewSize.width,
-            viewH: previewSize.height
-        ) else {
-            throw CropError.invalidGeometry
+        guard let cgImage = upright.cgImage else { throw CropError.missingCGImage }
+        guard let quad = CardStillQuad.detect(cgImage: cgImage) else {
+            if source.imageOrientation == .up { return QuadCrop(jpeg: data, quad: nil) }
+            guard let jpeg = upright.jpegData(compressionQuality: jpegQuality) else { throw CropError.jpegEncodeFailed }
+            return QuadCrop(jpeg: jpeg, quad: nil)
         }
-        guard let cgImage = upright.cgImage else {
-            throw CropError.missingCGImage
+        let corners = [quad.tl, quad.tr, quad.br, quad.bl].compactMap { point -> (Double, Double)? in
+            guard point.count == 2 else { return nil }
+            return (point[0], point[1])
         }
-        let integral = clampedIntegralRect(crop.cgRect, in: CGSize(width: cgImage.width, height: cgImage.height))
-        guard integral.width >= 8, integral.height >= 8, let cut = cgImage.cropping(to: integral) else {
-            throw CropError.cropFailed
+        guard let rect = marginRect(corners: corners, imageWidth: cgImage.width, imageHeight: cgImage.height),
+              let cut = cgImage.cropping(to: rect),
+              let shifted = shiftedQuad(quad, originX: rect.origin.x, originY: rect.origin.y, imageWidth: cut.width, imageHeight: cut.height) else {
+            guard let jpeg = upright.jpegData(compressionQuality: jpegQuality) else { throw CropError.jpegEncodeFailed }
+            return QuadCrop(jpeg: jpeg, quad: nil)
         }
         let cropped = UIImage(cgImage: cut, scale: 1, orientation: .up)
-        guard let jpeg = cropped.jpegData(compressionQuality: jpegQuality) else {
-            throw CropError.jpegEncodeFailed
-        }
-        return jpeg
+        guard let jpeg = cropped.jpegData(compressionQuality: jpegQuality) else { throw CropError.jpegEncodeFailed }
+        return QuadCrop(jpeg: jpeg, quad: shifted)
     }
 
     enum CropError: LocalizedError {
-        case previewNotLaidOut
         case undecodableJPEG
-        case invalidGeometry
         case missingCGImage
-        case cropFailed
         case jpegEncodeFailed
 
         var errorDescription: String? {
             switch self {
-            case .previewNotLaidOut: return "Preview layer has no size yet — wait for the viewfinder."
             case .undecodableJPEG: return "PhotoOutput did not return a decodable JPEG."
-            case .invalidGeometry: return "Could not map the 2.5×3.5 window onto the still."
             case .missingCGImage: return "Upright still has no CGImage."
-            case .cropFailed: return "Neon-window crop failed."
             case .jpegEncodeFailed: return "Failed to re-encode the cropped JPEG."
             }
         }
@@ -131,4 +135,42 @@ enum CardAlignmentCrop {
         let intersection = rect.intersection(bounds).integral
         return intersection
     }
+
+    #if DEBUG
+    static func runContractChecks(_ check: ContractCheck) {
+        func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String, file: StaticString = #filePath, line: UInt = #line) {
+            check(condition(), message(), file, line)
+        }
+        // 11 cm on this phone: card about 1907×2670 inside a 3024×4032 still.
+        let cardW = 1907.0
+        let cardH = 2670.0
+        let imageW = 3024
+        let imageH = 4032
+        let minX = (Double(imageW) - cardW) / 2
+        let minY = (Double(imageH) - cardH) / 2
+        let corners = [
+            (minX, minY),
+            (minX + cardW, minY),
+            (minX + cardW, minY + cardH),
+            (minX, minY + cardH)
+        ]
+        guard let rect = marginRect(corners: corners, imageWidth: imageW, imageHeight: imageH) else {
+            expect(false, "the quad margin rect exists")
+            return
+        }
+        expect(rect.width > 1748 && rect.height > 2448, "the quad margin is larger than the old 1748×2448 window")
+        expect(rect.width < CGFloat(imageW) && rect.height < CGFloat(imageH), "the margin still leaves the still's own bounds")
+        expect(rect.minX < minX && rect.minY < minY, "the crop keeps background above and left of the card")
+        expect(rect.maxX > minX + cardW && rect.maxY > minY + cardH, "the crop keeps background below and right of the card")
+        expect(!(rect.width == 1748 && rect.height == 2448), "the upload rect is not the neon window")
+        let quad = JudgeAPIClient.CardQuad(
+            tl: [minX, minY], tr: [minX + cardW, minY], br: [minX + cardW, minY + cardH], bl: [minX, minY + cardH],
+            imageWidth: imageW, imageHeight: imageH, confidence: 0.9
+        )
+        let shifted = shiftedQuad(quad, originX: rect.origin.x, originY: rect.origin.y, imageWidth: Int(rect.width), imageHeight: Int(rect.height))
+        expect(shifted?.imageWidth == Int(rect.width) && shifted?.imageHeight == Int(rect.height), "the quad's image size is the cropped still")
+        expect((shifted?.tl.first ?? 0) > 1 && (shifted?.tl.dropFirst().first ?? 0) > 1, "the shifted quad sits inside the margin")
+        expect(shiftedQuad(quad, originX: 0, originY: 0, imageWidth: 1, imageHeight: 1)?.tl == [minX, minY], "a zero origin leaves the quad where it was")
+    }
+    #endif
 }
