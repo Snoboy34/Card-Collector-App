@@ -3,7 +3,7 @@
   "approved": false,
   "dpi": 1199.9976,
   "pairMm": 0.1,
-  "definition": "A corner is the cut, where two card edges meet. It is not the printed frame. Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm, and the upright and 180° scans must agree within 0.1 mm. A setback inside the scanner limit is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published. Whitening is paper showing against the same border at mid-edge. Whitening on a border that is already paper-white is not applicable. A pale patch that is foil glare is withheld. A ding is a local notch in the cut. It is withheld when only one orientation shows it. Fraying is card-colored fiber outside the fitted cut. It is withheld when it does not rotate with the card. Length 0 is published only when both orientations are clean. A side the centering key has withheld does not grow a corner grade. TD-12 is excluded. TD-14 through TD-18 and the flatbed backs are pending and are not measured here. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9. A disagreement between the two orientations, a quad that is not card-sized, or an unclear step stays withheld. Unapproved until the owner checks the overlay. No 0–10 corner score is assigned. This review does not change grading.",
+  "definition": "A corner is the cut, where two card edges meet. It is not the printed frame. Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm, and the upright and 180° scans must agree within 0.1 mm. A setback inside the scanner limit is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published. Whitening is paper showing against the same border at mid-edge. Whitening on a border that is already paper-white is not applicable. A pale patch that is foil glare is withheld. A ding is a local notch in the cut. It is withheld when only one orientation shows it. Fraying is card-colored fiber outside the fitted cut. It is withheld when it does not rotate with the card. Length 0 is published only when both orientations are clean. A side the centering key has withheld does not grow a corner grade. TD-12 is excluded. TD-14 through TD-18 are still to come from the owner and are not measured here. Flatbed backs of TD-01 through TD-11 and Karros are a separate unapproved corner review. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9. A disagreement between the two orientations, a quad that is not card-sized, or an unclear step stays withheld. Unapproved until the owner checks the overlay. No 0–10 corner score is assigned. This review does not change grading.",
   "excluded": [
     "TD-12"
   ],
@@ -14,20 +14,6 @@
       "TD-16",
       "TD-17",
       "TD-18"
-    ],
-    "backs": [
-      "TD-01",
-      "TD-02",
-      "TD-03",
-      "TD-04",
-      "TD-05",
-      "TD-06",
-      "TD-07",
-      "TD-08",
-      "TD-09",
-      "TD-10",
-      "TD-11",
-      "KARROS"
     ]
   },
   "bgsReference": {
@@ -88,6 +74,6579 @@
     ]
   },
   "phone": "A phone corner is not scored. It waits until those two edges already match the centering key, on a still in the ±0.1 mm tier (at or above 30 px/mm) or the ±0.2 mm tier (from 15 px/mm up to 30).",
+  "backs": {
+    "TD-01": {
+      "approved": false,
+      "files": {
+        "180": "TD-01_back_180.png",
+        "up": "TD-01_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 63.614,
+          "height": 89.271
+        },
+        "up": {
+          "width": 63.593,
+          "height": 89.265
+        }
+      },
+      "sizeOk": {
+        "180": true,
+        "up": true
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.148,
+              "label": "sharp: setback under 0.148 mm (scanner limit)",
+              "setbackMm": 0.129,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.148,
+              "right": 0.1
+            },
+            "alphaDeg": 44.964
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.276,
+            "label": "sharp: setback under 0.276 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.276,
+              "label": "sharp: setback under 0.276 mm (scanner limit)",
+              "setbackMm": 0.207,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.276,
+              "left": 0.144
+            },
+            "alphaDeg": 44.964
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.148,
+              "label": "sharp: setback under 0.148 mm (scanner limit)",
+              "setbackMm": 0.051,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.148,
+              "left": 0.085
+            },
+            "alphaDeg": 45.052
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.276,
+            "label": "sharp: setback under 0.276 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.276,
+              "label": "sharp: setback under 0.276 mm (scanner limit)",
+              "setbackMm": 0.178,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.276,
+              "right": 0.169
+            },
+            "alphaDeg": 45.035
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.306,
+              "label": "sharp: setback under 0.306 mm (scanner limit)",
+              "setbackMm": 0.24,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.249,
+              "fromTipMm": 0.4,
+              "edge": "right"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.306,
+              "right": 0.1
+            },
+            "alphaDeg": 45.014
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.306,
+            "label": "sharp: setback under 0.306 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.144,
+              "label": "sharp: setback under 0.144 mm (scanner limit)",
+              "setbackMm": 0.083,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.111,
+              "left": 0.144
+            },
+            "alphaDeg": 45.05
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.306,
+              "label": "sharp: setback under 0.306 mm (scanner limit)",
+              "setbackMm": 0.22,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.274,
+              "fromTipMm": 0.35,
+              "edge": "left"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.306,
+              "left": 0.085
+            },
+            "alphaDeg": 44.97
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.306,
+            "label": "sharp: setback under 0.306 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.169,
+              "label": "sharp: setback under 0.169 mm (scanner limit)",
+              "setbackMm": 0.067,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.111,
+              "right": 0.169
+            },
+            "alphaDeg": 44.95
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/TD-01_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "TD-01_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.614,
+            "height": 89.271
+          },
+          "sizeOk": true,
+          "minMarginMm": 10.587,
+          "closest": "tl top",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "TD-01_back_up.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.593,
+            "height": 89.265
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.85,
+          "closest": "tl top",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    },
+    "TD-02": {
+      "approved": false,
+      "files": {
+        "180": "TD-02_back_180.png",
+        "up": "TD-02_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 63.671,
+          "height": 89.103
+        },
+        "up": {
+          "width": 63.631,
+          "height": 89.136
+        }
+      },
+      "sizeOk": {
+        "180": true,
+        "up": true
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.065,
+              "label": null,
+              "setbackMm": 0.103,
+              "radiusFromSetbackMm": 0.248,
+              "radiusFitMm": 0.355,
+              "residualMm": 0.043,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.065,
+              "right": 0.038
+            },
+            "alphaDeg": 45.001
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.4,
+              "label": "sharp: setback under 0.400 mm (scanner limit)",
+              "setbackMm": 0.212,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.4,
+              "left": 0.073
+            },
+            "alphaDeg": 45.034
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.144,
+              "label": "sharp: setback under 0.144 mm (scanner limit)",
+              "setbackMm": 0.075,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.065,
+              "left": 0.144
+            },
+            "alphaDeg": 45.006
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.4,
+            "label": "sharp: setback under 0.400 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.4,
+              "label": "sharp: setback under 0.400 mm (scanner limit)",
+              "setbackMm": 0.21,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.4,
+              "right": 0.114
+            },
+            "alphaDeg": 44.976
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.099,
+              "label": null,
+              "setbackMm": 0.14,
+              "radiusFromSetbackMm": 0.338,
+              "radiusFitMm": 0.605,
+              "residualMm": 0.078,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.099,
+              "right": 0.038
+            },
+            "alphaDeg": 45.002
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.342,
+              "label": "sharp: setback under 0.342 mm (scanner limit)",
+              "setbackMm": 0.114,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.342,
+              "left": 0.073
+            },
+            "alphaDeg": 45.026
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": false,
+              "limitMm": 0.144,
+              "label": null,
+              "setbackMm": 0.161,
+              "radiusFromSetbackMm": 0.388,
+              "radiusFitMm": 0.45,
+              "residualMm": 0.069,
+              "radiusMm": 0.45
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.099,
+              "left": 0.144
+            },
+            "alphaDeg": 44.991
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.342,
+              "label": "sharp: setback under 0.342 mm (scanner limit)",
+              "setbackMm": 0.107,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.342,
+              "right": 0.114
+            },
+            "alphaDeg": 44.964
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/TD-02_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "TD-02_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.671,
+            "height": 89.103
+          },
+          "sizeOk": true,
+          "minMarginMm": 10.283,
+          "closest": "br right",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "TD-02_back_up.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.631,
+            "height": 89.136
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.635,
+          "closest": "br right",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    },
+    "KARROS": {
+      "approved": false,
+      "files": {
+        "180": "Karros_back_180.png",
+        "up": "Karros_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 63.712,
+          "height": 88.89
+        },
+        "up": {
+          "width": 63.696,
+          "height": 88.932
+        }
+      },
+      "sizeOk": {
+        "180": true,
+        "up": true
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.486,
+              "label": "sharp: setback under 0.486 mm (scanner limit)",
+              "setbackMm": 0.111,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.171,
+              "right": 0.486
+            },
+            "alphaDeg": 44.912
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.179,
+              "label": null,
+              "setbackMm": 0.243,
+              "radiusFromSetbackMm": 0.583,
+              "radiusFitMm": 0.47,
+              "residualMm": 0.061,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.121,
+              "left": 0.179
+            },
+            "alphaDeg": 44.924
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.171,
+              "label": "sharp: setback under 0.171 mm (scanner limit)",
+              "setbackMm": 0.085,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.171,
+              "left": 0.157
+            },
+            "alphaDeg": 45.076
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.171,
+            "label": "sharp: setback under 0.171 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.121,
+              "label": "sharp: setback under 0.121 mm (scanner limit)",
+              "setbackMm": 0.074,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.121,
+              "right": 0.098
+            },
+            "alphaDeg": 45.073
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.486,
+              "label": "sharp: setback under 0.486 mm (scanner limit)",
+              "setbackMm": 0.089,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.366,
+              "right": 0.486
+            },
+            "alphaDeg": 45.067
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.486,
+            "label": "sharp: setback under 0.486 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.179,
+              "label": "sharp: setback under 0.179 mm (scanner limit)",
+              "setbackMm": 0.09,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.171,
+              "left": 0.179
+            },
+            "alphaDeg": 45.075
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.366,
+              "label": "sharp: setback under 0.366 mm (scanner limit)",
+              "setbackMm": 0.098,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.366,
+              "left": 0.157
+            },
+            "alphaDeg": 44.945
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "unclear",
+              "sharp": false,
+              "limitMm": 0.171,
+              "label": null,
+              "setbackMm": -0.731,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.171,
+              "right": 0.098
+            },
+            "alphaDeg": 44.929
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/KARROS_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "Karros_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.712,
+            "height": 88.89
+          },
+          "sizeOk": true,
+          "minMarginMm": 12.216,
+          "closest": "br right",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "Karros_back_up.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.696,
+            "height": 88.932
+          },
+          "sizeOk": true,
+          "minMarginMm": 9.426,
+          "closest": "tr right",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    },
+    "TD-03": {
+      "approved": false,
+      "files": {
+        "180": "TD-03_back_180.png",
+        "up": "TD-03_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 62.898,
+          "height": 88.082
+        },
+        "up": {
+          "width": 62.944,
+          "height": 88.052
+        }
+      },
+      "sizeOk": {
+        "180": true,
+        "up": true
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.262,
+              "label": null,
+              "setbackMm": 1.025,
+              "radiusFromSetbackMm": 2.489,
+              "radiusFitMm": 2.495,
+              "residualMm": 0.31,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 1.76,
+              "areaMm2": 1.254,
+              "midLuma": 31.849
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.313,
+              "fromTipMm": 0.55,
+              "edge": "bottom"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.179,
+              "right": 0.262
+            },
+            "alphaDeg": 45.1
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "not-an-arc",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 1.76,
+            "areaMm2": 1.296,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.455,
+              "label": null,
+              "setbackMm": 1.055,
+              "radiusFromSetbackMm": 2.564,
+              "radiusFitMm": 2.75,
+              "residualMm": 0.087,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 1.76,
+              "areaMm2": 1.338,
+              "midLuma": 36.038
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.189,
+              "left": 0.455
+            },
+            "alphaDeg": 45.106
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.179,
+              "label": null,
+              "setbackMm": 1.015,
+              "radiusFromSetbackMm": 2.442,
+              "radiusFitMm": 2.425,
+              "residualMm": 0.385,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 1.76,
+              "areaMm2": 1.402,
+              "midLuma": 32.867
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.397,
+              "fromTipMm": 0.7,
+              "edge": "left"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.179,
+              "left": 0.177
+            },
+            "alphaDeg": 44.934
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 1.76,
+            "areaMm2": 1.444,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "unclear",
+              "sharp": false,
+              "limitMm": 0.205,
+              "label": null,
+              "setbackMm": -0.46,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 1.76,
+              "areaMm2": 1.485,
+              "midLuma": 35.488
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 1.051,
+              "fromTipMm": 0.7,
+              "edge": "right"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.189,
+              "right": 0.205
+            },
+            "alphaDeg": 44.929
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.262,
+              "label": null,
+              "setbackMm": 0.999,
+              "radiusFromSetbackMm": 2.399,
+              "radiusFitMm": 2.76,
+              "residualMm": 0.099,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 1.76,
+              "areaMm2": 1.453,
+              "midLuma": 32.67
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.102,
+              "right": 0.262
+            },
+            "alphaDeg": 44.907
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 1.76,
+            "areaMm2": 1.418,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "unclear",
+              "sharp": false,
+              "limitMm": 0.455,
+              "label": null,
+              "setbackMm": -0.926,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 1.76,
+              "areaMm2": 1.382,
+              "midLuma": 29.603
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.137,
+              "left": 0.455
+            },
+            "alphaDeg": 44.909
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "unclear",
+              "sharp": false,
+              "limitMm": 0.177,
+              "label": null,
+              "setbackMm": -0.863,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 1.76,
+              "areaMm2": 1.382,
+              "midLuma": 30.104
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.102,
+              "left": 0.177
+            },
+            "alphaDeg": 45.059
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 1.76,
+            "areaMm2": 1.302,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.205,
+              "label": null,
+              "setbackMm": 1.062,
+              "radiusFromSetbackMm": 2.573,
+              "radiusFitMm": 2.745,
+              "residualMm": 0.074,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 1.76,
+              "areaMm2": 1.222,
+              "midLuma": 32.465
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.137,
+              "right": 0.205
+            },
+            "alphaDeg": 45.056
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/TD-03_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "TD-03_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 62.898,
+            "height": 88.082
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.152,
+          "closest": "bl left",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "TD-03_back_up.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 62.944,
+            "height": 88.052
+          },
+          "sizeOk": true,
+          "minMarginMm": 10.442,
+          "closest": "tr top",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    },
+    "TD-04": {
+      "approved": false,
+      "files": {
+        "180": "TD-04_back_180.png",
+        "up": "TD-04_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 58.393,
+          "height": 82.063
+        },
+        "up": {
+          "width": 58.426,
+          "height": 82.002
+        }
+      },
+      "sizeOk": {
+        "180": false,
+        "up": false
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.251,
+              "label": "sharp: setback under 0.251 mm (scanner limit)",
+              "setbackMm": -0.15,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "no-solid-border",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 115.627
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.396,
+              "fromTipMm": 1.8,
+              "edge": "right"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 2.55,
+              "stickOutMm": 0.7,
+              "edge": "bottom"
+            },
+            "riseMm": {
+              "bottom": 0.251,
+              "right": 0.007
+            },
+            "alphaDeg": 45.414
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "sharp": false,
+              "limitMm": null,
+              "label": null,
+              "setbackMm": null,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null
+            },
+            "ding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "depthMm": null,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "lengthMm": null,
+              "stickOutMm": null,
+              "edge": null
+            },
+            "riseMm": null,
+            "alphaDeg": null
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.251,
+              "label": "sharp: setback under 0.251 mm (scanner limit)",
+              "setbackMm": -0.222,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 0,
+              "areaMm2": 0,
+              "midLuma": 153.41
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.959,
+              "fromTipMm": 0.45,
+              "edge": "bottom"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 2.55,
+              "stickOutMm": 0.7,
+              "edge": "bottom"
+            },
+            "riseMm": {
+              "bottom": 0.251,
+              "left": 0.066
+            },
+            "alphaDeg": 44.452
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "sharp": false,
+              "limitMm": null,
+              "label": null,
+              "setbackMm": null,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null
+            },
+            "ding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "depthMm": null,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "lengthMm": null,
+              "stickOutMm": null,
+              "edge": null
+            },
+            "riseMm": null,
+            "alphaDeg": null
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.358,
+              "label": null,
+              "setbackMm": 0.799,
+              "radiusFromSetbackMm": 1.937,
+              "radiusFitMm": 1.255,
+              "residualMm": 0.436,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "no-solid-border",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 97.781
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 1.136,
+              "fromTipMm": 1.45,
+              "edge": "top"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 2.55,
+              "stickOutMm": 0.7,
+              "edge": "top"
+            },
+            "riseMm": {
+              "top": 0.358,
+              "right": 0.007
+            },
+            "alphaDeg": 45.07
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.548,
+              "label": "sharp: setback under 0.548 mm (scanner limit)",
+              "setbackMm": 0.043,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "no-solid-border",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 93.419
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 1.209,
+              "fromTipMm": 2,
+              "edge": "left"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 2.55,
+              "stickOutMm": 0.7,
+              "edge": "bottom"
+            },
+            "riseMm": {
+              "bottom": 0.058,
+              "left": 0.548
+            },
+            "alphaDeg": 45.064
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.358,
+              "label": "sharp: setback under 0.358 mm (scanner limit)",
+              "setbackMm": 0.181,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "no-solid-border",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 156.297
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 2.55,
+              "stickOutMm": 0.7,
+              "edge": "top"
+            },
+            "riseMm": {
+              "top": 0.358,
+              "left": 0.066
+            },
+            "alphaDeg": 45.064
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "not-card-sized",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.408,
+              "label": "sharp: setback under 0.408 mm (scanner limit)",
+              "setbackMm": 0.248,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "no-solid-border",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 149.478
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 2.55,
+              "stickOutMm": 0.7,
+              "edge": "bottom"
+            },
+            "riseMm": {
+              "bottom": 0.058,
+              "right": 0.408
+            },
+            "alphaDeg": 45.09
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/TD-04_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "TD-04_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 58.393,
+            "height": 82.063
+          },
+          "sizeOk": false,
+          "minMarginMm": 13.147,
+          "closest": "tr right",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "TD-04_back_up.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 58.426,
+            "height": 82.002
+          },
+          "sizeOk": false,
+          "minMarginMm": 12.642,
+          "closest": "tr right",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    },
+    "TD-05": {
+      "approved": false,
+      "files": {
+        "180": "TD-05_back_180.png",
+        "up": "TD-05_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 63.55,
+          "height": 89.015
+        },
+        "up": {
+          "width": 63.542,
+          "height": 88.979
+        }
+      },
+      "sizeOk": {
+        "180": true,
+        "up": true
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.18,
+              "label": "sharp: setback under 0.180 mm (scanner limit)",
+              "setbackMm": 0.1,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 0.16,
+              "areaMm2": 0.013,
+              "midLuma": 36.749
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.006,
+              "right": 0.18
+            },
+            "alphaDeg": 44.837
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.14,
+              "label": null,
+              "setbackMm": 0.171,
+              "radiusFromSetbackMm": 0.41,
+              "radiusFitMm": 0.52,
+              "residualMm": 0.06,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 0,
+              "areaMm2": 0,
+              "midLuma": 38.145
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0.7,
+              "stickOutMm": 0.05,
+              "edge": "top"
+            },
+            "riseMm": {
+              "top": 0.14,
+              "left": 0.13
+            },
+            "alphaDeg": 44.912
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.056,
+              "label": null,
+              "setbackMm": 0.109,
+              "radiusFromSetbackMm": 0.266,
+              "radiusFitMm": 1.61,
+              "residualMm": 0.397,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "no-solid-border",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 98.463
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.006,
+              "left": 0.056
+            },
+            "alphaDeg": 45.152
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "no-solid-border",
+            "label": null,
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.256,
+              "label": "sharp: setback under 0.256 mm (scanner limit)",
+              "setbackMm": 0.188,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "no-solid-border",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 97.971
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.403,
+              "fromTipMm": 0.3,
+              "edge": "right"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.14,
+              "right": 0.256
+            },
+            "alphaDeg": 45.083
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "sharp": false,
+              "limitMm": null,
+              "label": null,
+              "setbackMm": null,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null
+            },
+            "ding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "depthMm": null,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "lengthMm": null,
+              "stickOutMm": null,
+              "edge": null
+            },
+            "riseMm": null,
+            "alphaDeg": null
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "label": null,
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.13,
+              "label": null,
+              "setbackMm": 0.745,
+              "radiusFromSetbackMm": 1.645,
+              "radiusFitMm": 0.62,
+              "residualMm": 0.149,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": false,
+              "reason": null,
+              "label": null,
+              "lengthMm": 0,
+              "areaMm2": 0,
+              "midLuma": 218.019
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.014,
+              "left": 0.13
+            },
+            "alphaDeg": 43.486
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "sharp": false,
+              "limitMm": null,
+              "label": null,
+              "setbackMm": null,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null
+            },
+            "ding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "depthMm": null,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "lengthMm": null,
+              "stickOutMm": null,
+              "edge": null
+            },
+            "riseMm": null,
+            "alphaDeg": null
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "label": null,
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.256,
+              "label": null,
+              "setbackMm": 0.323,
+              "radiusFromSetbackMm": 0.854,
+              "radiusFitMm": 1.635,
+              "residualMm": 0.375,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 233.468
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.589,
+              "fromTipMm": 1.95,
+              "edge": "bottom"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 2.5,
+              "stickOutMm": 0.7,
+              "edge": "bottom"
+            },
+            "riseMm": {
+              "bottom": 0.014,
+              "right": 0.256
+            },
+            "alphaDeg": 46.52
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/TD-05_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "TD-05_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.55,
+            "height": 89.015
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.501,
+          "closest": "br bottom",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "TD-05_back_up.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.542,
+            "height": 88.979
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.846,
+          "closest": "tr right",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    },
+    "TD-06": {
+      "approved": false,
+      "files": {
+        "180": "TD-06_back_180.png",
+        "up": "TD-06_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 63.68,
+          "height": 89.157
+        },
+        "up": {
+          "width": 63.626,
+          "height": 89.138
+        }
+      },
+      "sizeOk": {
+        "180": true,
+        "up": true
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.246,
+              "label": "sharp: setback under 0.246 mm (scanner limit)",
+              "setbackMm": 0.132,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.199,
+              "right": 0.246
+            },
+            "alphaDeg": 45.092
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "label": null,
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "sharp": false,
+              "limitMm": null,
+              "label": null,
+              "setbackMm": null,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null
+            },
+            "ding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "depthMm": null,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "lengthMm": null,
+              "stickOutMm": null,
+              "edge": null
+            },
+            "riseMm": null,
+            "alphaDeg": null
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.233,
+              "label": "sharp: setback under 0.233 mm (scanner limit)",
+              "setbackMm": 0.064,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.199,
+              "left": 0.233
+            },
+            "alphaDeg": 44.932
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "label": null,
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "sharp": false,
+              "limitMm": null,
+              "label": null,
+              "setbackMm": null,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null
+            },
+            "ding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "depthMm": null,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "lengthMm": null,
+              "stickOutMm": null,
+              "edge": null
+            },
+            "riseMm": null,
+            "alphaDeg": null
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.246,
+              "label": "sharp: setback under 0.246 mm (scanner limit)",
+              "setbackMm": 0.089,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.046,
+              "right": 0.246
+            },
+            "alphaDeg": 44.892
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.246,
+            "label": "sharp: setback under 0.246 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.081,
+              "label": "sharp: setback under 0.081 mm (scanner limit)",
+              "setbackMm": -0.072,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.359,
+              "fromTipMm": 1.75,
+              "edge": "left"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.066,
+              "left": 0.081
+            },
+            "alphaDeg": 44.938
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.233,
+              "label": "sharp: setback under 0.233 mm (scanner limit)",
+              "setbackMm": 0.163,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.046,
+              "left": 0.233
+            },
+            "alphaDeg": 45.085
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.286,
+            "label": "sharp: setback under 0.286 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.286,
+              "label": "sharp: setback under 0.286 mm (scanner limit)",
+              "setbackMm": -0.014,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.066,
+              "right": 0.286
+            },
+            "alphaDeg": 45.087
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/TD-06_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "TD-06_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.68,
+            "height": 89.157
+          },
+          "sizeOk": true,
+          "minMarginMm": 10.619,
+          "closest": "br right",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "TD-06_back_up.png",
+          "width": 4176,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.626,
+            "height": 89.138
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.707,
+          "closest": "tr right",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    },
+    "TD-07": {
+      "approved": false,
+      "files": {
+        "180": "TD-07_back_180.png",
+        "up": "TD-07_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 63.643,
+          "height": 89.081
+        },
+        "up": {
+          "width": 63.614,
+          "height": 89.107
+        }
+      },
+      "sizeOk": {
+        "180": true,
+        "up": true
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.247,
+              "label": "sharp: setback under 0.247 mm (scanner limit)",
+              "setbackMm": 0.039,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 253.338
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.247,
+              "right": 0.188
+            },
+            "alphaDeg": 44.869
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "label": null,
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "sharp": false,
+              "limitMm": null,
+              "label": null,
+              "setbackMm": null,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null
+            },
+            "ding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "depthMm": null,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "lengthMm": null,
+              "stickOutMm": null,
+              "edge": null
+            },
+            "riseMm": null,
+            "alphaDeg": null
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.299,
+              "label": "sharp: setback under 0.299 mm (scanner limit)",
+              "setbackMm": 0.264,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 250.687
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.247,
+              "left": 0.299
+            },
+            "alphaDeg": 45.085
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": false,
+              "limitMm": 0.223,
+              "label": null,
+              "setbackMm": 0.237,
+              "radiusFromSetbackMm": 0.574,
+              "radiusFitMm": 0.655,
+              "residualMm": 0.086,
+              "radiusMm": 0.655
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 247.325
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.182,
+              "right": 0.223
+            },
+            "alphaDeg": 45.039
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": false,
+              "limitMm": 0.229,
+              "label": null,
+              "setbackMm": 0.262,
+              "radiusFromSetbackMm": 0.638,
+              "radiusFitMm": 0.605,
+              "residualMm": 0.053,
+              "radiusMm": 0.605
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.229,
+              "right": 0.188
+            },
+            "alphaDeg": 45.12
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "label": null,
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "sharp": false,
+              "limitMm": null,
+              "label": null,
+              "setbackMm": null,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null
+            },
+            "ding": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "depthMm": null,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "lengthMm": null,
+              "stickOutMm": null,
+              "edge": null
+            },
+            "riseMm": null,
+            "alphaDeg": null
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.299,
+              "label": "sharp: setback under 0.299 mm (scanner limit)",
+              "setbackMm": 0.242,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.229,
+              "left": 0.299
+            },
+            "alphaDeg": 44.926
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.398,
+            "label": "sharp: setback under 0.398 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.398,
+              "label": "sharp: setback under 0.398 mm (scanner limit)",
+              "setbackMm": 0.05,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.167,
+              "fromTipMm": 1.65,
+              "edge": "right"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.398,
+              "right": 0.223
+            },
+            "alphaDeg": 44.938
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/TD-07_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "TD-07_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.643,
+            "height": 89.081
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.728,
+          "closest": "br bottom",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "TD-07_back_up.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.614,
+            "height": 89.107
+          },
+          "sizeOk": true,
+          "minMarginMm": 9.604,
+          "closest": "tr right",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    },
+    "TD-08": {
+      "approved": false,
+      "files": {
+        "180": "TD-08_back_180.png",
+        "up": "TD-08_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 63.553,
+          "height": 89.139
+        },
+        "up": {
+          "width": 63.553,
+          "height": 89.147
+        }
+      },
+      "sizeOk": {
+        "180": true,
+        "up": true
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.395,
+              "label": "sharp: setback under 0.395 mm (scanner limit)",
+              "setbackMm": 0.028,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.395,
+              "right": 0.245
+            },
+            "alphaDeg": 45.013
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.235,
+              "label": null,
+              "setbackMm": 0.279,
+              "radiusFromSetbackMm": 0.674,
+              "radiusFitMm": 0.555,
+              "residualMm": 0.059,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0.8,
+              "stickOutMm": 0.05,
+              "edge": "left"
+            },
+            "riseMm": {
+              "top": 0.235,
+              "left": 0.215
+            },
+            "alphaDeg": 45.047
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.395,
+              "label": "sharp: setback under 0.395 mm (scanner limit)",
+              "setbackMm": 0.09,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.395,
+              "left": 0.352
+            },
+            "alphaDeg": 45.021
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.235,
+              "label": null,
+              "setbackMm": 0.265,
+              "radiusFromSetbackMm": 0.639,
+              "radiusFitMm": 0.755,
+              "residualMm": 0.057,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.235,
+              "right": 0.219
+            },
+            "alphaDeg": 45.001
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": false,
+              "limitMm": 0.248,
+              "label": null,
+              "setbackMm": 0.262,
+              "radiusFromSetbackMm": 0.633,
+              "radiusFitMm": 0.575,
+              "residualMm": 0.086,
+              "radiusMm": 0.575
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 246.929
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.248,
+              "right": 0.245
+            },
+            "alphaDeg": 45.012
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.383,
+              "label": "sharp: setback under 0.383 mm (scanner limit)",
+              "setbackMm": 0.047,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 251.237
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.383,
+              "left": 0.215
+            },
+            "alphaDeg": 45.01
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.352,
+              "label": "sharp: setback under 0.352 mm (scanner limit)",
+              "setbackMm": 0.346,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 253.846
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.167,
+              "fromTipMm": 0.7,
+              "edge": "left"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.248,
+              "left": 0.352
+            },
+            "alphaDeg": 44.954
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.383,
+            "label": "sharp: setback under 0.383 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.383,
+              "label": "sharp: setback under 0.383 mm (scanner limit)",
+              "setbackMm": 0.244,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 253.16
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.195,
+              "fromTipMm": 1.1,
+              "edge": "right"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.383,
+              "right": 0.219
+            },
+            "alphaDeg": 44.943
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/TD-08_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "TD-08_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.553,
+            "height": 89.139
+          },
+          "sizeOk": true,
+          "minMarginMm": 10.225,
+          "closest": "tr top",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "TD-08_back_up.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.553,
+            "height": 89.147
+          },
+          "sizeOk": true,
+          "minMarginMm": 9.607,
+          "closest": "br right",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    },
+    "TD-09": {
+      "approved": false,
+      "files": {
+        "180": "TD-09_back_180.png",
+        "up": "TD-09_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 62.893,
+          "height": 89.155
+        },
+        "up": {
+          "width": 62.937,
+          "height": 89.158
+        }
+      },
+      "sizeOk": {
+        "180": true,
+        "up": true
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.295,
+              "label": "sharp: setback under 0.295 mm (scanner limit)",
+              "setbackMm": 0.086,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.092,
+              "right": 0.295
+            },
+            "alphaDeg": 44.919
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.295,
+            "label": "sharp: setback under 0.295 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.182,
+              "label": "sharp: setback under 0.182 mm (scanner limit)",
+              "setbackMm": 0.126,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.182,
+              "left": 0.18
+            },
+            "alphaDeg": 44.933
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.092,
+              "label": "sharp: setback under 0.092 mm (scanner limit)",
+              "setbackMm": 0.048,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.092,
+              "left": 0.055
+            },
+            "alphaDeg": 45.081
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.462,
+            "label": "sharp: setback under 0.462 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.462,
+              "label": "sharp: setback under 0.462 mm (scanner limit)",
+              "setbackMm": 0.094,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.182,
+              "right": 0.462
+            },
+            "alphaDeg": 45.065
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.295,
+              "label": "sharp: setback under 0.295 mm (scanner limit)",
+              "setbackMm": 0.248,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 249.105
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.18,
+              "right": 0.295
+            },
+            "alphaDeg": 45.045
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.295,
+            "label": "sharp: setback under 0.295 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.18,
+              "label": "sharp: setback under 0.180 mm (scanner limit)",
+              "setbackMm": 0.094,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 249.642
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.177,
+              "left": 0.18
+            },
+            "alphaDeg": 45.037
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.18,
+              "label": null,
+              "setbackMm": 0.251,
+              "radiusFromSetbackMm": 0.604,
+              "radiusFitMm": 1.65,
+              "residualMm": 0.331,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 253.218
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.18,
+              "left": 0.055
+            },
+            "alphaDeg": 44.955
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.462,
+              "label": "sharp: setback under 0.462 mm (scanner limit)",
+              "setbackMm": 0.07,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 253.683
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.177,
+              "right": 0.462
+            },
+            "alphaDeg": 44.964
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/TD-09_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "TD-09_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 62.893,
+            "height": 89.155
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.806,
+          "closest": "tl left",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "TD-09_back_up.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 62.937,
+            "height": 89.158
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.518,
+          "closest": "tr top",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    },
+    "TD-10": {
+      "approved": false,
+      "files": {
+        "180": "TD-10_back_180.png",
+        "up": "TD-10_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 63.434,
+          "height": 89.086
+        },
+        "up": {
+          "width": 63.421,
+          "height": 89.108
+        }
+      },
+      "sizeOk": {
+        "180": true,
+        "up": true
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.225,
+              "label": "sharp: setback under 0.225 mm (scanner limit)",
+              "setbackMm": -0.023,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 254
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.169,
+              "fromTipMm": 1.8,
+              "edge": "right"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.225,
+              "right": 0.019
+            },
+            "alphaDeg": 45.029
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.227,
+            "label": "sharp: setback under 0.227 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.227,
+              "label": "sharp: setback under 0.227 mm (scanner limit)",
+              "setbackMm": 0.201,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 254
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.195,
+              "fromTipMm": 0.3,
+              "edge": "left"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.227,
+              "left": 0.197
+            },
+            "alphaDeg": 45.022
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.225,
+              "label": "sharp: setback under 0.225 mm (scanner limit)",
+              "setbackMm": 0.154,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 252.672
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.225,
+              "left": 0.204
+            },
+            "alphaDeg": 44.945
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.278,
+            "label": "sharp: setback under 0.278 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.278,
+              "label": "sharp: setback under 0.278 mm (scanner limit)",
+              "setbackMm": 0.257,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 250.216
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.183,
+              "fromTipMm": 0.65,
+              "edge": "right"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.227,
+              "right": 0.278
+            },
+            "alphaDeg": 44.925
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": false,
+              "limitMm": 0.144,
+              "label": null,
+              "setbackMm": 0.347,
+              "radiusFromSetbackMm": 0.836,
+              "radiusFitMm": 0.85,
+              "residualMm": 0.077,
+              "radiusMm": 0.85
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.155,
+              "fromTipMm": 0.4,
+              "edge": "top"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.144,
+              "right": 0.019
+            },
+            "alphaDeg": 44.975
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.197,
+              "label": "sharp: setback under 0.197 mm (scanner limit)",
+              "setbackMm": 0.042,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.101,
+              "left": 0.197
+            },
+            "alphaDeg": 45.023
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.204,
+              "label": "sharp: setback under 0.204 mm (scanner limit)",
+              "setbackMm": 0.145,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 1.65,
+              "stickOutMm": 0.1,
+              "edge": "left"
+            },
+            "riseMm": {
+              "top": 0.144,
+              "left": 0.204
+            },
+            "alphaDeg": 45.051
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": false,
+            "reason": null,
+            "sharp": true,
+            "limitMm": 0.278,
+            "label": "sharp: setback under 0.278 mm (scanner limit)",
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": false,
+            "reason": null,
+            "depthMm": 0,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "lengthMm": null,
+            "stickOutMm": null,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.278,
+              "label": "sharp: setback under 0.278 mm (scanner limit)",
+              "setbackMm": 0.023,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 255
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.101,
+              "right": 0.278
+            },
+            "alphaDeg": 45.029
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/TD-10_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "TD-10_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.434,
+            "height": 89.086
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.88,
+          "closest": "tr right",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "TD-10_back_up.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.421,
+            "height": 89.108
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.337,
+          "closest": "tl left",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    },
+    "TD-11": {
+      "approved": false,
+      "files": {
+        "180": "TD-11_back_180.png",
+        "up": "TD-11_back_up.png"
+      },
+      "cardMm": {
+        "180": {
+          "width": 63.694,
+          "height": 89.131
+        },
+        "up": {
+          "width": 63.691,
+          "height": 89.119
+        }
+      },
+      "sizeOk": {
+        "180": true,
+        "up": true
+      },
+      "corners": {
+        "tl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.239,
+              "label": "sharp: setback under 0.239 mm (scanner limit)",
+              "setbackMm": 0.082,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 252.444
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.239,
+              "right": 0.06
+            },
+            "alphaDeg": 44.974
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": false,
+              "limitMm": 0.189,
+              "label": null,
+              "setbackMm": 0.26,
+              "radiusFromSetbackMm": 0.629,
+              "radiusFitMm": 0.705,
+              "residualMm": 0.065,
+              "radiusMm": 0.705
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 250.977
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.268,
+              "fromTipMm": 0.5,
+              "edge": "left"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.189,
+              "left": 0.109
+            },
+            "alphaDeg": 45.011
+          }
+        },
+        "tr": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.239,
+              "label": "sharp: setback under 0.239 mm (scanner limit)",
+              "setbackMm": 0.064,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 254
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.239,
+              "left": 0.083
+            },
+            "alphaDeg": 44.997
+          },
+          "approved": false,
+          "adjacent": [
+            "top",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": false,
+              "limitMm": 0.316,
+              "label": null,
+              "setbackMm": 0.323,
+              "radiusFromSetbackMm": 0.777,
+              "radiusFitMm": 0.795,
+              "residualMm": 0.069,
+              "radiusMm": 0.795
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 253.856
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.306,
+              "fromTipMm": 0.4,
+              "edge": "right"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.189,
+              "right": 0.316
+            },
+            "alphaDeg": 44.959
+          }
+        },
+        "bl": {
+          "180": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": false,
+              "limitMm": 0.155,
+              "label": null,
+              "setbackMm": 0.203,
+              "radiusFromSetbackMm": 0.489,
+              "radiusFitMm": 0.435,
+              "residualMm": 0.038,
+              "radiusMm": 0.435
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "no-solid-border",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 199.55
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0.5,
+              "stickOutMm": 0.1,
+              "edge": "right"
+            },
+            "riseMm": {
+              "top": 0.155,
+              "right": 0.06
+            },
+            "alphaDeg": 44.987
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "left"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "no-solid-border",
+            "label": null,
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0.575,
+            "stickOutMm": 0.1,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.109,
+              "label": "sharp: setback under 0.109 mm (scanner limit)",
+              "setbackMm": 0.067,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "no-solid-border",
+              "label": null,
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 201.37
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0.205,
+              "fromTipMm": 1.2,
+              "edge": "left"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0.65,
+              "stickOutMm": 0.1,
+              "edge": "left"
+            },
+            "riseMm": {
+              "bottom": 0.096,
+              "left": 0.109
+            },
+            "alphaDeg": 44.996
+          }
+        },
+        "br": {
+          "180": {
+            "rounding": {
+              "withheld": true,
+              "reason": "not-an-arc",
+              "sharp": false,
+              "limitMm": 0.155,
+              "label": null,
+              "setbackMm": 0.215,
+              "radiusFromSetbackMm": 0.52,
+              "radiusFitMm": 0.855,
+              "residualMm": 0.163,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 254
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 1.035,
+              "fromTipMm": 0.35,
+              "edge": "left"
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "top": 0.155,
+              "left": 0.083
+            },
+            "alphaDeg": 45.042
+          },
+          "approved": false,
+          "adjacent": [
+            "bottom",
+            "right"
+          ],
+          "centeringSideWithheld": false,
+          "rounding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "sharp": false,
+            "limitMm": null,
+            "label": null,
+            "radiusMm": null,
+            "setbackMm": null,
+            "residualMm": null,
+            "approved": false
+          },
+          "whitening": {
+            "withheld": true,
+            "reason": "white-border",
+            "label": "not applicable",
+            "lengthMm": null,
+            "areaMm2": null,
+            "approved": false
+          },
+          "ding": {
+            "withheld": true,
+            "reason": "orientation-disagreement",
+            "depthMm": null,
+            "fromTipMm": null,
+            "approved": false
+          },
+          "fray": {
+            "withheld": false,
+            "reason": null,
+            "lengthMm": 0,
+            "stickOutMm": 0,
+            "approved": false
+          },
+          "up": {
+            "rounding": {
+              "withheld": false,
+              "reason": null,
+              "sharp": true,
+              "limitMm": 0.316,
+              "label": "sharp: setback under 0.316 mm (scanner limit)",
+              "setbackMm": 0.046,
+              "radiusFromSetbackMm": null,
+              "radiusFitMm": null,
+              "residualMm": null,
+              "radiusMm": null
+            },
+            "whitening": {
+              "withheld": true,
+              "reason": "white-border",
+              "label": "not applicable",
+              "lengthMm": null,
+              "areaMm2": null,
+              "midLuma": 254
+            },
+            "ding": {
+              "withheld": false,
+              "reason": null,
+              "depthMm": 0,
+              "fromTipMm": null,
+              "edge": null
+            },
+            "fray": {
+              "withheld": false,
+              "reason": null,
+              "lengthMm": 0,
+              "stickOutMm": 0,
+              "edge": null
+            },
+            "riseMm": {
+              "bottom": 0.096,
+              "right": 0.316
+            },
+            "alphaDeg": 45.035
+          }
+        }
+      },
+      "face": "back",
+      "overlay": "reference/corner_overlays/TD-11_back_review.jpg",
+      "scanCheck": {
+        "180": {
+          "present": true,
+          "file": "TD-11_back_180.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.694,
+            "height": 89.131
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.165,
+          "closest": "br right",
+          "clipped": false,
+          "cropOk": true
+        },
+        "up": {
+          "present": true,
+          "file": "TD-11_back_up.png",
+          "width": 4200,
+          "height": 5400,
+          "dpi": 1199.9976,
+          "cardMm": {
+            "width": 63.691,
+            "height": 89.119
+          },
+          "sizeOk": true,
+          "minMarginMm": 11.344,
+          "closest": "br right",
+          "clipped": false,
+          "cropOk": true
+        }
+      }
+    }
+  },
   "cards": {
     "TD-01": {
       "approved": false,

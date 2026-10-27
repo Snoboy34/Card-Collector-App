@@ -2,11 +2,11 @@
 /**
  * scripts/measure_corners.js
  *
- * Corner review for the flatbed fronts already on disk. Reads the centering
- * finder through measureFile and does not write the centering answer key,
- * the flatbed manifest, or the centering overlays.
+ * Corner review for flatbed fronts and backs already on disk. Reads the
+ * centering finder through measureFile and does not write the centering
+ * answer key, the flatbed manifest, or the centering overlays.
  *
- * Run: node scripts/measure_corners.js [--flatbed DIR] [--card TD-01]
+ * Run: node scripts/measure_corners.js [--flatbed DIR] [--card TD-01] [--face front|back|both]
  */
 'use strict';
 
@@ -25,12 +25,16 @@ const LABELS = {
 };
 
 function parseArgs(argv) {
-  const opts = { flatbed: null, card: null };
+  const opts = { flatbed: null, card: null, face: 'front' };
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--flatbed') opts.flatbed = argv[++i];
     else if (arg === '--card') opts.card = String(argv[++i] || '').toUpperCase();
+    else if (arg === '--face') opts.face = String(argv[++i] || '').toLowerCase();
     else throw new Error('unknown argument ' + arg);
+  }
+  if (opts.face !== 'front' && opts.face !== 'back' && opts.face !== 'both') {
+    throw new Error('face must be front, back, or both');
   }
   return opts;
 }
@@ -74,17 +78,27 @@ function readPngDpi(file) {
   return null;
 }
 
+function addScan(byCard, name, entry) {
+  if (!entry || !entry.deck || (entry.orientation !== 'up' && entry.orientation !== '180')) return;
+  const id = String(entry.deck).toUpperCase();
+  if (!byCard[id]) byCard[id] = {};
+  byCard[id][entry.orientation] = name;
+}
+
 function loadManifest() {
   const raw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'reference', 'flatbed_manifest.json'), 'utf8'));
-  const byCard = {};
+  const fronts = {};
+  const backs = {};
   Object.keys(raw).forEach(function (name) {
-    const entry = raw[name];
-    if (!entry || !entry.deck || (entry.orientation !== 'up' && entry.orientation !== '180')) return;
-    const id = String(entry.deck).toUpperCase();
-    if (!byCard[id]) byCard[id] = {};
-    byCard[id][entry.orientation] = name;
+    if (name === 'backs' && raw.backs && raw.backs.files) {
+      Object.keys(raw.backs.files).forEach(function (file) {
+        addScan(backs, file, raw.backs.files[file]);
+      });
+      return;
+    }
+    addScan(fronts, name, raw[name]);
   });
-  return byCard;
+  return { fronts: fronts, backs: backs };
 }
 
 function centeringWithheld(cardId) {
@@ -301,7 +315,54 @@ async function measureOne(file) {
     file: path.basename(file),
     path: file,
     cardMm: result.cardMm,
-    sizeOk: !!result.sizeOk
+    sizeOk: !!result.sizeOk,
+    width: raw.info.width,
+    height: raw.info.height,
+    corners: result.corners
+  };
+}
+
+const CLIP_MM = 1.5;
+
+function scanCheck(measured) {
+  if (!measured || !measured.ok) {
+    return { present: false, sizeOk: false, clipped: false, cardMm: null, minMarginMm: null };
+  }
+  const ppm = measured.dpi / 25.4;
+  let min = null;
+  let closest = null;
+  const found = measured.corners || {};
+  Object.keys(found).forEach(function (name) {
+    const point = found[name];
+    if (!point) return;
+    const margins = [
+      ['left', point.x / ppm],
+      ['right', (measured.width - 1 - point.x) / ppm],
+      ['top', point.y / ppm],
+      ['bottom', (measured.height - 1 - point.y) / ppm]
+    ];
+    margins.forEach(function (pair) {
+      if (min == null || pair[1] < min) {
+        min = pair[1];
+        closest = name + ' ' + pair[0];
+      }
+    });
+  });
+  const minMarginMm = min == null ? null : Math.round(min * 1000) / 1000;
+  const shortSide = Math.min(measured.width, measured.height);
+  const longSide = Math.max(measured.width, measured.height);
+  return {
+    present: true,
+    file: measured.file,
+    width: measured.width,
+    height: measured.height,
+    dpi: Math.round(measured.dpi * 10000) / 10000,
+    cardMm: measured.cardMm || null,
+    sizeOk: measured.sizeOk === true,
+    minMarginMm: minMarginMm,
+    closest: closest,
+    clipped: minMarginMm != null && minMarginMm < CLIP_MM,
+    cropOk: shortSide >= 3900 && longSide >= 5000
   };
 }
 
@@ -336,25 +397,17 @@ function publicCard(up, down, paired) {
   };
 }
 
-async function main() {
-  const opts = parseArgs(process.argv);
-  const dir = flatbedDir(opts.flatbed);
-  const manifest = loadManifest();
-  const overlayDir = path.join(__dirname, '..', 'reference', 'corner_overlays');
-  fs.mkdirSync(overlayDir, { recursive: true });
-  function deckOrder(id) {
+function deckOrder(id) {
   if (id === 'KARROS') return 2.5;
   const match = /^TD-(\d+)$/.exec(id);
   if (match) return Number(match[1]);
   return 1000;
 }
-const ids = Object.keys(manifest).filter(corners.isCornerCard).sort(function (a, b) {
-  return deckOrder(a) - deckOrder(b) || (a < b ? -1 : a > b ? 1 : 0);
-});
+
+async function measureSet(ids, manifest, dir, face, overlayDir) {
   const cards = {};
   for (let i = 0; i < ids.length; i++) {
     const id = ids[i];
-    if (opts.card && id !== opts.card) continue;
     const names = manifest[id];
     const upPath = names.up ? path.join(dir, names.up) : null;
     const downPath = names['180'] ? path.join(dir, names['180']) : null;
@@ -363,27 +416,69 @@ const ids = Object.keys(manifest).filter(corners.isCornerCard).sort(function (a,
     const paired = corners.pairReadings(
       up && up.ok ? up.reading : null,
       down && down.ok ? down.reading : null,
-      centeringWithheld(id)
+      face === 'back' ? null : centeringWithheld(id)
     );
     const record = publicCard(up, down, paired);
-    record.overlay = 'reference/corner_overlays/' + id + '_review.jpg';
+    record.face = face;
+    const suffix = face === 'back' ? '_back_review.jpg' : '_review.jpg';
+    record.overlay = 'reference/corner_overlays/' + id + suffix;
+    record.scanCheck = { up: scanCheck(up), '180': scanCheck(down) };
     if (!up && !down) {
       record.missing = true;
-      record.note = 'Flatbed front was not on disk. Nothing was measured.';
+      record.note = 'Flatbed ' + face + ' was not on disk. Nothing was measured.';
     }
     cards[id] = record;
-    const sheet = path.join(overlayDir, id + '_review.jpg');
-    const bytes = await writeSheet(sheet, id, up, down, paired);
+    const sheet = path.join(overlayDir, id + suffix);
+    const bytes = await writeSheet(sheet, face === 'back' ? id + ' back' : id, up, down, paired);
     const tl = record.corners.tl.rounding;
     const rise = record.corners.tl.up && record.corners.tl.up.riseMm;
-    console.log(id + '\t' + (tl.label || tl.reason || tl.radiusMm) + '\t' + JSON.stringify(rise) + '\t' + bytes);
+    console.log(id + '\t' + face + '\t' + (tl.label || tl.reason || tl.radiusMm) + '\t' + JSON.stringify(rise) + '\t' + bytes);
+    ['up', '180'].forEach(function (orient) {
+      const row = record.scanCheck[orient];
+      if (!row || !row.present) {
+        console.log('RESCAN\t' + id + '\t' + face + '\t' + orient + '\tmissing');
+        return;
+      }
+      const flags = [];
+      if (!row.sizeOk) flags.push('not-card-sized ' + (row.cardMm ? row.cardMm.width + 'x' + row.cardMm.height : '—'));
+      if (row.clipped) flags.push('clipped ' + row.closest + ' margin ' + row.minMarginMm + ' mm');
+      if (!row.cropOk) flags.push('crop ' + row.width + 'x' + row.height);
+      if (flags.length) console.log('RESCAN\t' + id + '\t' + face + '\t' + orient + '\t' + flags.join('; '));
+    });
   }
-  if (!opts.card) {
-    const doc = corners.reviewDocument(cards);
-    const jsonPath = path.join(__dirname, '..', 'reference', 'corner_review.json');
-    fs.writeFileSync(jsonPath, JSON.stringify(doc, null, 2) + '\n');
-    console.log('wrote ' + jsonPath);
+  return cards;
+}
+
+function writeReview(face, measured) {
+  const jsonPath = path.join(__dirname, '..', 'reference', 'corner_review.json');
+  const prev = fs.existsSync(jsonPath) ? JSON.parse(fs.readFileSync(jsonPath, 'utf8')) : {};
+  const cards = face === 'back' ? (prev.cards || {}) : measured.fronts;
+  const backs = face === 'front' ? (prev.backs || {}) : measured.backs;
+  const doc = corners.reviewDocument(cards, backs);
+  fs.writeFileSync(jsonPath, JSON.stringify(doc, null, 2) + '\n');
+  console.log('wrote ' + jsonPath);
+}
+
+async function main() {
+  const opts = parseArgs(process.argv);
+  const dir = flatbedDir(opts.flatbed);
+  const manifest = loadManifest();
+  const overlayDir = path.join(__dirname, '..', 'reference', 'corner_overlays');
+  fs.mkdirSync(overlayDir, { recursive: true });
+  const measured = { fronts: {}, backs: {} };
+  const faces = opts.face === 'both' ? ['front', 'back'] : [opts.face];
+  for (let f = 0; f < faces.length; f++) {
+    const face = faces[f];
+    const table = face === 'back' ? manifest.backs : manifest.fronts;
+    const scanDir = face === 'back' ? path.join(dir, 'backs') : dir;
+    const ids = Object.keys(table).filter(corners.isCornerCard).sort(function (a, b) {
+      return deckOrder(a) - deckOrder(b) || (a < b ? -1 : a > b ? 1 : 0);
+    }).filter(function (id) { return !opts.card || id === opts.card; });
+    const cards = await measureSet(ids, table, scanDir, face, overlayDir);
+    if (face === 'back') measured.backs = cards;
+    else measured.fronts = cards;
   }
+  if (!opts.card) writeReview(opts.face, measured);
 }
 
 if (require.main === module) {

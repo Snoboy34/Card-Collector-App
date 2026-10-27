@@ -9,6 +9,8 @@
  */
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const corners = require('../services/corner_measure');
 
 const DPI = 1200;
@@ -386,7 +388,31 @@ function run() {
   check('review document stays unapproved', doc.approved === false && doc.excluded.indexOf('TD-12') >= 0);
   check(
     'pending worn ids are TD-14 through TD-18',
-    doc.pendingScans.worn.join(',') === 'TD-14,TD-15,TD-16,TD-17,TD-18'
+    doc.pendingScans.worn.join(',') === 'TD-14,TD-15,TD-16,TD-17,TD-18' &&
+      !doc.pendingScans.backs &&
+      doc.definition.indexOf('TD-14 through TD-18 are still to come') >= 0
+  );
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'reference', 'flatbed_manifest.json'), 'utf8'));
+  const backFiles = manifest.backs && manifest.backs.files ? manifest.backs.files : {};
+  const backNames = Object.keys(backFiles);
+  const frontNames = Object.keys(manifest).filter(function (name) {
+    return manifest[name] && manifest[name].deck && (manifest[name].orientation === 'up' || manifest[name].orientation === '180');
+  });
+  check(
+    'back scans stay out of the front manifest entries',
+    backNames.length === 24 &&
+      manifest.backs.face === 'back' &&
+      manifest.backs.shadowFree.indexOf('2026.10.13-shadow-free-v1') >= 0 &&
+      backNames.every(function (name) {
+        const entry = backFiles[name];
+        return entry.face === 'back' && (entry.orientation === 'up' || entry.orientation === '180') &&
+          frontNames.indexOf(name) < 0;
+      }) &&
+      corners.BACK_IDS.every(function (id) {
+        return backNames.some(function (name) { return backFiles[name].deck === id && backFiles[name].orientation === 'up'; }) &&
+          backNames.some(function (name) { return backFiles[name].deck === id && backFiles[name].orientation === '180'; });
+      }),
+    backNames.length
   );
   const bgs = doc.bgsReference;
   const bush = bgs && bgs.slabs && bgs.slabs[0];
