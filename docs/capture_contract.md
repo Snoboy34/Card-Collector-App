@@ -47,15 +47,13 @@ On each saved scan, and on a card-not-found line, `capture` is:
 
 The scanning phone is an iPhone 13 Pro. Its identifier is `iPhone14,2`. The wide camera's largest still is 4032×3024, and capture uses the largest still that camera reports. `8064×6048` is the iPhone 14 Pro (`iPhone15,2`) 48 MP still, used when that camera is the one reporting its sizes.
 
-A card that fills the long side of the 4032×3024 still is 4032 / 88.9 = 45.4 px/mm. That clears 30 px/mm, so a solid edge can take the ±0.1 mm label. The card has to cover at least 2667 px of height (30 × 88.9), two-thirds of that long side.
+The upload is the card quad plus a margin, cut from that full still at the still's own pixels. The crop keeps those pixels. Background stays on all four sides. The quad is in the cropped image's coordinates, and `quadImageWidth` / `quadImageHeight` match the JPEG that is uploaded. The phone sends `centeringResolution` `full`, so the server measures that card at its own pixel height. A request that omits the field stays on the capped warp, and the millimetres of scans already saved do not move.
 
-The upload is the neon window, a pixel subset of that still. On this phone the window is 1748×2448. A card that fills the window is 2448 / 88.9 = 27.5 px/mm, which is the ±0.2 mm tier. The window is shorter than 2667 px, so a closer hold, with the card still inside the window, stays under 30 px/mm. The 30 px/mm line stays where it is.
-
-Hold the phone so the card nearly fills the neon frame and background still shows on all four sides. That is the closest distance that keeps the whole card in the upload, and it is a ±0.2 mm capture on this phone.
-
-A 48 MP phone (an iPhone 14 Pro or newer, or a high-resolution Android) belongs in the test set later, to prove the ±0.1 mm tier on a real scan.
+A card that fills the long side of the 4032×3024 still is 4032 / 88.9 = 45.4 px/mm. On this phone that distance is closer than the lens stays sharp. The measured sharp band for the iPhone 13 Pro wide camera is 29–31 px/mm, about 11 cm. The phone shows live px/mm from the on-screen card quad and the words move closer, hold, or too close. The shutter opens only inside that band, and only after focus has settled and the card edge is sharp. The measured band is data for one device and one camera. A device with no measurement uses a conservative default band from the long side of the still that camera reports: the far end is 15 px/mm when the still can show it, and the close end is 70% of a card that fills that long side. The shutter opens inside that band once focus has settled and the edge check passes. A still size that has not been reported leaves the distance open, and the shutter still opens once focus and the edge check pass. The phone records `capture.sharpBand` as `measured`, `default`, or `open`. The server stores that token and does not grade from it.
 
 ## How an edge is labeled
+
+The label follows that scan's achieved px/mm. 30.0 px/mm is on the line: it is ±0.1 mm. 29.9 px/mm is ±0.2 mm. Below 15 px/mm the edge is withheld. Each scan keeps the label its own px/mm produces. 30 px/mm stays the line. Every graded scan with a measured px/mm is appended to `data/sharp_band_log.jsonl` with the device, camera, capture size, px/mm, label, and band token, so a band can be learned per device. The log is not a grade.
 
 A claimed tolerance has to cover at least 3 pixels, the border finder's smallest distinct step.
 

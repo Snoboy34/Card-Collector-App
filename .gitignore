@@ -4,6 +4,7 @@ scans/
 data/regrades/
 data/centering_examples.jsonl
 data/assist_settings.json
+data/sharp_band_log.jsonl
 .env
 .DS_Store
 .vscode/

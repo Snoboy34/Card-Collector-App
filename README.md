@@ -102,14 +102,20 @@ tightened with sub-pixel precision at that resolution. Pass
 `centeringResolution: 'full'` crops the card from the upright photo and
 warps that crop once at the card's own pixel height (the cut refine and
 the border measure share that warp; the runner-up exclusion stays 0.2 mm).
-The ±0.1 mm label is used only when that card reaches 30 px/mm. 15 px/mm
-supports ±0.2 mm. Below that the edge is withheld. A fine-print edge stays
-at least ±0.2 mm. On the iPhone 13 Pro the wide still is 4032×3024. A card
-filling that long side is 45.4 px/mm and clears 30 px/mm. The neon window
-uploaded from that phone is 2448 px tall, so a card filling the window is
-about 27.5 px/mm and stays at ±0.2 mm. Phone apps upload the still described
-in `docs/capture_contract.md`. The default is the capped warp, so a request
-that omits the field grades the old way.
+The ±0.1 mm label is used only when that card reaches 30 px/mm. 30.0 is on
+the line and is ±0.1 mm. 29.9 is ±0.2 mm. The label is that scan's px/mm.
+15 px/mm supports ±0.2 mm. Below that the edge is withheld. A fine-print
+edge stays at least ±0.2 mm. On the iPhone 13 Pro the wide still is
+4032×3024. The upload is the card quad plus a margin from that still, and
+the phone asks for `centeringResolution: 'full'`. The measured sharp band
+on that wide camera is 29–31 px/mm. A phone with no measured band uses a
+default band from the still it reports and can still capture once focus
+and the edge check pass. Each scan is labeled from its own px/mm, and
+`data/sharp_band_log.jsonl` records the device, px/mm, and label so a band
+can be learned. A card filling the 4032 px long side is 45.4 px/mm and is
+closer than the measured band. Phone apps upload the still
+described in `docs/capture_contract.md`. The default is the capped warp, so
+a request that omits the field grades the old way.
 `node scripts/verify_centering_precision.js` compares standard and native
 on 12 synthetic phone-like captures. Uploads up to 20 MB are accepted.
 
