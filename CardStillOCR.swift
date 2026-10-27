@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 import Vision
 
-/// Full-frame text recognition on a locked-exposure still JPEG (neon-cropped).
+/// Full-frame text recognition on the locked-exposure still that is uploaded.
 /// This is not the live `/`-only scanner in `CenteringAnalyzer`.
 enum CardStillOCR {
     static func recognizeLines(from jpeg: Data) throws -> [String] {
@@ -41,7 +41,10 @@ enum CardStillQuad {
         guard let source = UIImage(data: jpeg) else { return nil }
         let upright = CardAlignmentCrop.uprightImage(source)
         guard let cgImage = upright.cgImage else { return nil }
+        return detect(cgImage: cgImage)
+    }
 
+    static func detect(cgImage: CGImage) -> JudgeAPIClient.CardQuad? {
         let request = VNDetectRectanglesRequest()
         request.minimumAspectRatio = 0.55
         request.maximumAspectRatio = 0.85

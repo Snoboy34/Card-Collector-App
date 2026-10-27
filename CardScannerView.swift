@@ -81,9 +81,12 @@ struct CardScannerView: View {
     @State private var selectedMonitorCard: SavedCard? = nil
     @State private var lastProcessedFrameTime = Date.distantPast
 
-    // Native still path: session-once AE lock + PhotoOutput JPEG → neon crop → /api/grade
+    // Native still path: session-once AE lock + PhotoOutput JPEG → quad plus margin → /api/grade
     @State private var stillCaptureNonce: UInt64 = 0
     @State private var exposureLockStatus = "Camera starting…"
+    @State private var sessionFacts = LiveCameraView.CaptureSessionFacts()
+    @State private var distanceGuide = DistanceGuide.Reading.idle
+    @State private var pxSmoother = DistanceGuide.Smoother()
     @State private var judgeServerURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
     @State private var helpImprove = CenteringAssistStore.helpImprove()
     @State private var deckIdInput = UserDefaults.standard.string(forKey: JudgeTestDeck.deckIdDefaultsKey) ?? ""
@@ -136,11 +139,21 @@ struct CardScannerView: View {
     // Live Vision only reports "card in view". Centering is measured on the
     // server from the Capture still, so the guide no longer grades alignment.
     private var guideBoxColor: Color {
-        isCardDetected ? Color.green : Color.white.opacity(0.4)
+        if distanceGuide.shutterAllowed { return Color.green }
+        if isCardDetected { return Color.orange }
+        return Color.white.opacity(0.4)
     }
 
     private var guideBoxLineWidth: CGFloat {
         isCardDetected ? 4 : 2
+    }
+
+    private var frontCaptureEnabled: Bool {
+        !isRemoteGrading && !sweepActive && distanceGuide.shutterAllowed
+    }
+
+    private var backCaptureEnabled: Bool {
+        !isRemoteGrading && distanceGuide.shutterAllowed
     }
 
     var body: some View {
@@ -254,7 +267,7 @@ struct CardScannerView: View {
         if sweepActive {
             return "Hold the highlighted tick. Keep the whole card inside the frame with a little background showing."
         }
-        return "Keep the whole card inside the frame with a little background showing."
+        return "Leave background showing on all four sides. The shutter opens on Hold."
     }
 
     private var compactActions: some View {
@@ -266,11 +279,11 @@ struct CardScannerView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, minHeight: 44)
-                        .background(isRemoteGrading ? Color.gray : Color.cyan)
+                        .background(backCaptureEnabled ? Color.cyan : Color.gray)
                         .foregroundColor(.black)
                         .cornerRadius(8)
                 }
-                .disabled(isRemoteGrading)
+                .disabled(!backCaptureEnabled)
                 Button("Skip back") {
                     finishPair()
                 }
@@ -293,11 +306,11 @@ struct CardScannerView: View {
                         .minimumScaleFactor(0.8)
                 }
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .background((isRemoteGrading || sweepActive) ? Color.gray : Color.cyan)
+                .background(frontCaptureEnabled ? Color.cyan : Color.gray)
                 .foregroundColor(.black)
                 .cornerRadius(8)
             }
-            .disabled(isRemoteGrading || sweepActive)
+            .disabled(!frontCaptureEnabled)
 
             if sweepActive {
                 Button("Submit without tilt frames") {
@@ -409,9 +422,11 @@ struct CardScannerView: View {
                 LiveCameraView(
                     stillCaptureNonce: $stillCaptureNonce,
                     exposureLockStatus: $exposureLockStatus,
+                    sessionFacts: $sessionFacts,
                     onStillCaptured: handleStillCapture,
                     onFrameCaptured: processLiveCameraFrame
                 )
+                .onChange(of: sessionFacts) { refreshDistanceGuide() }
                 .environmentObject(calibrationEngine)
                 .allowsHitTesting(false)
 
@@ -427,7 +442,15 @@ struct CardScannerView: View {
                             .padding(.horizontal, 8)
                         Spacer()
                     }
-                } else if !calibrationEngine.isPerfectlyLevel {
+                } else {
+                    VStack {
+                        distanceBanner
+                            .padding(.top, 6)
+                            .padding(.horizontal, 8)
+                        Spacer()
+                    }
+                }
+                if !sweepActive && !calibrationEngine.isPerfectlyLevel {
                     VStack {
                         Spacer()
                         Text("LEVEL THE PHONE")
@@ -467,7 +490,7 @@ struct CardScannerView: View {
             if !isCardDetected {
                 VStack {
                     Image(systemName: "viewfinder").font(.title2)
-                    Text("CARD INSIDE · BACKGROUND SHOWING").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4)
+                    Text("FIND THE CARD").font(.caption2).bold().padding(4).background(Color.black.opacity(0.6)).cornerRadius(4)
                 }
                 .foregroundColor(.white)
             }
@@ -504,6 +527,24 @@ struct CardScannerView: View {
                 .animation(nil, value: calibrationEngine.currentRoll)
         }
         .allowsHitTesting(false)
+    }
+
+    private var distanceBanner: some View {
+        VStack(spacing: 2) {
+            Text(distanceGuide.pxLabel)
+                .font(.system(.caption, design: .monospaced)).bold()
+            Text(distanceGuide.headline)
+                .font(.caption).bold()
+            if let detail = distanceGuide.detail {
+                Text(detail)
+                    .font(.caption2)
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity)
+        .background(distanceGuide.shutterAllowed ? Color.green.opacity(0.92) : Color.orange.opacity(0.92))
+        .foregroundColor(.black)
+        .cornerRadius(8)
     }
 
     private var captureButtonTitle: String {
@@ -816,11 +857,6 @@ struct CardScannerView: View {
     private func requestNativeStillGrade() {
         lastRemoteError = nil
         remoteGradeSummary = ""
-        pendingServerLedger = nil
-        pendingScanId = UUID().uuidString
-        captureSide = "front"
-        awaitingBack = false
-        frontPairId = nil
         guard JudgeAPIClient.normalizedBaseURL(judgeServerURL) != nil else {
             lastRemoteError = JudgeAPIClient.APIError.invalidServerURL.localizedDescription
             return
@@ -837,6 +873,15 @@ struct CardScannerView: View {
         pendingPreSubmission = preSubmission
         pendingIntendedGrader = JudgeTestDeck.graders.contains(intendedGrader) ? intendedGrader : nil
         pendingScanBackground = CaptureMetadata.backgrounds.contains(scanBackground) ? scanBackground : nil
+        guard distanceGuide.shutterAllowed else {
+            lastRemoteError = distanceGuide.statusLine
+            return
+        }
+        pendingServerLedger = nil
+        pendingScanId = UUID().uuidString
+        captureSide = "front"
+        awaitingBack = false
+        frontPairId = nil
         resetSweepSession()
         stillCaptureNonce += 1
     }
@@ -845,6 +890,10 @@ struct CardScannerView: View {
         guard awaitingBack, frontPairId != nil else { return }
         lastRemoteError = nil
         remoteGradeSummary = ""
+        guard distanceGuide.shutterAllowed else {
+            lastRemoteError = distanceGuide.statusLine
+            return
+        }
         pendingScanId = UUID().uuidString
         captureSide = "back"
         resetSweepSession()
@@ -878,28 +927,28 @@ struct CardScannerView: View {
             if sweepUploadStarted { return }
             lastRemoteError = nil
             do {
-                let cropped = try CardAlignmentCrop.cropJPEG(still.jpeg, previewSize: still.previewSize)
+                let prepared = try CardAlignmentCrop.cropToQuadMargin(still.jpeg)
                 let pitch = calibrationEngine.currentPitch
                 let roll = calibrationEngine.currentRoll
                 if captureSide == "back" {
-                    let ocrLines = (try? CardStillOCR.recognizeLines(from: cropped)) ?? []
+                    let ocrLines = (try? CardStillOCR.recognizeLines(from: prepared.jpeg)) ?? []
                     pendingLevelOCR = ocrLines
-                    pendingLevelQuad = CardStillQuad.detect(in: cropped)
+                    pendingLevelQuad = prepared.quad
                     pendingLevelCamera = still.camera
                     pendingLevelCapturedAt = still.capturedAt
-                    uploadNativeGrade(levelJPEG: cropped, extras: [])
+                    uploadNativeGrade(levelJPEG: prepared.jpeg, extras: [])
                     return
                 }
                 if sweepFrames.isEmpty {
-                    let ocrLines = (try? CardStillOCR.recognizeLines(from: cropped)) ?? []
-                    storeSweepFrame(bin: .level, jpeg: cropped, pitch: pitch, roll: roll)
+                    let ocrLines = (try? CardStillOCR.recognizeLines(from: prepared.jpeg)) ?? []
+                    storeSweepFrame(bin: .level, jpeg: prepared.jpeg, pitch: pitch, roll: roll)
                     pendingLevelOCR = ocrLines
-                    pendingLevelQuad = CardStillQuad.detect(in: cropped)
+                    pendingLevelQuad = prepared.quad
                     pendingLevelCamera = still.camera
                     pendingLevelCapturedAt = still.capturedAt
                     beginSweepAfterFirstStill()
                 } else if let target = sweepTarget {
-                    storeSweepFrame(bin: target, jpeg: cropped, pitch: pitch, roll: roll)
+                    storeSweepFrame(bin: target, jpeg: prepared.jpeg, pitch: pitch, roll: roll)
                     advanceSweepAfterGrab()
                 } else {
                     finishSweepAndUpload()
@@ -1097,10 +1146,25 @@ struct CardScannerView: View {
     }
     // Live preview only answers "is a card in view?" and hunts a serial like
     // 123/250. Nothing here is graded or saved; Capture → /api/grade is.
+    private func refreshDistanceGuide() {
+        let measured = DistanceGuide.band(
+            model: CaptureMetadata.hardwareModel(),
+            camera: sessionFacts.cameraDeviceType
+        )
+        distanceGuide = DistanceGuide.decide(
+            pxPerMm: pxSmoother.pxPerMm,
+            band: measured,
+            focusSettled: sessionFacts.focusSettled,
+            edgeSharp: pxSmoother.edgeSharp
+        )
+    }
+
     private func processLiveCameraFrame(_ imageFrame: CGImage) {
         guard !isLoadingPrice && !isSaveConfirmed else { return }
         let targetNow = Date()
         guard targetNow.timeIntervalSince(lastProcessedFrameTime) >= 0.3 else { return }
+        let sensorWidth = sessionFacts.sensorWidth
+        let sensorHeight = sessionFacts.sensorHeight
         Task(priority: .userInitiated) {
             await MainActor.run { self.lastProcessedFrameTime = targetNow }
             centeringAnalyzer.detectCardRectangle(in: imageFrame) { recognizedObservation in
@@ -1108,9 +1172,35 @@ struct CardScannerView: View {
                     Task { @MainActor in
                         self.cardMissStreak += 1
                         guard self.cardMissStreak >= 3 else { return }
-                        if self.isCardDetected { self.isCardDetected = false }
-                    }; return
+                        self.isCardDetected = false
+                        self.pxSmoother.reset()
+                        self.distanceGuide = .idle
+                    }
+                    return
                 }
+                let quad = DistanceGuide.NormQuad(cardRect)
+                let previewW = Double(imageFrame.width)
+                let previewH = Double(imageFrame.height)
+                let still = DistanceGuide.uprightStillPixels(
+                    sensorWidth: sensorWidth,
+                    sensorHeight: sensorHeight,
+                    previewWidth: imageFrame.width,
+                    previewHeight: imageFrame.height
+                )
+                let cardHeight = DistanceGuide.cardHeightPreviewPx(quad, width: previewW, height: previewH)
+                let px = cardHeight.flatMap { height in
+                    DistanceGuide.pxPerMm(
+                        cardHeightPreviewPx: height,
+                        previewWidth: previewW,
+                        previewHeight: previewH,
+                        stillWidth: Double(still?.width ?? 0),
+                        stillHeight: Double(still?.height ?? 0)
+                    )
+                }
+                let previewPx = cardHeight.map { $0 / DistanceGuide.cardHeightMm }
+                let sharp = previewPx.map {
+                    DistanceGuide.edgesAreSharp(image: imageFrame, quad: quad, previewPxPerMm: $0)
+                } ?? false
                 self.centeringAnalyzer.extractCardIdentifierText(from: imageFrame, cardBoundingBox: cardRect) { foundTextString in
                     Task { @MainActor in
                         if let serialCode = foundTextString, !serialCode.isEmpty {
@@ -1122,7 +1212,9 @@ struct CardScannerView: View {
                 }
                 Task { @MainActor in
                     self.cardMissStreak = 0
-                    if !self.isCardDetected { self.isCardDetected = true }
+                    self.isCardDetected = true
+                    self.pxSmoother.push(pxPerMm: px, edgeSharp: sharp)
+                    self.refreshDistanceGuide()
                 }
             }
         }

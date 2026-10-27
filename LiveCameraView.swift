@@ -5,7 +5,8 @@ import CoreImage
 /// Live viewfinder + session-once AE/WB lock + high-quality stills.
 ///
 /// `AVCaptureVideoDataOutput` stays on for the preview / still-path OCR hook.
-/// Framing is the SwiftUI neon 2.5×3.5 — no live Vision quad (it flickered).
+/// The SwiftUI frame is a composition aid. Distance comes from the live
+/// card quad. That quad is not drawn (a drawn quad flickered).
 /// The hosting UIView does not take hits so ScrollView and tab bar stay tappable.
 /// `AVCapturePhotoOutput` is a separate still path — one JPEG per tap.
 /// The still is the wide camera at 1×, JPEG, quality priority, at the
@@ -20,20 +21,30 @@ public struct LiveCameraView: UIViewRepresentable {
         let capturedAt: Date
     }
 
+    public struct CaptureSessionFacts: Equatable {
+        public var focusSettled: Bool = false
+        public var sensorWidth: Int = 0
+        public var sensorHeight: Int = 0
+        public var cameraDeviceType: String = ""
+    }
+
     @EnvironmentObject private var calibrationEngine: CameraCalibration
     private let onFrameCaptured: (CGImage) -> Void
     @Binding private var stillCaptureNonce: UInt64
     @Binding private var exposureLockStatus: String
+    @Binding private var sessionFacts: CaptureSessionFacts
     private let onStillCaptured: (Result<StillCapture, Error>) -> Void
 
     public init(
         stillCaptureNonce: Binding<UInt64>,
         exposureLockStatus: Binding<String>,
+        sessionFacts: Binding<CaptureSessionFacts>,
         onStillCaptured: @escaping (Result<StillCapture, Error>) -> Void,
         onFrameCaptured: @escaping (CGImage) -> Void = { _ in }
     ) {
         self._stillCaptureNonce = stillCaptureNonce
         self._exposureLockStatus = exposureLockStatus
+        self._sessionFacts = sessionFacts
         self.onStillCaptured = onStillCaptured
         self.onFrameCaptured = onFrameCaptured
     }
@@ -46,6 +57,7 @@ public struct LiveCameraView: UIViewRepresentable {
         context.coordinator.onFrameReceivedClosure = onFrameCaptured
         context.coordinator.onStillCaptured = onStillCaptured
         context.coordinator.onExposureLockStatus = { exposureLockStatus = $0 }
+        context.coordinator.onSessionFacts = { sessionFacts = $0 }
         context.coordinator.attachPreview(to: captureContainerView)
         context.coordinator.startSessionIfNeeded()
         return captureContainerView
@@ -55,6 +67,7 @@ public struct LiveCameraView: UIViewRepresentable {
         context.coordinator.onFrameReceivedClosure = onFrameCaptured
         context.coordinator.onStillCaptured = onStillCaptured
         context.coordinator.onExposureLockStatus = { exposureLockStatus = $0 }
+        context.coordinator.onSessionFacts = { sessionFacts = $0 }
         DispatchQueue.main.async {
             context.coordinator.layoutPreview(in: uiView)
         }
@@ -75,6 +88,7 @@ public struct LiveCameraView: UIViewRepresentable {
         var onFrameReceivedClosure: ((CGImage) -> Void)?
         var onStillCaptured: ((Result<StillCapture, Error>) -> Void)?
         var onExposureLockStatus: ((String) -> Void)?
+        var onSessionFacts: ((CaptureSessionFacts) -> Void)?
         var lastHandledCaptureNonce: UInt64 = 0
 
         private let sessionQueue = DispatchQueue(label: "com.cardgrader.camerasession.queue", qos: .userInteractive)
@@ -95,8 +109,8 @@ public struct LiveCameraView: UIViewRepresentable {
             liveVideoPreviewLayer.frame = container.bounds
             container.layer.addSublayer(liveVideoPreviewLayer)
 
-            // Neon 2.5×3.5 + crosshair are drawn in SwiftUI. A live Vision quad
-            // here flicker-fights that guide and is not the crop contract.
+            // The 2.5×3.5 frame and crosshair are drawn in SwiftUI. A live
+            // Vision quad is measured for distance and is not drawn.
             previewLayerAnchor = liveVideoPreviewLayer
         }
 
@@ -151,6 +165,7 @@ public struct LiveCameraView: UIViewRepresentable {
             if let stillOutput = photoOutput {
                 applyMaximumStillSize(to: stillOutput)
             }
+            publishSessionFacts()
             beginContinuousAE(on: primaryBackCamera)
             publishLockStatus("Point at empty mat — AE settling…")
             recordingSession.startRunning()
@@ -273,6 +288,7 @@ public struct LiveCameraView: UIViewRepresentable {
             guard let largest = StillPhotoSize.largest(sizes) else { return }
             output.maxPhotoDimensions = CMVideoDimensions(width: Int32(largest.width), height: Int32(largest.height))
             requestedPhoto = largest
+            publishSessionFacts()
         }
 
         public func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
@@ -327,8 +343,21 @@ public struct LiveCameraView: UIViewRepresentable {
             let now = Date()
             guard now.timeIntervalSince(lastFrameEmit) >= frameEmitInterval else { return }
             lastFrameEmit = now
+            publishSessionFacts()
             DispatchQueue.main.async {
                 closureAnchor(isolatedCGImage)
+            }
+        }
+
+        private func publishSessionFacts() {
+            let facts = CaptureSessionFacts(
+                focusSettled: !(captureDevice?.isAdjustingFocus ?? true),
+                sensorWidth: requestedPhoto.width,
+                sensorHeight: requestedPhoto.height,
+                cameraDeviceType: captureDevice?.deviceType.rawValue ?? ""
+            )
+            DispatchQueue.main.async { [weak self] in
+                self?.onSessionFacts?(facts)
             }
         }
 
