@@ -3706,6 +3706,7 @@ module.exports = {
   applyFinePrintLabel,
   applyEdgeResolution,
   resolutionToleranceMm,
+  resolutionEdgeLabel,
   edgeScoreToleranceMm,
   achievedPxPerMmFromReport,
   RESOLUTION_DISTINCT_PX,

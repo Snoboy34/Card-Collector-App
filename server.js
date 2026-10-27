@@ -45,6 +45,7 @@ const scanLevel = require('./public/scan_level');
 const dumpScans = require('./scripts/dump_scans');
 const testDeck = require('./services/test_deck');
 const scanMetadata = require('./services/scan_metadata');
+const sharpBandLog = require('./services/sharp_band_log');
 const backScan = require('./services/back_scan');
 const centeringAssist = require('./services/centering_assist');
 const deckReport = require('./scripts/deck_report');
@@ -223,6 +224,7 @@ function respondCardNotFound(res, args) {
   };
   scanMetadata.applyStoredDeviceName(entry);
   logFailedScan(entry);
+  sharpBandLog.append(DATA_DIR, entry);
   console.log('[grade] scanId=' + args.scanId + ' card not found: ' + reason);
   return res.status(422).json({
     ok: false,
@@ -618,6 +620,7 @@ app.post('/api/grade', gradeUpload, async (req, res) => {
     const label = labelFromCapture(scanId, req.body);
     if (label && label.deckId) item.deckId = label.deckId;
     persistGradedItem(item, classification);
+    sharpBandLog.append(DATA_DIR, item);
     return res.json({ ok: true, item });
   } catch (err) {
     console.error('Grading/classification error', err);
@@ -687,6 +690,7 @@ app.post('/api/grade/upload', upload.single('image'), async (req, res) => {
     const label = labelFromCapture(scanId, req.body);
     if (label && label.deckId) item.deckId = label.deckId;
     persistGradedItem(item, classification);
+    sharpBandLog.append(DATA_DIR, item);
     return res.json({ ok: true, item });
   } catch (err) {
     console.error('Legacy grade/upload error', err);

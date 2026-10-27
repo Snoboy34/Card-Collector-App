@@ -128,6 +128,23 @@ async function run() {
     /quad plus a margin/.test(contract) && !contract.includes('1748×2448') && !contract.includes('1748x2448'));
   assert('the contract keeps the sharp band on the measured phone',
     contract.includes('29–31') && contract.includes('iPhone14,2'));
+  assert('an unmeasured phone uses a default band and is not locked out',
+    /default band/.test(contract) && !/shutter stays closed/.test(contract));
+  const bandLog = require('../services/sharp_band_log');
+  assert('30.0 logs as ±0.1 mm', bandLog.tierLabel(30) === '±0.1 mm' && bandLog.tierLabel(30.0) === '±0.1 mm');
+  assert('29.9 logs as ±0.2 mm', bandLog.tierLabel(29.9) === '±0.2 mm');
+  assert('14.9 logs as withheld', bandLog.tierLabel(14.9) === 'withheld, resolution');
+  const learned = bandLog.recordFromItem({
+    scanId: 'learn-1', side: 'front',
+    capture: { deviceModel: 'Pixel 8', camera: 'back', captureWidth: 4000, captureHeight: 3000, pxPerMm: 30 },
+    captureMetadata: { capture: { sharpBand: 'default' } }
+  });
+  assert('the learning row keeps the device, the label, and the default band',
+    learned && learned.deviceModel === 'Pixel 8' && learned.camera === 'back' &&
+    learned.pxPerMm === 30 && learned.label === '±0.1 mm' && learned.sharpBand === 'default' &&
+    learned.captureWidth === 4000);
+  assert('a scan with no px/mm is not a band sample',
+    bandLog.recordFromItem({ capture: { deviceModel: 'Pixel 8', pxPerMm: null } }) == null);
   const onLine = g.applyEdgeResolution({
     cardDetection: { achievedPxPerMm: 30.0 },
     centeringMetrics: { finePrintEdges: [], borderWidthsMm: { left: 3.1 } }
