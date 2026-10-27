@@ -130,7 +130,8 @@ enum CaptureMetadata {
         sweepFrames: Int,
         quad: JudgeAPIClient.CardQuad?,
         extraCamera: [String: Any] = [:],
-        background: String? = nil
+        background: String? = nil,
+        sharpBand: String? = nil
     ) -> String? {
         let object = payload(
             camera: camera,
@@ -140,7 +141,8 @@ enum CaptureMetadata {
             sweepFrames: sweepFrames,
             quad: quad,
             extraCamera: extraCamera,
-            background: background
+            background: background,
+            sharpBand: sharpBand
         )
         guard JSONSerialization.isValidJSONObject(object),
               let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
@@ -156,7 +158,8 @@ enum CaptureMetadata {
         sweepFrames: Int,
         quad: JudgeAPIClient.CardQuad?,
         extraCamera: [String: Any] = [:],
-        background: String? = nil
+        background: String? = nil,
+        sharpBand: String? = nil
     ) -> [String: Any] {
         let info = Bundle.main.infoDictionary ?? [:]
         var app: [String: Any] = [:]
@@ -209,6 +212,9 @@ enum CaptureMetadata {
         if let quad { capture["quadConfidence"] = round3(quad.confidence) }
         if let background, backgrounds.contains(background) {
             capture["background"] = background
+        }
+        if let sharpBand, sharpBand == "measured" || sharpBand == "default" || sharpBand == "open" {
+            capture["sharpBand"] = sharpBand
         }
 
         var root: [String: Any] = ["schema": schema, "app": app, "device": device, "capture": capture]
@@ -305,6 +311,15 @@ enum CaptureMetadata {
         let unknown = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
                               capturedAt: Date(), sweepFrames: 0, quad: nil, background: "magenta")
         expect((unknown["capture"] as? [String: Any])?["background"] == nil, "magenta is not a background token")
+        let learned = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
+                              capturedAt: Date(), sweepFrames: 0, quad: nil, sharpBand: "default")
+        expect((learned["capture"] as? [String: Any])?["sharpBand"] as? String == "default", "a default band is stored for learning")
+        let measuredBand = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
+                                   capturedAt: Date(), sweepFrames: 0, quad: nil, sharpBand: "measured")
+        expect((measuredBand["capture"] as? [String: Any])?["sharpBand"] as? String == "measured", "a measured band is stored")
+        let invented = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
+                               capturedAt: Date(), sweepFrames: 0, quad: nil, sharpBand: "wide")
+        expect((invented["capture"] as? [String: Any])?["sharpBand"] == nil, "an unknown band token is omitted")
         expect(surfaceGuidance.count == 4, "surface guidance has four lines")
         expect(!surfaceGuidance.joined(separator: " ").localizedCaseInsensitiveContains("pink"), "surface guidance does not name pink")
     }

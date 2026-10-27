@@ -123,6 +123,7 @@ struct CardScannerView: View {
     @State private var pendingLevelQuad: JudgeAPIClient.CardQuad?
     @State private var pendingLevelCamera: CameraFacts?
     @State private var pendingLevelCapturedAt: Date?
+    @State private var pendingSharpBand = DistanceGuide.BandSource.open.rawValue
     private let sweepClock = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     private var filteredVaultRecords: [SavedCard] {
@@ -877,6 +878,7 @@ struct CardScannerView: View {
             lastRemoteError = distanceGuide.statusLine
             return
         }
+        pendingSharpBand = distanceGuide.bandSource.rawValue
         pendingServerLedger = nil
         pendingScanId = UUID().uuidString
         captureSide = "front"
@@ -894,6 +896,7 @@ struct CardScannerView: View {
             lastRemoteError = distanceGuide.statusLine
             return
         }
+        pendingSharpBand = distanceGuide.bandSource.rawValue
         pendingScanId = UUID().uuidString
         captureSide = "back"
         resetSweepSession()
@@ -1065,7 +1068,8 @@ struct CardScannerView: View {
             capturedAt: pendingLevelCapturedAt ?? Date(),
             sweepFrames: extras.count,
             quad: cardQuad,
-            background: pendingScanBackground
+            background: pendingScanBackground,
+            sharpBand: pendingSharpBand
         )
         Task {
             do {
@@ -1147,9 +1151,11 @@ struct CardScannerView: View {
     // Live preview only answers "is a card in view?" and hunts a serial like
     // 123/250. Nothing here is graded or saved; Capture → /api/grade is.
     private func refreshDistanceGuide() {
-        let measured = DistanceGuide.band(
+        let measured = DistanceGuide.activeBand(
             model: CaptureMetadata.hardwareModel(),
-            camera: sessionFacts.cameraDeviceType
+            camera: sessionFacts.cameraDeviceType,
+            stillWidth: sessionFacts.sensorWidth,
+            stillHeight: sessionFacts.sensorHeight
         )
         distanceGuide = DistanceGuide.decide(
             pxPerMm: pxSmoother.pxPerMm,

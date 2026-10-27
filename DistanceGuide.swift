@@ -4,9 +4,9 @@ import Vision
 
 /// Live distance guide. The on-screen card quad is mapped into the still the
 /// shutter will take, and px/mm is that card's height divided by 88.9 mm.
-/// The shutter opens only inside a measured sharp band for this device and
-/// camera, and only when focus has settled and the card edge is sharp.
-/// A device with no measured band does not borrow another phone's numbers.
+/// A measured device uses its capture-test band. Every other device uses a
+/// conservative band from the still size the camera reports, and the shutter
+/// still opens once focus has settled and the edge check passes.
 enum DistanceGuide {
     static let cardHeightMm = 88.9
     /// Wider than the 0.31 mm transition measured on the sharp 11 cm still.
@@ -14,6 +14,33 @@ enum DistanceGuide {
     /// smeared border. Distance itself is the band below, not this number.
     static let maxSharpTransitionMm = 0.55
     static let wideCamera = "AVCaptureDeviceTypeBuiltInWideAngleCamera"
+    /// Fraction of a filled frame the default band will approach. Filling the
+    /// frame ran soft on the measured phone, so an unmeasured phone stops
+    /// short of that. 70% of a 4032 px still is about 31.8 px/mm, which still
+    /// reaches the 30 px/mm line.
+    static let defaultBandFillFraction = 0.70
+    /// Far end of the default band when the still can show it. Under 15 px/mm
+    /// the server withholds the edge.
+    static let defaultBandLabelFloor = 15.0
+
+    enum BandSource: String, Equatable {
+        case measured
+        case `default`
+        case open
+    }
+
+    struct ActiveBand: Equatable {
+        var minPxPerMm: Double
+        var maxPxPerMm: Double
+        var source: BandSource
+
+        func contains(_ pxPerMm: Double) -> Bool {
+            if source == .open { return pxPerMm > 0 }
+            return pxPerMm >= minPxPerMm && pxPerMm <= maxPxPerMm
+        }
+
+        static let open = ActiveBand(minPxPerMm: 0, maxPxPerMm: 0, source: .open)
+    }
 
     struct DeviceBand: Equatable {
         var model: String
@@ -35,6 +62,33 @@ enum DistanceGuide {
 
     static func band(model: String, camera: String) -> DeviceBand? {
         measuredBands.first { $0.model == model && $0.camera == camera }
+    }
+
+    static func round1(_ value: Double) -> Double {
+        (value * 10).rounded() / 10
+    }
+
+    /// Band for a camera with no capture test, from the long side of the
+    /// still that camera reported. Nil when that still is too small to
+    /// describe a range; the caller then leaves the distance open.
+    static func defaultBand(stillWidth: Int, stillHeight: Int) -> ActiveBand? {
+        let longSide = max(stillWidth, stillHeight)
+        guard longSide >= 200 else { return nil }
+        let fill = Double(longSide) / cardHeightMm
+        let maxPx = round1(fill * defaultBandFillFraction)
+        let minPx = round1(min(defaultBandLabelFloor, maxPx * 0.50))
+        guard maxPx > minPx else { return nil }
+        return ActiveBand(minPxPerMm: minPx, maxPxPerMm: maxPx, source: .default)
+    }
+
+    /// Measured band when this device and camera have one. Otherwise the
+    /// default from the reported still, or an open band when the still size
+    /// has not arrived. An open band does not lock the shutter.
+    static func activeBand(model: String, camera: String, stillWidth: Int, stillHeight: Int) -> ActiveBand {
+        if let measured = band(model: model, camera: camera) {
+            return ActiveBand(minPxPerMm: measured.minPxPerMm, maxPxPerMm: measured.maxPxPerMm, source: .measured)
+        }
+        return defaultBand(stillWidth: stillWidth, stillHeight: stillHeight) ?? .open
     }
 
     struct NormPoint: Equatable {
@@ -75,7 +129,6 @@ enum DistanceGuide {
 
     enum Prompt: Equatable {
         case findCard
-        case unmeasured
         case moveCloser
         case tooClose
         case hold
@@ -87,13 +140,13 @@ enum DistanceGuide {
         var pxPerMm: Double?
         var prompt: Prompt
         var shutterAllowed: Bool
+        var bandSource: BandSource
 
-        static let idle = Reading(pxPerMm: nil, prompt: .findCard, shutterAllowed: false)
+        static let idle = Reading(pxPerMm: nil, prompt: .findCard, shutterAllowed: false, bandSource: .open)
 
         var headline: String {
             switch prompt {
             case .findCard: return "Find the card"
-            case .unmeasured: return "Sharp band not measured"
             case .moveCloser: return "Move closer"
             case .tooClose: return "Too close"
             case .hold, .holdFocusing, .holdSoft: return "Hold"
@@ -104,6 +157,7 @@ enum DistanceGuide {
             switch prompt {
             case .holdFocusing: return "Focusing"
             case .holdSoft: return "Edge soft"
+            case .hold: return bandSource == .measured ? nil : "Default band"
             default: return nil
             }
         }
@@ -146,26 +200,21 @@ enum DistanceGuide {
         }
     }
 
-    static func decide(pxPerMm: Double?, band: DeviceBand?, focusSettled: Bool, edgeSharp: Bool) -> Reading {
+    static func decide(pxPerMm: Double?, band: ActiveBand, focusSettled: Bool, edgeSharp: Bool) -> Reading {
         guard let pxPerMm, pxPerMm > 0 else {
-            return Reading(pxPerMm: nil, prompt: .findCard, shutterAllowed: false)
+            return Reading(pxPerMm: nil, prompt: .findCard, shutterAllowed: false, bandSource: band.source)
         }
-        guard let band else {
-            return Reading(pxPerMm: pxPerMm, prompt: .unmeasured, shutterAllowed: false)
-        }
-        if pxPerMm < band.minPxPerMm {
-            return Reading(pxPerMm: pxPerMm, prompt: .moveCloser, shutterAllowed: false)
-        }
-        if pxPerMm > band.maxPxPerMm {
-            return Reading(pxPerMm: pxPerMm, prompt: .tooClose, shutterAllowed: false)
+        if !band.contains(pxPerMm) {
+            let prompt: Prompt = pxPerMm < band.minPxPerMm ? .moveCloser : .tooClose
+            return Reading(pxPerMm: pxPerMm, prompt: prompt, shutterAllowed: false, bandSource: band.source)
         }
         if !focusSettled {
-            return Reading(pxPerMm: pxPerMm, prompt: .holdFocusing, shutterAllowed: false)
+            return Reading(pxPerMm: pxPerMm, prompt: .holdFocusing, shutterAllowed: false, bandSource: band.source)
         }
         if !edgeSharp {
-            return Reading(pxPerMm: pxPerMm, prompt: .holdSoft, shutterAllowed: false)
+            return Reading(pxPerMm: pxPerMm, prompt: .holdSoft, shutterAllowed: false, bandSource: band.source)
         }
-        return Reading(pxPerMm: pxPerMm, prompt: .hold, shutterAllowed: true)
+        return Reading(pxPerMm: pxPerMm, prompt: .hold, shutterAllowed: true, bandSource: band.source)
     }
 
     /// Sensor pixels in the same orientation as the preview. A 4032×3024
@@ -389,10 +438,9 @@ enum DistanceGuide {
         func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String, file: StaticString = #filePath, line: UInt = #line) {
             check(condition(), message(), file, line)
         }
-        let wide = band(model: "iPhone14,2", camera: wideCamera)
-        expect(wide?.minPxPerMm == 29 && wide?.maxPxPerMm == 31, "iPhone 13 Pro wide band is 29–31 px/mm")
-        expect(band(model: "iPhone14,2", camera: "back") == nil, "a camera with no measurement has no band")
-        expect(band(model: "Pixel 8", camera: "back") == nil, "an unmeasured phone has no band")
+        let wide = activeBand(model: "iPhone14,2", camera: wideCamera, stillWidth: 4032, stillHeight: 3024)
+        expect(wide.source == .measured && wide.minPxPerMm == 29 && wide.maxPxPerMm == 31, "iPhone 13 Pro wide band stays 29–31 px/mm")
+        expect(band(model: "Pixel 8", camera: "back") == nil, "an unmeasured phone is absent from the measured table")
         expect(measuredBands.count == 1, "only the measured phone is in the band table")
 
         let hold = decide(pxPerMm: 30.0, band: wide, focusSettled: true, edgeSharp: true)
@@ -409,10 +457,28 @@ enum DistanceGuide {
         expect(!focusing.shutterAllowed && focusing.prompt == .holdFocusing && focusing.statusLine.contains("Focusing"), "an unsettled focus keeps the shutter closed")
         let soft = decide(pxPerMm: 30.0, band: wide, focusSettled: true, edgeSharp: false)
         expect(!soft.shutterAllowed && soft.prompt == .holdSoft && soft.statusLine.contains("Edge soft"), "a soft edge keeps the shutter closed")
-        let unknown = decide(pxPerMm: 30.0, band: nil, focusSettled: true, edgeSharp: true)
-        expect(!unknown.shutterAllowed && unknown.prompt == .unmeasured && unknown.statusLine == "30.0 px/mm · Sharp band not measured", "an unmeasured phone shows px/mm and stays closed")
         let missing = decide(pxPerMm: nil, band: wide, focusSettled: true, edgeSharp: true)
         expect(!missing.shutterAllowed && missing.prompt == .findCard && missing.statusLine == "— px/mm · Find the card", "no card keeps the shutter closed")
+
+        let fallback = activeBand(model: "Pixel 8", camera: "back", stillWidth: 4000, stillHeight: 3000)
+        expect(fallback.source == .default && fallback.minPxPerMm == 15 && abs(fallback.maxPxPerMm - 31.5) < 0.05, "a 4000 px still defaults to 15–31.5 px/mm")
+        let defaultHold = decide(pxPerMm: 30.0, band: fallback, focusSettled: true, edgeSharp: true)
+        expect(defaultHold.shutterAllowed && defaultHold.statusLine == "30.0 px/mm · Hold · Default band", "an unmeasured phone can capture inside the default band")
+        let defaultFar = decide(pxPerMm: 10.0, band: fallback, focusSettled: true, edgeSharp: true)
+        expect(!defaultFar.shutterAllowed && defaultFar.prompt == .moveCloser, "the default band still asks for a closer card under 15 px/mm")
+        let defaultClose = decide(pxPerMm: 40.0, band: fallback, focusSettled: true, edgeSharp: true)
+        expect(!defaultClose.shutterAllowed && defaultClose.prompt == .tooClose, "the default band stops short of filling the frame")
+        let defaultSoft = decide(pxPerMm: 30.0, band: fallback, focusSettled: true, edgeSharp: false)
+        expect(!defaultSoft.shutterAllowed && defaultSoft.prompt == .holdSoft, "the default band still waits for a sharp edge")
+        let tiny = defaultBand(stillWidth: 800, stillHeight: 600)
+        expect(tiny?.source == .default && (tiny?.maxPxPerMm ?? 99) < 15, "a small still keeps a band inside what it can show")
+        let tinyHold = decide(pxPerMm: 5.0, band: tiny ?? .open, focusSettled: true, edgeSharp: true)
+        expect(tinyHold.shutterAllowed, "a small still is not locked out")
+        let open = activeBand(model: "Pixel 8", camera: "back", stillWidth: 0, stillHeight: 0)
+        let openHold = decide(pxPerMm: 30.0, band: open, focusSettled: true, edgeSharp: true)
+        expect(open.source == .open && openHold.shutterAllowed && openHold.statusLine == "30.0 px/mm · Hold · Default band", "a missing still size leaves the shutter open once focus and the edge pass")
+        let openSoft = decide(pxPerMm: 30.0, band: open, focusSettled: false, edgeSharp: true)
+        expect(!openSoft.shutterAllowed, "an open band still waits for focus")
 
         let upright = uprightStillPixels(sensorWidth: 4032, sensorHeight: 3024, previewWidth: 1440, previewHeight: 1920)
         expect(upright?.width == 3024 && upright?.height == 4032, "a portrait preview stands the 4032×3024 still upright")
