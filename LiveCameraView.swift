@@ -158,7 +158,6 @@ public struct LiveCameraView: UIViewRepresentable {
                 stillOutput.maxPhotoQualityPrioritization = .quality
                 applyPortraitRotation(stillOutput.connection(with: .video))
                 photoOutput = stillOutput
-                applyMaximumStillSize(to: stillOutput)
             }
 
             recordingSession.commitConfiguration()
@@ -270,6 +269,7 @@ public struct LiveCameraView: UIViewRepresentable {
                 ? .quality
                 : output.maxPhotoQualityPrioritization
             if requestedPhoto.width > 0, requestedPhoto.height > 0 {
+                // Same dimensions as the output cap. A mismatch throws.
                 settings.maxPhotoDimensions = CMVideoDimensions(
                     width: Int32(requestedPhoto.width),
                     height: Int32(requestedPhoto.height)
@@ -278,12 +278,19 @@ public struct LiveCameraView: UIViewRepresentable {
             return settings
         }
 
-        /// Raise the output cap to the largest size this wide camera offers.
-        /// The list comes from the camera. iPhone 13 Pro (`iPhone14,2`)
+        /// Raise the output cap to the largest size this wide camera's active
+        /// format offers. `supportedMaxPhotoDimensions` is on
+        /// `AVCaptureDevice.Format` (iOS 16+). The photo output only has
+        /// `maxPhotoDimensions`. Called after `commitConfiguration`, when
+        /// `activeFormat` is the `.photo` preset. iPhone 13 Pro (`iPhone14,2`)
         /// reports 4032×3024 as that maximum.
         private func applyMaximumStillSize(to output: AVCapturePhotoOutput) {
-            let sizes = output.supportedMaxPhotoDimensions.map {
-                StillPhotoSize.Pixels(width: Int($0.width), height: Int($0.height))
+            let offered = captureDevice?.activeFormat.supportedMaxPhotoDimensions ?? []
+            let sizes = offered.compactMap { dims -> StillPhotoSize.Pixels? in
+                let width = Int(dims.width)
+                let height = Int(dims.height)
+                guard width > 0, height > 0 else { return nil }
+                return StillPhotoSize.Pixels(width: width, height: height)
             }
             guard let largest = StillPhotoSize.largest(sizes) else { return }
             output.maxPhotoDimensions = CMVideoDimensions(width: Int32(largest.width), height: Int32(largest.height))
