@@ -2515,9 +2515,10 @@ const MAX_DECODE_DIM = 2400;
 // Card size (ISO/IEC 7810 ID-1 trading card) for physical units.
 const CARD_WIDTH_MM = 63.5;
 const CARD_HEIGHT_MM = 88.9;
-// Centering is measured on a warp at the card's own decoded resolution
-// (≈20+ px/mm on a 12 MP neon crop) instead of the 643×900 grading raster
-// (≈10.1 px/mm). Other detectors keep 643×900: their thresholds are tuned there.
+// Centering on the default path is a warp at the card's decoded height,
+// capped at 2400 px, instead of the 643×900 grading raster (≈10.1 px/mm).
+// Other detectors keep 643×900: their thresholds are tuned there.
+// centeringResolution full skips the cap and warps at the card's own pixels.
 const CENTERING_WARP_MIN_HEIGHT = 900;
 const CENTERING_WARP_MAX_HEIGHT = 2400;
 // Opt-in centering warp. The card is cropped from the upload and warped at

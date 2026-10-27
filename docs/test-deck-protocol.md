@@ -55,11 +55,12 @@ The phone shows this guidance:
   Note anything that changed.
 - **Phone:** same phone, held level (green bubble), card flat and taped.
   The scanning phone is an iPhone 13 Pro (`iPhone14,2`), wide camera,
-  4032×3024. Hold it so the card nearly fills the neon frame and background
-  still shows on every side. That upload is 1748×2448. A card filling it is
-  27.5 px/mm, the ±0.2 mm tier. A card filling the 4032 px long side is
-  45.4 px/mm and clears 30 px/mm. The window is 2448 px tall, short of the
-  2667 px that line needs, so a closer hold stays on ±0.2 mm.
+  4032×3024. The upload is the card quad plus a margin from that still, at
+  the still's own pixels. Leave background showing on every side. The phone
+  shows live px/mm and move closer / hold / too close. Press the shutter
+  only on Hold. On this phone Hold is the measured sharp band, about 11 cm,
+  29–31 px/mm. The grade uses `centeringResolution` full. The ±0.1 mm label
+  follows that scan: 30.0 px/mm is ±0.1 mm, and 29.9 px/mm is ±0.2 mm.
 
 Per card:
 

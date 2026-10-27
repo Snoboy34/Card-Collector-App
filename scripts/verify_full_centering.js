@@ -124,6 +124,26 @@ async function run() {
 
   assert('30 px/mm supports ±0.1 mm', g.resolutionToleranceMm(30) === 0.1);
   assert('29.9 px/mm is ±0.2 mm', g.resolutionToleranceMm(29.9) === 0.2);
+  assert('the contract uploads the quad plus a margin',
+    /quad plus a margin/.test(contract) && !contract.includes('1748×2448') && !contract.includes('1748x2448'));
+  assert('the contract keeps the sharp band on the measured phone',
+    contract.includes('29–31') && contract.includes('iPhone14,2'));
+  const onLine = g.applyEdgeResolution({
+    cardDetection: { achievedPxPerMm: 30.0 },
+    centeringMetrics: { finePrintEdges: [], borderWidthsMm: { left: 3.1 } }
+  });
+  const underLine = g.applyEdgeResolution({
+    cardDetection: { achievedPxPerMm: 29.9 },
+    centeringMetrics: { finePrintEdges: [], borderWidthsMm: { left: 3.1 } }
+  });
+  assert('30.0 is on the line and the label follows that scan',
+    onLine.centeringMetrics.edgeResolution.left.label === '±0.1 mm' &&
+    onLine.centeringMetrics.edgeResolution.left.toleranceMm === 0.1 &&
+    onLine.centeringMetrics.borderWidthsMm.left === 3.1);
+  assert('29.9 on the next scan stays ±0.2 mm',
+    underLine.centeringMetrics.edgeResolution.left.label === '±0.2 mm' &&
+    underLine.centeringMetrics.edgeResolution.left.toleranceMm === 0.2 &&
+    underLine.centeringMetrics.borderWidthsMm.left === 3.1);
   assert('15 px/mm supports ±0.2 mm', g.resolutionToleranceMm(15) === 0.2);
   assert('14.9 px/mm is withheld', g.resolutionToleranceMm(14.9) == null);
   assert('unknown px/mm keeps the flatbed rule',
