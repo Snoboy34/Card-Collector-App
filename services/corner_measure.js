@@ -32,6 +32,56 @@ const PENDING_BACKS = [
   'TD-07', 'TD-08', 'TD-09', 'TD-10', 'TD-11', 'KARROS'
 ];
 
+const BGS_REFERENCE = {
+  approved: false,
+  role: 'reference-only',
+  inAnswerKey: false,
+  measured: false,
+  onlySlabs: true,
+  orderCheck: {
+    rule: 'Once a corner method exists, a corners 9.5 should not measure worse than a corners 9.',
+    higher: { player: 'Jerry Rice', corners: 9.5, cert: '0000640358' },
+    lower: { player: 'Reggie Bush', corners: 9, cert: '0005205494' },
+    families: 'White-border Score and foil Momentum. This pair is an order check. It does not set a millimetre scale.'
+  },
+  calibrationProposal: {
+    approved: false,
+    rawCards: 6,
+    note: 'After the worn fronts exist and the owner has approved the overlays, submit six raw cards: TD-01 and Karros (sharp on all four corners), TD-02 (a fitted radius on one orientation), and three worn cards that carry a soft corner, a ding, and fraying. The first six stay with those white-border and worn cards. Foil, the halftone Pokémon card, and the full-bleed card wait. If the six corner subgrades fall on one half-point, stop.'
+  },
+  slabs: [
+    {
+      player: 'Reggie Bush',
+      year: 2006,
+      set: 'Score',
+      number: '360',
+      overall: 9,
+      label: 'Mint',
+      centering: 9.5,
+      corners: 9,
+      edges: 9,
+      surface: 10,
+      cert: '0005205494',
+      family: 'white-border Score'
+    },
+    {
+      player: 'Jerry Rice',
+      year: 2000,
+      set: 'Playoff Momentum Graded Series',
+      number: '78',
+      serial: '1 of 210',
+      overall: 8.5,
+      label: 'NM-MT+',
+      centering: 8.5,
+      corners: 9.5,
+      edges: 9,
+      surface: 8.5,
+      cert: '0000640358',
+      family: 'foil Momentum'
+    }
+  ]
+};
+
 const PAIR_MM = 0.1;
 const FRAY_PAIR_MM = 0.3;
 const FRAY_MIN_MM = 0.3;
@@ -50,7 +100,7 @@ const DEFINITION = [
   'A ding is a local notch in the cut. It is withheld when only one orientation shows it.',
   'Fraying is card-colored fiber outside the fitted cut. It is withheld when it does not rotate with the card. Length 0 is published only when both orientations are clean.',
   'A side the centering key has withheld does not grow a corner grade.',
-  'TD-12 is excluded. TD-14 through TD-18, the flatbed backs, and the BGS labels are pending and are not measured here.',
+  'TD-12 is excluded. TD-14 through TD-18 and the flatbed backs are pending and are not measured here. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9.',
   'A disagreement between the two orientations, a quad that is not card-sized, or an unclear step stays withheld.',
   'Unapproved until the owner checks the overlay. No 0–10 corner score is assigned. This review does not change grading.'
 ].join(' ');
@@ -995,9 +1045,9 @@ function reviewDocument(cards) {
     excluded: ['TD-12'],
     pendingScans: {
       worn: PENDING_WORN.slice(),
-      backs: PENDING_BACKS.slice(),
-      bgsLabels: 'Owner will write company, overall, centering, corners, edges, surface, and cert for his BGS slabs. No label is stored here.'
+      backs: PENDING_BACKS.slice()
     },
+    bgsReference: BGS_REFERENCE,
     phone: 'A phone corner is not scored. It waits until those two edges already match the centering key, on a still in the ±0.1 mm tier (at or above 30 px/mm) or the ±0.2 mm tier (from 15 px/mm up to 30).',
     cards: cards
   };
@@ -1009,6 +1059,7 @@ module.exports = {
   EXCLUDED_IDS: EXCLUDED_IDS,
   PENDING_WORN: PENDING_WORN,
   PENDING_BACKS: PENDING_BACKS,
+  BGS_REFERENCE: BGS_REFERENCE,
   PAIR_MM: PAIR_MM,
   DEFINITION: DEFINITION,
   pxPerMm: pxPerMm,

@@ -388,6 +388,39 @@ function run() {
     'pending worn ids are TD-14 through TD-18',
     doc.pendingScans.worn.join(',') === 'TD-14,TD-15,TD-16,TD-17,TD-18'
   );
+  const bgs = doc.bgsReference;
+  const bush = bgs && bgs.slabs && bgs.slabs[0];
+  const rice = bgs && bgs.slabs && bgs.slabs[1];
+  check(
+    'the two BGS slabs are reference labels',
+    bgs && bgs.approved === false && bgs.inAnswerKey === false && bgs.measured === false &&
+      bgs.onlySlabs === true && bgs.slabs.length === 2 && !doc.pendingScans.bgsLabels,
+    bgs
+  );
+  check(
+    'Bush is corners 9 on white-border Score',
+    bush && bush.player === 'Reggie Bush' && bush.year === 2006 && bush.set === 'Score' &&
+      bush.number === '360' && bush.overall === 9 && bush.label === 'Mint' &&
+      bush.centering === 9.5 && bush.corners === 9 && bush.edges === 9 && bush.surface === 10 &&
+      bush.cert === '0005205494' && bush.family === 'white-border Score',
+    bush
+  );
+  check(
+    'Rice is corners 9.5 on foil Momentum',
+    rice && rice.player === 'Jerry Rice' && rice.year === 2000 &&
+      rice.set === 'Playoff Momentum Graded Series' && rice.number === '78' &&
+      rice.serial === '1 of 210' && rice.overall === 8.5 && rice.label === 'NM-MT+' &&
+      rice.centering === 8.5 && rice.corners === 9.5 && rice.edges === 9 && rice.surface === 8.5 &&
+      rice.cert === '0000640358' && rice.family === 'foil Momentum',
+    rice
+  );
+  check(
+    'BGS corners are an order check',
+    bgs.orderCheck.higher.corners === 9.5 && bgs.orderCheck.higher.cert === '0000640358' &&
+      bgs.orderCheck.lower.corners === 9 && bgs.orderCheck.lower.cert === '0005205494' &&
+      bgs.calibrationProposal.approved === false && bgs.calibrationProposal.rawCards === 6,
+    bgs.orderCheck
+  );
 
   if (failed) {
     console.error(failed + ' failure(s)');
