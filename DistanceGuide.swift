@@ -149,14 +149,15 @@ enum DistanceGuide {
             case .findCard: return "Find the card"
             case .moveCloser: return "Move closer"
             case .tooClose: return "Too close"
-            case .hold, .holdFocusing, .holdSoft: return "Hold"
+            case .hold, .holdFocusing: return "Hold"
+            case .holdSoft: return "Edge soft"
             }
         }
 
         var detail: String? {
             switch prompt {
             case .holdFocusing: return "Focusing"
-            case .holdSoft: return "Edge soft"
+            case .holdSoft: return nil
             case .hold: return bandSource == .measured ? nil : "Default band"
             default: return nil
             }
@@ -248,7 +249,7 @@ enum DistanceGuide {
     /// Preview card height scaled into the upright still, then divided by
     /// 88.9 mm. Matching aspects scale by height. A mismatched aspect uses
     /// the shared axis of an aspect-fill.
-    static func pxPerMm(cardHeightPreviewPx: Double, previewWidth: Double, previewHeight: Double, stillWidth: Double, stillHeight: Double) -> Double? {
+    static func pxPerMm(cardHeightPreviewPx: Double, previewWidth: Double, previewHeight: Double, stillWidth: Double, stillHeight: Double, cardHeightMm: Double = DistanceGuide.cardHeightMm) -> Double? {
         guard cardHeightPreviewPx > 1, previewWidth > 1, previewHeight > 1, stillWidth > 1, stillHeight > 1 else {
             return nil
         }
@@ -456,7 +457,7 @@ enum DistanceGuide {
         let focusing = decide(pxPerMm: 30.0, band: wide, focusSettled: false, edgeSharp: true)
         expect(!focusing.shutterAllowed && focusing.prompt == .holdFocusing && focusing.statusLine.contains("Focusing"), "an unsettled focus keeps the shutter closed")
         let soft = decide(pxPerMm: 30.0, band: wide, focusSettled: true, edgeSharp: false)
-        expect(!soft.shutterAllowed && soft.prompt == .holdSoft && soft.statusLine.contains("Edge soft"), "a soft edge keeps the shutter closed")
+        expect(!soft.shutterAllowed && soft.prompt == .holdSoft && soft.headline == "Edge soft" && !soft.statusLine.contains("Hold"), "a soft frame does not say Hold")
         let missing = decide(pxPerMm: nil, band: wide, focusSettled: true, edgeSharp: true)
         expect(!missing.shutterAllowed && missing.prompt == .findCard && missing.statusLine == "— px/mm · Find the card", "no card keeps the shutter closed")
 

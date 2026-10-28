@@ -81,11 +81,11 @@ enum CardAlignmentCrop {
     /// Quad plus margin from the full still, in the still's own pixels.
     /// No quad: the upright full still, so the server can detect the card.
     /// This does not cut the preview's 2.5×3.5 window.
-    static func cropToQuadMargin(_ data: Data) throws -> QuadCrop {
+    static func cropToQuadMargin(_ data: Data, face: CardFaceSize.Millimetres = CardFaceSize.sports) throws -> QuadCrop {
         guard let source = UIImage(data: data) else { throw CropError.undecodableJPEG }
         let upright = uprightImage(source)
         guard let cgImage = upright.cgImage else { throw CropError.missingCGImage }
-        guard let quad = CardStillQuad.detect(cgImage: cgImage) else {
+        guard let quad = CardStillQuad.detect(cgImage: cgImage, face: face) else {
             if source.imageOrientation == .up { return QuadCrop(jpeg: data, quad: nil) }
             guard let jpeg = upright.jpegData(compressionQuality: jpegQuality) else { throw CropError.jpegEncodeFailed }
             return QuadCrop(jpeg: jpeg, quad: nil)

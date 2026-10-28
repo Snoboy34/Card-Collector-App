@@ -87,6 +87,8 @@ struct CardScannerView: View {
     @State private var sessionFacts = LiveCameraView.CaptureSessionFacts()
     @State private var distanceGuide = DistanceGuide.Reading.idle
     @State private var pxSmoother = DistanceGuide.Smoother()
+    @State private var outerTracker = OuterCut.Tracker()
+    @State private var liveFrame: OuterCut.Result?
     @State private var judgeServerURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
     @State private var helpImprove = CenteringAssistStore.helpImprove()
     @State private var deckIdInput = UserDefaults.standard.string(forKey: JudgeTestDeck.deckIdDefaultsKey) ?? ""
@@ -237,6 +239,20 @@ struct CardScannerView: View {
 
     private var compactStatus: some View {
         VStack(alignment: .leading, spacing: 2) {
+            if sweepActive, let target = sweepTarget {
+                sweepBanner(target: target)
+            } else {
+                distanceBanner
+            }
+            if !sweepActive && !calibrationEngine.isPerfectlyLevel {
+                Text("LEVEL THE PHONE")
+                    .font(.caption2).bold()
+                    .padding(6)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.black.opacity(0.75))
+                    .foregroundColor(.white)
+                    .cornerRadius(6)
+            }
             HStack(spacing: 8) {
                 Text(exposureLockStatus)
                     .font(.caption2)
@@ -431,38 +447,14 @@ struct CardScannerView: View {
                 .environmentObject(calibrationEngine)
                 .allowsHitTesting(false)
 
-                neonFrameOverlay(neon: neon, center: neonCenter)
+                if let liveFrame {
+                    outerQuadOverlay(liveFrame, in: geo.size)
+                } else {
+                    neonFrameOverlay(neon: neon, center: neonCenter)
+                }
 
                 levelBubbleOverlay
                     .position(x: neonCenter.x, y: neonCenter.y)
-
-                if sweepActive, let target = sweepTarget {
-                    VStack {
-                        sweepBanner(target: target)
-                            .padding(.top, 6)
-                            .padding(.horizontal, 8)
-                        Spacer()
-                    }
-                } else {
-                    VStack {
-                        distanceBanner
-                            .padding(.top, 6)
-                            .padding(.horizontal, 8)
-                        Spacer()
-                    }
-                }
-                if !sweepActive && !calibrationEngine.isPerfectlyLevel {
-                    VStack {
-                        Spacer()
-                        Text("LEVEL THE PHONE")
-                            .font(.caption2).bold()
-                            .padding(6)
-                            .background(Color.black.opacity(0.6))
-                            .foregroundColor(.white)
-                            .cornerRadius(6)
-                            .padding(.bottom, 8)
-                    }
-                }
             }
             .allowsHitTesting(false)
         }
@@ -498,6 +490,27 @@ struct CardScannerView: View {
         }
         .frame(width: neon.w, height: neon.h)
         .position(x: center.x, y: center.y)
+        .allowsHitTesting(false)
+    }
+
+    private func outerQuadOverlay(_ frame: OuterCut.Result, in viewSize: CGSize) -> some View {
+        let imageW = Double(frame.imageWidth)
+        let imageH = Double(frame.imageHeight)
+        func point(_ p: OuterCut.Point) -> CGPoint {
+            OuterCut.aspectFill(
+                x: p.x / imageW, y: p.y / imageH,
+                imageWidth: imageW, imageHeight: imageH,
+                viewWidth: viewSize.width, viewHeight: viewSize.height
+            )
+        }
+        let corners = [point(frame.tl), point(frame.tr), point(frame.br), point(frame.bl)]
+        return Path { path in
+            guard let first = corners.first else { return }
+            path.move(to: first)
+            for corner in corners.dropFirst() { path.addLine(to: corner) }
+            path.closeSubpath()
+        }
+        .stroke(guideBoxColor, lineWidth: guideBoxLineWidth)
         .allowsHitTesting(false)
     }
 
@@ -930,7 +943,7 @@ struct CardScannerView: View {
             if sweepUploadStarted { return }
             lastRemoteError = nil
             do {
-                let prepared = try CardAlignmentCrop.cropToQuadMargin(still.jpeg)
+                let prepared = try CardAlignmentCrop.cropToQuadMargin(still.jpeg, face: CardFaceSize.size(for: selectedCategory))
                 let pitch = calibrationEngine.currentPitch
                 let roll = calibrationEngine.currentRoll
                 if captureSide == "back" {
@@ -1147,6 +1160,10 @@ struct CardScannerView: View {
     private func resetCurrentScanState() {
         pendingServerLedger = nil; pendingScanId = ""; isSaveConfirmed = false; isCardDetected = false; cardMissStreak = 0
         automaticCardIdentifier = "unknown"
+        outerTracker.reset()
+        liveFrame = nil
+        pxSmoother.reset()
+        distanceGuide = .idle
     }
     // Live preview only answers "is a card in view?" and hunts a serial like
     // 123/250. Nothing here is graded or saved; Capture → /api/grade is.
@@ -1171,59 +1188,87 @@ struct CardScannerView: View {
         guard targetNow.timeIntervalSince(lastProcessedFrameTime) >= 0.3 else { return }
         let sensorWidth = sessionFacts.sensorWidth
         let sensorHeight = sessionFacts.sensorHeight
+        let face = CardFaceSize.size(for: selectedCategory)
         Task(priority: .userInitiated) {
             await MainActor.run { self.lastProcessedFrameTime = targetNow }
-            centeringAnalyzer.detectCardRectangle(in: imageFrame) { recognizedObservation in
-                guard let cardRect = recognizedObservation else {
-                    Task { @MainActor in
-                        self.cardMissStreak += 1
-                        guard self.cardMissStreak >= 3 else { return }
-                        self.isCardDetected = false
-                        self.pxSmoother.reset()
-                        self.distanceGuide = .idle
-                    }
-                    return
+            guard let found = OuterCut.find(in: imageFrame, face: face) else {
+                await MainActor.run {
+                    self.cardMissStreak += 1
+                    guard self.cardMissStreak >= 3 else { return }
+                    self.isCardDetected = false
+                    self.pxSmoother.reset()
+                    self.outerTracker.reset()
+                    self.liveFrame = nil
+                    self.distanceGuide = .idle
                 }
-                let quad = DistanceGuide.NormQuad(cardRect)
-                let previewW = Double(imageFrame.width)
-                let previewH = Double(imageFrame.height)
-                let still = DistanceGuide.uprightStillPixels(
-                    sensorWidth: sensorWidth,
-                    sensorHeight: sensorHeight,
-                    previewWidth: imageFrame.width,
-                    previewHeight: imageFrame.height
+                return
+            }
+            let stable = await MainActor.run { self.outerTracker.push(found.norm) }
+            let frame = self.pixelFrame(stable, image: found)
+            let quad = DistanceGuide.NormQuad(
+                tl: self.visionPoint(frame.tl, image: frame),
+                tr: self.visionPoint(frame.tr, image: frame),
+                br: self.visionPoint(frame.br, image: frame),
+                bl: self.visionPoint(frame.bl, image: frame)
+            )
+            let previewW = Double(imageFrame.width)
+            let previewH = Double(imageFrame.height)
+            let still = DistanceGuide.uprightStillPixels(
+                sensorWidth: sensorWidth,
+                sensorHeight: sensorHeight,
+                previewWidth: imageFrame.width,
+                previewHeight: imageFrame.height
+            )
+            let cardHeight = DistanceGuide.cardHeightPreviewPx(quad, width: previewW, height: previewH)
+            let px = cardHeight.flatMap { height in
+                DistanceGuide.pxPerMm(
+                    cardHeightPreviewPx: height,
+                    previewWidth: previewW,
+                    previewHeight: previewH,
+                    stillWidth: Double(still?.width ?? 0),
+                    stillHeight: Double(still?.height ?? 0),
+                    cardHeightMm: face.height
                 )
-                let cardHeight = DistanceGuide.cardHeightPreviewPx(quad, width: previewW, height: previewH)
-                let px = cardHeight.flatMap { height in
-                    DistanceGuide.pxPerMm(
-                        cardHeightPreviewPx: height,
-                        previewWidth: previewW,
-                        previewHeight: previewH,
-                        stillWidth: Double(still?.width ?? 0),
-                        stillHeight: Double(still?.height ?? 0)
-                    )
-                }
-                let previewPx = cardHeight.map { $0 / DistanceGuide.cardHeightMm }
-                let sharp = previewPx.map {
-                    DistanceGuide.edgesAreSharp(image: imageFrame, quad: quad, previewPxPerMm: $0)
-                } ?? false
-                self.centeringAnalyzer.extractCardIdentifierText(from: imageFrame, cardBoundingBox: cardRect) { foundTextString in
-                    Task { @MainActor in
-                        if let serialCode = foundTextString, !serialCode.isEmpty {
-                            self.automaticCardIdentifier = serialCode
-                        } else if self.automaticCardIdentifier.isEmpty || self.automaticCardIdentifier == "Processing Viewport..." {
-                            self.automaticCardIdentifier = "unknown"
-                        }
-                    }
-                }
+            }
+            let previewPx = cardHeight.map { $0 / face.height }
+            let sharp = previewPx.map {
+                DistanceGuide.edgesAreSharp(image: imageFrame, quad: quad, previewPxPerMm: $0)
+            } ?? false
+            self.centeringAnalyzer.extractCardIdentifierText(from: imageFrame) { foundTextString in
                 Task { @MainActor in
-                    self.cardMissStreak = 0
-                    self.isCardDetected = true
-                    self.pxSmoother.push(pxPerMm: px, edgeSharp: sharp)
-                    self.refreshDistanceGuide()
+                    if let serialCode = foundTextString, !serialCode.isEmpty {
+                        self.automaticCardIdentifier = serialCode
+                    } else if self.automaticCardIdentifier.isEmpty || self.automaticCardIdentifier == "Processing Viewport..." {
+                        self.automaticCardIdentifier = "unknown"
+                    }
                 }
             }
+            await MainActor.run {
+                self.cardMissStreak = 0
+                self.isCardDetected = true
+                self.liveFrame = frame
+                self.pxSmoother.push(pxPerMm: px, edgeSharp: sharp)
+                self.refreshDistanceGuide()
+            }
         }
+    }
+
+    private func pixelFrame(_ quad: OuterCut.Norm, image: OuterCut.Result) -> OuterCut.Result {
+        func pixel(_ p: OuterCut.Norm.Point) -> OuterCut.Point {
+            OuterCut.Point(x: p.x * Double(image.imageWidth), y: p.y * Double(image.imageHeight))
+        }
+        return OuterCut.Result(
+            tl: pixel(quad.tl), tr: pixel(quad.tr), br: pixel(quad.br), bl: pixel(quad.bl),
+            confident: image.confident, imageWidth: image.imageWidth, imageHeight: image.imageHeight
+        )
+    }
+
+    /// DistanceGuide measures Vision's bottom-left normalized quad.
+    private func visionPoint(_ point: OuterCut.Point, image: OuterCut.Result) -> DistanceGuide.NormPoint {
+        DistanceGuide.NormPoint(
+            point.x / Double(image.imageWidth),
+            1 - point.y / Double(image.imageHeight)
+        )
     }
 }
 // MARK: - Shared ledger fields (report sheet and vault must match)
