@@ -63,6 +63,13 @@
  * dimension covers the real cards plus the repeat and rejects the lost edge.
  * Otherwise every side is withheld with reason not-card-sized.
  *
+ * A short quad is measured again at the outermost step off the background.
+ * A darker shade of the same paper hue is still the sheet. The line is fit
+ * to those contact points, so it follows the cut. Peaks closer than 0.2 mm
+ * are one edge, the same runner-up separation the server uses. An inner
+ * step at least that far in is a runner-up and does not move the cut. The
+ * outer quad is kept only when it is card-sized.
+ *
  * The card edge is the paper-to-card colour step. A tight crop's corners
  * include the card, and that raises the bed gate until a silver or yellow
  * edge counts as the sheet. When that gate does not yield a card-sized
@@ -97,6 +104,9 @@ const DEFAULT_DPI = 1200;
 const BIAS_AGREE_MM = 0.02;
 const BORDER_RULE = '2026.10.13-shadow-free-v1';
 const SIZE_AXIS_MM = 1;
+const RUNNER_UP_SEPARATION_MM = 0.2;
+const PAPER_HUE_RISE = 10;
+const SHADOW_LUMA_DROP = 55;
 const PARTIAL_COVERAGE = 0.32;
 // A real outline is found along the side. Foil and gloss make some stations
 // miss it, so this is not every station. A lock on fewer than one station
@@ -2573,14 +2583,200 @@ function collectDesignReference(data, w, h, quad, sides) {
   };
 }
 
+function quadFromLines(lines, ppm) {
+  if (!lines.top || !lines.bottom || !lines.left || !lines.right) return null;
+  const tl = intersect(lines.top, lines.left);
+  const tr = intersect(lines.top, lines.right);
+  const br = intersect(lines.bottom, lines.right);
+  const bl = intersect(lines.bottom, lines.left);
+  if (!tl || !tr || !br || !bl) return null;
+  const widthPx = 0.5 * (
+    Math.abs(signedDist(lines.right, tl.x, tl.y)) +
+    Math.abs(signedDist(lines.right, bl.x, bl.y))
+  );
+  const heightPx = 0.5 * (
+    Math.abs(signedDist(lines.bottom, tl.x, tl.y)) +
+    Math.abs(signedDist(lines.bottom, tr.x, tr.y))
+  );
+  return {
+    lines: lines,
+    corners: { tl: tl, tr: tr, br: br, bl: bl },
+    widthMm: widthPx / ppm,
+    heightMm: heightPx / ppm
+  };
+}
+
+function shortOfCard(widthMm, heightMm) {
+  if (dimensionsAreCard(widthMm, heightMm)) return false;
+  const upright = Math.abs(widthMm - NOMINAL_W_MM) + Math.abs(heightMm - NOMINAL_H_MM);
+  const turned = Math.abs(widthMm - NOMINAL_H_MM) + Math.abs(heightMm - NOMINAL_W_MM);
+  if (upright <= turned) {
+    return widthMm < NOMINAL_W_MM - SIZE_AXIS_MM || heightMm < NOMINAL_H_MM - SIZE_AXIS_MM;
+  }
+  return heightMm < NOMINAL_W_MM - SIZE_AXIS_MM || widthMm < NOMINAL_H_MM - SIZE_AXIS_MM;
+}
+
+function lumaOf(r, g, b) {
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+function chromaResidual(r, g, b, paper) {
+  const pn2 = paper[0] * paper[0] + paper[1] * paper[1] + paper[2] * paper[2];
+  if (!pn2) return 0;
+  const scale = (r * paper[0] + g * paper[1] + b * paper[2]) / pn2;
+  const dr = r - scale * paper[0];
+  const dg = g - scale * paper[1];
+  const db = b - scale * paper[2];
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+function offPaper(r, g, b, paper) {
+  const chroma = chromaResidual(r, g, b, paper);
+  const dark = lumaOf(paper[0], paper[1], paper[2]) - lumaOf(r, g, b);
+  if (dark > SHADOW_LUMA_DROP) return Math.max(chroma, dark);
+  return chroma;
+}
+
+function backgroundShiftMm(data, w, h, paper, line, a, b, ppm, u0, u1) {
+  const step = 0.05;
+  const far = 8;
+  const inwardReach = 1.5;
+  const uStart = u0 == null ? 0.3 : u0;
+  const uStop = u1 == null ? 0.7 : u1;
+  const uStep = Math.max(0.02, (uStop - uStart) / 3);
+  const n = Math.round((far + inwardReach) / step);
+  const prof = new Array(n + 1);
+  for (let i = 0; i <= n; i++) {
+    const mmOut = far - i * step;
+    const samples = [];
+    for (let u = uStart; u <= uStop + 1e-9; u += uStep) {
+      const x = a.x + (b.x - a.x) * u - line.a * mmOut * ppm;
+      const y = a.y + (b.y - a.y) * u - line.b * mmOut * ppm;
+      const rgb = sampleRgb(data, w, h, x, y);
+      if (!rgb) continue;
+      samples.push(offPaper(rgb[0], rgb[1], rgb[2], paper));
+    }
+    prof[i] = samples.length ? median(samples) : null;
+  }
+  const bgCount = Math.round(1.5 / step);
+  const bgSamples = [];
+  for (let i = 0; i < bgCount; i++) {
+    if (prof[i] != null) bgSamples.push(prof[i]);
+  }
+  if (bgSamples.length < 4) return 0;
+  const bg = median(bgSamples);
+  const mad = median(bgSamples.map(function (v) { return Math.abs(v - bg); })) || 1;
+  const rise = bg + Math.max(PAPER_HUE_RISE, 4 * mad);
+  const sustainN = Math.round(0.6 / step);
+  const nearN = Math.max(1, Math.round(0.2 / step));
+  const sepN = Math.max(1, Math.round(RUNNER_UP_SEPARATION_MM / step));
+  let cross = -1;
+  for (let i = 0; i < n - sustainN; i++) {
+    if (prof[i] == null || prof[i + 1] == null) continue;
+    if (prof[i] > rise || prof[i + 1] < rise) continue;
+    const near = [];
+    const inside = [];
+    for (let j = i + 1; j <= i + nearN; j++) {
+      if (prof[j] != null) near.push(prof[j]);
+    }
+    for (let j = i + 1; j <= i + sustainN; j++) {
+      if (prof[j] != null) inside.push(prof[j]);
+    }
+    if (near.length < nearN * 0.7 || median(near) < rise) continue;
+    if (inside.length < sustainN * 0.7 || median(inside) < rise) continue;
+    cross = i;
+    break;
+  }
+  if (cross < 0) return 0;
+  const steps = new Array(n);
+  for (let i = 0; i < n; i++) {
+    steps[i] = prof[i] == null || prof[i + 1] == null ? 0 : Math.abs(prof[i + 1] - prof[i]);
+  }
+  const peaks = [];
+  for (let i = 1; i < n - 1; i++) {
+    if (steps[i] < steps[i - 1] || steps[i] < steps[i + 1]) continue;
+    if (peaks.length && i - peaks[peaks.length - 1] < sepN) {
+      if (steps[i] > steps[peaks[peaks.length - 1]]) peaks[peaks.length - 1] = i;
+      continue;
+    }
+    peaks.push(i);
+  }
+  let chosen = cross;
+  for (let p = 0; p < peaks.length; p++) {
+    const apart = Math.abs(peaks[p] - cross) * step;
+    if (apart < RUNNER_UP_SEPARATION_MM && steps[peaks[p]] >= steps[chosen]) chosen = peaks[p];
+  }
+  const reach = Math.round(RUNNER_UP_SEPARATION_MM / step);
+  const lo = Math.max(0, chosen - reach);
+  const hi = Math.min(n, chosen + reach);
+  const outsideVals = [];
+  const insideVals = [];
+  for (let j = lo; j <= chosen; j++) if (prof[j] != null) outsideVals.push(prof[j]);
+  for (let j = chosen + 1; j <= hi; j++) if (prof[j] != null) insideVals.push(prof[j]);
+  const outside = outsideVals.length ? median(outsideVals) : prof[chosen];
+  const inside = insideVals.length ? median(insideVals) : prof[Math.min(n, chosen + 1)];
+  const half = (outside + inside) / 2;
+  let hit = far - (chosen + 0.5) * step;
+  for (let j = lo; j < hi; j++) {
+    if (prof[j] == null || prof[j + 1] == null || prof[j + 1] === prof[j]) continue;
+    if ((prof[j] - half) * (prof[j + 1] - half) <= 0) {
+      hit = far - (j + (half - prof[j]) / (prof[j + 1] - prof[j])) * step;
+      break;
+    }
+  }
+  return hit > 0.1 ? hit : 0;
+}
+
+function expandQuadToBackground(data, w, h, paper, quad, ppm) {
+  const ends = {
+    top: [quad.corners.tl, quad.corners.tr],
+    bottom: [quad.corners.bl, quad.corners.br],
+    left: [quad.corners.tl, quad.corners.bl],
+    right: [quad.corners.tr, quad.corners.br]
+  };
+  const cx = (quad.corners.tl.x + quad.corners.tr.x + quad.corners.br.x + quad.corners.bl.x) / 4;
+  const cy = (quad.corners.tl.y + quad.corners.tr.y + quad.corners.br.y + quad.corners.bl.y) / 4;
+  const lines = {};
+  ['top', 'bottom', 'left', 'right'].forEach(function (name) {
+    const line = quad.lines[name];
+    const a = ends[name][0];
+    const b = ends[name][1];
+    const points = [];
+    for (let u = 0.12; u <= 0.88 + 1e-9; u += 0.08) {
+      const hit = backgroundShiftMm(
+        data, w, h, paper, line, a, b, ppm,
+        Math.max(0.02, u - 0.03),
+        Math.min(0.98, u + 0.03)
+      );
+      if (!(hit > 0.1)) continue;
+      points.push({
+        x: a.x + (b.x - a.x) * u - line.a * hit * ppm,
+        y: a.y + (b.y - a.y) * u - line.b * hit * ppm
+      });
+    }
+    const fitted = points.length >= 4 ? trimLine(points).line : null;
+    if (fitted) {
+      lines[name] = orientInward(fitted, cx, cy);
+    } else {
+      const shiftMm = backgroundShiftMm(data, w, h, paper, line, a, b, ppm);
+      lines[name] = { a: line.a, b: line.b, c: line.c + Math.max(0, shiftMm) * ppm };
+    }
+  });
+  return quadFromLines(lines, ppm);
+}
+
 function measureWithPaper(data, w, h, dpi, ppm, paperModel) {
   const bbox = largestComponentBBox(data, w, h, paperModel.paper, paperModel.threshold);
   if (!bbox) {
     return { ok: false, error: 'no-card', dpi: dpi };
   }
-  const quad = findCardQuad(data, w, h, paperModel.paper, paperModel.threshold, bbox, ppm);
+  let quad = findCardQuad(data, w, h, paperModel.paper, paperModel.threshold, bbox, ppm);
   if (!quad) {
     return { ok: false, error: 'no-quad', dpi: dpi, paper: paperModel.paper };
+  }
+  if (shortOfCard(quad.widthMm, quad.heightMm)) {
+    const expanded = expandQuadToBackground(data, w, h, paperModel.paper, quad, ppm);
+    if (expanded && dimensionsAreCard(expanded.widthMm, expanded.heightMm)) quad = expanded;
   }
   const sides = {};
   ['top', 'bottom', 'left', 'right'].forEach(function (name) {

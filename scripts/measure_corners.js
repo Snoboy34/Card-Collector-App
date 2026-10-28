@@ -449,11 +449,15 @@ async function measureSet(ids, manifest, dir, face, overlayDir) {
   return cards;
 }
 
-function writeReview(face, measured) {
+function writeReview(face, measured, onlyCard) {
   const jsonPath = path.join(__dirname, '..', 'reference', 'corner_review.json');
   const prev = fs.existsSync(jsonPath) ? JSON.parse(fs.readFileSync(jsonPath, 'utf8')) : {};
-  const cards = face === 'back' ? (prev.cards || {}) : measured.fronts;
-  const backs = face === 'front' ? (prev.backs || {}) : measured.backs;
+  let cards = face === 'back' ? (prev.cards || {}) : measured.fronts;
+  let backs = face === 'front' ? (prev.backs || {}) : measured.backs;
+  if (onlyCard) {
+    if (face !== 'back') cards = Object.assign({}, prev.cards || {}, measured.fronts);
+    if (face !== 'front') backs = Object.assign({}, prev.backs || {}, measured.backs);
+  }
   const doc = corners.reviewDocument(cards, backs);
   fs.writeFileSync(jsonPath, JSON.stringify(doc, null, 2) + '\n');
   console.log('wrote ' + jsonPath);
@@ -478,7 +482,7 @@ async function main() {
     if (face === 'back') measured.backs = cards;
     else measured.fronts = cards;
   }
-  if (!opts.card) writeReview(opts.face, measured);
+  writeReview(opts.face, measured, opts.card);
 }
 
 if (require.main === module) {
