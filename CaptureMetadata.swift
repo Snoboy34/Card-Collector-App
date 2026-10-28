@@ -1,0 +1,327 @@
+import Foundation
+import AVFoundation
+import ImageIO
+import UIKit
+
+/// One still size the camera offered. Pixel count picks the device maximum.
+enum StillPhotoSize {
+    struct Pixels: Equatable {
+        var width: Int
+        var height: Int
+        var count: Int { width * height }
+    }
+
+    /// Largest offered still. Nil when the camera offered none.
+    static func largest(_ sizes: [Pixels]) -> Pixels? {
+        sizes.max { $0.count < $1.count }
+    }
+}
+
+/// Camera state read at the moment a still was taken. Recorded with the scan
+/// (`captureMetadata` upload field); the server stores it and never grades it.
+struct CameraFacts {
+    var deviceType: String
+    var position: String
+    var photoWidth: Int?
+    var photoHeight: Int?
+    var codec: String
+    var iso: Double?
+    var exposureDurationS: Double?
+    var lensPosition: Double?
+    var lensAperture: Double?
+    var zoomFactor: Double?
+    var focusMode: String
+    var exposureMode: String
+    var whiteBalanceMode: String
+    var maxPhotoWidth: Int? = nil
+    var maxPhotoHeight: Int? = nil
+    var requestedWidth: Int? = nil
+    var requestedHeight: Int? = nil
+    var photoSizeSetting: String? = nil
+
+    static func read(device: AVCaptureDevice?, photo: AVCapturePhoto, fileData: Data) -> CameraFacts {
+        let dims = photo.resolvedSettings.photoDimensions
+        let exposure = device.map { CMTimeGetSeconds($0.exposureDuration) }
+        return CameraFacts(
+            deviceType: device?.deviceType.rawValue ?? "unknown",
+            position: device.map { positionName($0.position) } ?? "unknown",
+            photoWidth: dims.width > 0 ? Int(dims.width) : nil,
+            photoHeight: dims.height > 0 ? Int(dims.height) : nil,
+            codec: codecName(fileData),
+            iso: device.map { Double($0.iso) },
+            exposureDurationS: exposure.flatMap { $0.isFinite ? $0 : nil },
+            lensPosition: device.map { Double($0.lensPosition) },
+            lensAperture: device.map { Double($0.lensAperture) },
+            zoomFactor: device.map { Double($0.videoZoomFactor) },
+            focusMode: device.map { focusModeName($0.focusMode) } ?? "unknown",
+            exposureMode: device.map { exposureModeName($0.exposureMode) } ?? "unknown",
+            whiteBalanceMode: device.map { whiteBalanceModeName($0.whiteBalanceMode) } ?? "unknown"
+        )
+    }
+
+    /// From the file bytes, not the requested settings: JPEG starts FF D8 FF,
+    /// HEIF/HEIC has `ftyp` at offset 4.
+    static func codecName(_ data: Data) -> String {
+        let bytes = [UInt8](data.prefix(12))
+        if bytes.count >= 3, bytes[0] == 0xFF, bytes[1] == 0xD8, bytes[2] == 0xFF { return "jpeg" }
+        if bytes.count >= 8, bytes[4] == 0x66, bytes[5] == 0x74, bytes[6] == 0x79, bytes[7] == 0x70 { return "heif" }
+        return "unknown"
+    }
+
+    static func positionName(_ position: AVCaptureDevice.Position) -> String {
+        switch position {
+        case .back: return "back"
+        case .front: return "front"
+        case .unspecified: return "unspecified"
+        @unknown default: return "unknown"
+        }
+    }
+
+    static func focusModeName(_ mode: AVCaptureDevice.FocusMode) -> String {
+        switch mode {
+        case .locked: return "locked"
+        case .autoFocus: return "auto"
+        case .continuousAutoFocus: return "continuous"
+        @unknown default: return "unknown"
+        }
+    }
+
+    static func exposureModeName(_ mode: AVCaptureDevice.ExposureMode) -> String {
+        switch mode {
+        case .locked: return "locked"
+        case .autoExpose: return "auto"
+        case .continuousAutoExposure: return "continuous"
+        case .custom: return "custom"
+        @unknown default: return "unknown"
+        }
+    }
+
+    static func whiteBalanceModeName(_ mode: AVCaptureDevice.WhiteBalanceMode) -> String {
+        switch mode {
+        case .locked: return "locked"
+        case .autoWhiteBalance: return "auto"
+        case .continuousAutoWhiteBalance: return "continuous"
+        @unknown default: return "unknown"
+        }
+    }
+}
+
+/// Schema-1 JSON for the `captureMetadata` field. Groups stay one level deep
+/// (scalars and short scalar arrays only) — the server drops anything deeper,
+/// anything outside app/device/camera/capture, and anything over 8 KB.
+enum CaptureMetadata {
+    static let schema = 1
+    static let backgroundDefaultsKey = "judgeScanBackground"
+    /// Same tokens as services/scan_metadata.js BACKGROUNDS. Empty means unset.
+    static let backgrounds = ["pink", "white", "dark-matte", "wood", "pattern", "glossy", "other"]
+    /// Shown on the scan screen. Pink is a lab value, not part of this guidance.
+    static let surfaceGuidance = [
+        "Use a plain, matte, colored surface that contrasts with the card's border, and leave background showing on all four sides.",
+        "Do not use white paper under a white border. A white border needs a colored surface.",
+        "Do not use a black surface under a dark border. A dark border needs a lighter colored surface.",
+        "Do not use a pattern or a glossy surface. Patterns and glare look like extra edges."
+    ]
+
+    static func json(
+        camera: CameraFacts?,
+        uploadJPEG: Data,
+        mode: String,
+        capturedAt: Date,
+        sweepFrames: Int,
+        quad: JudgeAPIClient.CardQuad?,
+        extraCamera: [String: Any] = [:],
+        background: String? = nil,
+        sharpBand: String? = nil
+    ) -> String? {
+        let object = payload(
+            camera: camera,
+            uploadJPEG: uploadJPEG,
+            mode: mode,
+            capturedAt: capturedAt,
+            sweepFrames: sweepFrames,
+            quad: quad,
+            extraCamera: extraCamera,
+            background: background,
+            sharpBand: sharpBand
+        )
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+              data.count <= 8 * 1024 else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func payload(
+        camera: CameraFacts?,
+        uploadJPEG: Data,
+        mode: String,
+        capturedAt: Date,
+        sweepFrames: Int,
+        quad: JudgeAPIClient.CardQuad?,
+        extraCamera: [String: Any] = [:],
+        background: String? = nil,
+        sharpBand: String? = nil
+    ) -> [String: Any] {
+        let info = Bundle.main.infoDictionary ?? [:]
+        var app: [String: Any] = [:]
+        app["version"] = info["CFBundleShortVersionString"] as? String
+        app["build"] = info["CFBundleVersion"] as? String
+        app["bundleId"] = Bundle.main.bundleIdentifier
+
+        let device: [String: Any] = [
+            "model": hardwareModel(),
+            "systemName": UIDevice.current.systemName,
+            "systemVersion": UIDevice.current.systemVersion
+        ]
+
+        var cam: [String: Any] = [:]
+        if let camera {
+            cam["deviceType"] = camera.deviceType
+            cam["position"] = camera.position
+            cam["photoWidth"] = camera.photoWidth
+            cam["photoHeight"] = camera.photoHeight
+            cam["codec"] = camera.codec
+            cam["iso"] = camera.iso.map(round3)
+            cam["exposureDurationS"] = camera.exposureDurationS.map { ($0 * 1_000_000).rounded() / 1_000_000 }
+            cam["lensPosition"] = camera.lensPosition.map(round3)
+            cam["lensAperture"] = camera.lensAperture.map(round3)
+            cam["zoomFactor"] = camera.zoomFactor.map(round3)
+            cam["focusMode"] = camera.focusMode
+            cam["exposureMode"] = camera.exposureMode
+            cam["whiteBalanceMode"] = camera.whiteBalanceMode
+            if let maxPhotoWidth = camera.maxPhotoWidth { cam["maxPhotoWidth"] = maxPhotoWidth }
+            if let maxPhotoHeight = camera.maxPhotoHeight { cam["maxPhotoHeight"] = maxPhotoHeight }
+            if let requestedWidth = camera.requestedWidth { cam["requestedWidth"] = requestedWidth }
+            if let requestedHeight = camera.requestedHeight { cam["requestedHeight"] = requestedHeight }
+            if let photoSizeSetting = camera.photoSizeSetting { cam["photoSizeSetting"] = photoSizeSetting }
+        }
+        for (key, value) in extraCamera { cam[key] = value }
+
+        var capture: [String: Any] = [
+            "mode": mode,
+            "capturedAt": ISO8601DateFormatter().string(from: capturedAt),
+            "uploadBytes": uploadJPEG.count,
+            "uploadCodec": CameraFacts.codecName(uploadJPEG),
+            "cropJpegQuality": Double(CardAlignmentCrop.jpegQuality),
+            "sweepFrames": sweepFrames,
+            "quadDetected": quad != nil
+        ]
+        if let size = pixelSize(uploadJPEG) {
+            capture["uploadWidth"] = size.width
+            capture["uploadHeight"] = size.height
+        }
+        if let quad { capture["quadConfidence"] = round3(quad.confidence) }
+        if let background, backgrounds.contains(background) {
+            capture["background"] = background
+        }
+        if let sharpBand, sharpBand == "measured" || sharpBand == "default" || sharpBand == "open" {
+            capture["sharpBand"] = sharpBand
+        }
+
+        var root: [String: Any] = ["schema": schema, "app": app, "device": device, "capture": capture]
+        if !cam.isEmpty { root["camera"] = cam }
+        return root
+    }
+
+    /// e.g. "iPhone14,2". The server maps a known identifier to a marketing
+    /// name. That name is not available on the phone.
+    static func hardwareModel() -> String {
+        var info = utsname()
+        uname(&info)
+        let mirror = Mirror(reflecting: info.machine)
+        let bytes = mirror.children.compactMap { $0.value as? Int8 }.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) }
+        let text = String(decoding: bytes, as: UTF8.self)
+        return text.isEmpty ? "unknown" : text
+    }
+
+    static func pixelSize(_ data: Data) -> (width: Int, height: Int)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let w = props[kCGImagePropertyPixelWidth] as? Int,
+              let h = props[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        let orientation = props[kCGImagePropertyOrientation] as? Int ?? 1
+        return orientation >= 5 ? (h, w) : (w, h)
+    }
+
+    private static func round3(_ value: Double) -> Double {
+        (value * 1000).rounded() / 1000
+    }
+
+    #if DEBUG
+    /// Payload shape only. `CameraFacts.read` is the hardware path and is not called here.
+    static func runContractChecks(_ check: ContractCheck) {
+        func expect(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String, file: StaticString = #filePath, line: UInt = #line) {
+            check(condition(), message(), file, line)
+        }
+        expect(CameraFacts.codecName(Data([0xFF, 0xD8, 0xFF, 0xE0])) == "jpeg", "JPEG magic is jpeg")
+        expect(CameraFacts.codecName(Data([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63])) == "heif", "ftyp marks heif")
+        expect(CameraFacts.codecName(Data([0x89, 0x50])) == "unknown", "a short header is unknown")
+        // iPhone 13 Pro (iPhone14,2) wide camera. 4032×3024 is its largest still.
+        let offered = [
+            StillPhotoSize.Pixels(width: 1920, height: 1440),
+            StillPhotoSize.Pixels(width: 4032, height: 3024)
+        ]
+        let deviceMax = StillPhotoSize.largest(offered)
+        expect(deviceMax?.width == 4032 && deviceMax?.height == 3024, "iPhone 13 Pro maximum is 4032×3024")
+        // 8064×6048 is the iPhone 14 Pro 48 MP still. It wins only when this camera offers it.
+        let pro = [
+            StillPhotoSize.Pixels(width: 4032, height: 3024),
+            StillPhotoSize.Pixels(width: 8064, height: 6048)
+        ]
+        let proMax = StillPhotoSize.largest(pro)
+        expect(proMax?.width == 8064 && proMax?.height == 6048, "a camera that offers 8064×6048 uses that still")
+        expect(StillPhotoSize.largest([]) == nil, "no offered size leaves the maximum unset")
+
+        let facts = CameraFacts(
+            deviceType: "AVCaptureDeviceTypeBuiltInWideAngleCamera", position: "back",
+            photoWidth: 4032, photoHeight: 3024, codec: "jpeg",
+            iso: 64.0, exposureDurationS: 0.0166666, lensPosition: 0.8123, lensAperture: 1.78,
+            zoomFactor: 1.0, focusMode: "continuous", exposureMode: "locked", whiteBalanceMode: "locked"
+        )
+        let body = payload(
+            camera: facts, uploadJPEG: Data([0xFF, 0xD8, 0xFF]), mode: "native-sweep",
+            capturedAt: Date(timeIntervalSince1970: 0), sweepFrames: 4, quad: nil,
+            extraCamera: ["photoSizeSetting": "12mp"]
+        )
+        expect(body["schema"] as? Int == 1, "schema is 1")
+        let cam = body["camera"] as? [String: Any]
+        expect(cam?["photoWidth"] as? Int == 4032, "camera photoWidth is 4032")
+        expect(cam?["iso"] as? Double == 64.0, "camera iso is 64")
+        expect(cam?["exposureDurationS"] as? Double == 0.016667, "exposure rounds to 0.016667 s")
+        expect(cam?["photoSizeSetting"] as? String == "12mp", "extra camera fields stay on the camera group")
+        let capture = body["capture"] as? [String: Any]
+        expect(capture?["mode"] as? String == "native-sweep", "capture mode is native-sweep")
+        expect(capture?["capturedAt"] as? String == "1970-01-01T00:00:00Z", "capturedAt is UTC ISO-8601")
+        expect(capture?["quadDetected"] as? Bool == false, "a missing quad is quadDetected false")
+        expect(capture?["quadConfidence"] == nil, "a missing quad writes no confidence")
+        expect(capture?["uploadWidth"] == nil, "a header-only JPEG writes no pixel size")
+        for (_, group) in body {
+            guard let group = group as? [String: Any] else { continue }
+            for (key, value) in group {
+                expect(!(value is [String: Any]), "captureMetadata group value \(key) stays flat")
+            }
+        }
+        let noCamera = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
+                               capturedAt: Date(), sweepFrames: 0, quad: nil)
+        expect(noCamera["camera"] == nil, "a still with no camera omits the camera group")
+        expect(json(camera: facts, uploadJPEG: Data([0xFF, 0xD8, 0xFF]), mode: "native-still",
+                    capturedAt: Date(), sweepFrames: 0, quad: nil) != nil, "the still payload encodes as JSON")
+        let pink = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
+                           capturedAt: Date(), sweepFrames: 0, quad: nil, background: "pink")
+        expect((pink["capture"] as? [String: Any])?["background"] as? String == "pink", "pink is a stored background")
+        let unknown = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
+                              capturedAt: Date(), sweepFrames: 0, quad: nil, background: "magenta")
+        expect((unknown["capture"] as? [String: Any])?["background"] == nil, "magenta is not a background token")
+        let learned = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
+                              capturedAt: Date(), sweepFrames: 0, quad: nil, sharpBand: "default")
+        expect((learned["capture"] as? [String: Any])?["sharpBand"] as? String == "default", "a default band is stored for learning")
+        let measuredBand = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
+                                   capturedAt: Date(), sweepFrames: 0, quad: nil, sharpBand: "measured")
+        expect((measuredBand["capture"] as? [String: Any])?["sharpBand"] as? String == "measured", "a measured band is stored")
+        let invented = payload(camera: nil, uploadJPEG: Data(), mode: "native-still",
+                               capturedAt: Date(), sweepFrames: 0, quad: nil, sharpBand: "wide")
+        expect((invented["capture"] as? [String: Any])?["sharpBand"] == nil, "an unknown band token is omitted")
+        expect(surfaceGuidance.count == 4, "surface guidance has four lines")
+        expect(!surfaceGuidance.joined(separator: " ").localizedCaseInsensitiveContains("pink"), "surface guidance does not name pink")
+    }
+    #endif
+}

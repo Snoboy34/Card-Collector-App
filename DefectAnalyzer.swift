@@ -34,7 +34,10 @@ public final class DefectAnalyzer {
         // separate from the general edge-perimeter scan above. Corners wear differently
         // than straight edges (rounding, chipping) so they get their own localized check
         // rather than being folded into the edge-whitening number.
-        let cornerSeverity = detectCornerFraying(in: ciImage)
+        // Stage A: peak-brightness corner mapping is not a fray detector
+        // (white borders read as severity 4). Held at 0 until a real
+        // detector exists. Do not feed this into any saved grade.
+        let cornerSeverity = 0
 
         // Step 4: Generate dynamic mock coordinate pinpoints matching the found defect counts
         let visualMarkers = generateDefectCoordinates(scratchCount: scratchCount, edgeCount: edgeSeverity)
@@ -92,32 +95,11 @@ public final class DefectAnalyzer {
         }
     }
 
-    /// NEW: samples a small square region at each of the four corners and measures peak
-    /// brightness within each, the same way detectEdgeWhitening measures the full perimeter —
-    /// exposed white paper/fraying at a corner reads as a localized brightness spike relative
-    /// to the surrounding border color. Returns the WORST (max) of the four corner readings,
-    /// since a single badly frayed corner should drive the score even if the other three are
-    /// clean — averaging them would dilute a real, visible flaw.
+    /// Intentionally unused for grades. Peak brightness in a white-border
+    /// corner is paper, not fray. Kept so Stage C can replace it later.
     private func detectCornerFraying(in inputImage: CIImage) -> Int {
-        let extent = inputImage.extent
-        // Corner sample squares sized relative to the card image, same proportions used by
-        // the edge-whitening inset (15pt) but as a small square footprint at each corner
-        // rather than a thin strip around the whole perimeter.
-        let cornerSize: CGFloat = max(20, min(extent.width, extent.height) * 0.08)
-
-        let corners: [CGRect] = [
-            CGRect(x: extent.minX, y: extent.maxY - cornerSize, width: cornerSize, height: cornerSize), // top-left
-            CGRect(x: extent.maxX - cornerSize, y: extent.maxY - cornerSize, width: cornerSize, height: cornerSize), // top-right
-            CGRect(x: extent.minX, y: extent.minY, width: cornerSize, height: cornerSize), // bottom-left
-            CGRect(x: extent.maxX - cornerSize, y: extent.minY, width: cornerSize, height: cornerSize) // bottom-right
-        ]
-
-        var worstSeverity = 0
-        for cornerRect in corners {
-            let severity = brightnessSeverity(in: inputImage, region: cornerRect)
-            worstSeverity = max(worstSeverity, severity)
-        }
-        return worstSeverity
+        _ = inputImage
+        return 0
     }
 
     /// Shared helper: measures max brightness within a region and maps it to the same

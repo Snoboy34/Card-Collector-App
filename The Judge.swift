@@ -26,7 +26,8 @@ public class TheJudge {
 
     public init() {}
 
-    /// Fully automated real-world evaluation engine computing structural multi-phase inspection results
+    /// Formula twin of services/grading_engine.js. Native Capture does not
+    /// save this result — /api/grade is the vault authority.
     public func evaluateMultiPhaseCondition(
         centering: CenteringResult,
         surface: SurfaceDefects,

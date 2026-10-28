@@ -35,6 +35,14 @@ public struct HistoricalTickerPoint: Identifiable, Sendable {
     public let closingPrice: Double
 }
 
+public enum PricingEngineError: LocalizedError {
+    case notARealPriceSource
+
+    public var errorDescription: String? {
+        "No live price source. Scan value stays — until a real lookup exists."
+    }
+}
+
 @MainActor
 public class PricingEngine: ObservableObject {
     @Published public var historicalTrendData: [Double] = []
@@ -43,6 +51,7 @@ public class PricingEngine: ObservableObject {
 
     public func fetchMarketTickerHistory(for cardName: String) -> [HistoricalTickerPoint] {
         let baseValue = determineBasePrice(for: cardName)
+        guard baseValue > 0 else { return [] }
         return [
             HistoricalTickerPoint(dateLabel: "Mon", closingPrice: baseValue * 0.94),
             HistoricalTickerPoint(dateLabel: "Tue", closingPrice: baseValue * 0.96),
@@ -54,46 +63,19 @@ public class PricingEngine: ObservableObject {
         ]
     }
 
+    /// Removed mock sports/TCG registries. A scan must never display a name
+    /// or price this function did not receive from a real source.
     public func fetchLiveValuations(cardId: String, category: CardCategory, completion: @escaping @MainActor (Result<CardValuation, Error>) -> Void) {
-        let registryMatch: CardValuation
-
-        switch category {
-        case .tcg:
-            let elements = [
-                CardValuation(cardName: "Charizard Holo Base Set #4", setName: "1999 Base Set", marketValueRaw: 350, marketValuePSA10: 8500, marketValueBGS95: 5400),
-                CardValuation(cardName: "Pikachu Illustrator Promo", setName: "CoroCoro Comics (1998)", marketValueRaw: 50000, marketValuePSA10: 450000, marketValueBGS95: 320000),
-                CardValuation(cardName: "Umbreon VMAX Alternate Art #215", setName: "Evolving Skies", marketValueRaw: 120, marketValuePSA10: 950, marketValueBGS95: 720)
-            ]
-            registryMatch = elements.randomElement()!
-
-        case .sports:
-            let elements = [
-                CardValuation(cardName: "Michael Jordan Rookie Fleer #119", setName: "1986 Fleer Basketball", marketValueRaw: 150, marketValuePSA10: 3500, marketValueBGS95: 2400),
-                CardValuation(cardName: "Caitlin Clark Blue Refractor Rookie", setName: "2024 Bowman University", marketValueRaw: 85, marketValuePSA10: 850, marketValueBGS95: 610),
-                CardValuation(cardName: "Paige Bueckers Chrome Prospect Autograph", setName: "2025 Bowman University", marketValueRaw: 45, marketValuePSA10: 420, marketValueBGS95: 310)
-            ]
-            registryMatch = elements.randomElement()!
-
-        case .mtg:
-            let elements = [
-                CardValuation(cardName: "Black Lotus Power Nine", setName: "1993 Alpha Edition", marketValueRaw: 12000, marketValuePSA10: 165000, marketValueBGS95: 110000),
-                CardValuation(cardName: "Mox Diamond Holo", setName: "Stronghold", marketValueRaw: 90, marketValuePSA10: 750, marketValueBGS95: 500)
-            ]
-            registryMatch = elements.randomElement()!
-
-        case .entertainment:
-            registryMatch = CardValuation(cardName: "Luke Skywalker Rookie #1", setName: "1977 Topps Star Wars", marketValueRaw: 20, marketValuePSA10: 600, marketValueBGS95: 400)
-        }
-
-        completion(.success(registryMatch))
+        completion(.failure(PricingEngineError.notARealPriceSource))
     }
 
     private func determineBasePrice(for name: String) -> Double {
+        if name.isEmpty || name == ScanLedger.unidentified { return 0 }
         if name.contains("Lotus") { return 165000 }
         if name.contains("Illustrator") { return 450000 }
         if name.contains("Charizard") { return 8500 }
         if name.contains("Jordan") { return 3500 }
         if name.contains("Clark") { return 850 }
-        return 400
+        return 0
     }
 }
