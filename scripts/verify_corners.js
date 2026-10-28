@@ -387,10 +387,15 @@ function run() {
   const doc = corners.reviewDocument({});
   check('review document stays unapproved', doc.approved === false && doc.excluded.indexOf('TD-12') >= 0);
   check(
-    'pending worn ids are TD-14 through TD-18',
-    doc.pendingScans.worn.join(',') === 'TD-14,TD-15,TD-16,TD-17,TD-18' &&
+    'worn set TD-14 through TD-21 is in the review',
+    doc.pendingScans.worn.length === 0 &&
       !doc.pendingScans.backs &&
-      doc.definition.indexOf('TD-14 through TD-18 are still to come') >= 0
+      doc.definition.indexOf('TD-14 through TD-21 are an unapproved worn and control review') >= 0 &&
+      doc.wornSet['TD-18'].role === 'control' &&
+      doc.wornSet['TD-21'].role === 'control' &&
+      doc.wornSet['TD-14'].role === 'worn' &&
+      doc.wornSet['TD-14'].name === 'Kugler' &&
+      Object.keys(doc.wornSet).join(',') === 'TD-14,TD-15,TD-16,TD-17,TD-18,TD-19,TD-20,TD-21'
   );
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'reference', 'flatbed_manifest.json'), 'utf8'));
   const backFiles = manifest.backs && manifest.backs.files ? manifest.backs.files : {};
@@ -413,6 +418,30 @@ function run() {
           backNames.some(function (name) { return backFiles[name].deck === id && backFiles[name].orientation === '180'; });
       }),
     backNames.length
+  );
+  const wornFiles = manifest.worn && manifest.worn.files ? manifest.worn.files : {};
+  const wornNames = Object.keys(wornFiles);
+  const wornIds = ['TD-14', 'TD-15', 'TD-16', 'TD-17', 'TD-18', 'TD-19', 'TD-20', 'TD-21'];
+  check(
+    'worn scans stay out of the front manifest entries',
+    wornNames.length === 32 &&
+      manifest.worn.shadowFree.indexOf('2026.10.13-shadow-free-v1') >= 0 &&
+      wornNames.every(function (name) {
+        const entry = wornFiles[name];
+        return (entry.face === 'front' || entry.face === 'back') &&
+          (entry.orientation === 'up' || entry.orientation === '180') &&
+          frontNames.indexOf(name) < 0 && backNames.indexOf(name) < 0;
+      }) &&
+      wornIds.every(function (id) {
+        return ['up', '180'].every(function (orientation) {
+          return wornNames.some(function (name) {
+            return wornFiles[name].deck === id && wornFiles[name].face === 'front' && wornFiles[name].orientation === orientation;
+          }) && wornNames.some(function (name) {
+            return wornFiles[name].deck === id && wornFiles[name].face === 'back' && wornFiles[name].orientation === orientation;
+          });
+        });
+      }),
+    wornNames.length
   );
   const bgs = doc.bgsReference;
   const bush = bgs && bgs.slabs && bgs.slabs[0];

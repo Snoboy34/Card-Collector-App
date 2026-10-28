@@ -26,7 +26,17 @@ const ADJACENT = {
 const FROM_180 = { tl: 'br', tr: 'bl', bl: 'tr', br: 'tl' };
 
 const EXCLUDED_IDS = { 'TD-12': true, LAPORTA: true };
-const PENDING_WORN = ['TD-14', 'TD-15', 'TD-16', 'TD-17', 'TD-18'];
+const PENDING_WORN = [];
+const WORN_SET = {
+  'TD-14': { role: 'worn', name: 'Kugler', note: 'Whitening on red corners.' },
+  'TD-15': { role: 'worn', name: 'Jurgensen', note: 'Rounded and frayed corners.' },
+  'TD-16': { role: 'worn', name: 'Hatcher', note: 'Off-center. Two hurt corners. Lower-left whitening. Left and bottom border whitening on a black border.' },
+  'TD-17': { role: 'worn', name: 'Little', note: 'Soft corners. Crooked print.' },
+  'TD-18': { role: 'control', name: 'Speed Racer', note: 'Clean non-sports control.' },
+  'TD-19': { role: 'worn', name: 'Dawsey', note: 'Four bad corners. Ding and wrinkle in the top border. Poor left and top edges.' },
+  'TD-20': { role: 'worn', name: 'Jones', note: 'Off-center. Chipping, creases, and heavy surface wear.' },
+  'TD-21': { role: 'control', name: 'Esiason', note: 'Clean sports control. Striped green border.' }
+};
 const BACK_IDS = [
   'TD-01', 'TD-02', 'TD-03', 'TD-04', 'TD-05', 'TD-06',
   'TD-07', 'TD-08', 'TD-09', 'TD-10', 'TD-11', 'KARROS'
@@ -100,7 +110,7 @@ const DEFINITION = [
   'A ding is a local notch in the cut. It is withheld when only one orientation shows it.',
   'Fraying is card-colored fiber outside the fitted cut. It is withheld when it does not rotate with the card. Length 0 is published only when both orientations are clean.',
   'A side the centering key has withheld does not grow a corner grade.',
-  'TD-12 is excluded. TD-14 through TD-18 are still to come from the owner and are not measured here. Flatbed backs of TD-01 through TD-11 and Karros are a separate unapproved corner review. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9.',
+  'TD-12 is excluded. TD-14 through TD-21 are an unapproved worn and control review. TD-18 and TD-21 are the clean controls. Flatbed backs of TD-01 through TD-11 and Karros are a separate unapproved corner review. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9.',
   'A disagreement between the two orientations, a quad that is not card-sized, or an unclear step stays withheld.',
   'Unapproved until the owner checks the overlay. No 0–10 corner score is assigned. This review does not change grading.'
 ].join(' ');
@@ -1046,6 +1056,7 @@ function reviewDocument(cards, backs) {
     pendingScans: {
       worn: PENDING_WORN.slice()
     },
+    wornSet: WORN_SET,
     bgsReference: BGS_REFERENCE,
     phone: 'A phone corner is not scored. It waits until those two edges already match the centering key, on a still in the ±0.1 mm tier (at or above 30 px/mm) or the ±0.2 mm tier (from 15 px/mm up to 30).',
     backs: backs || {},
@@ -1058,6 +1069,7 @@ module.exports = {
   FROM_180: FROM_180,
   EXCLUDED_IDS: EXCLUDED_IDS,
   PENDING_WORN: PENDING_WORN,
+  WORN_SET: WORN_SET,
   BACK_IDS: BACK_IDS,
   BGS_REFERENCE: BGS_REFERENCE,
   PAIR_MM: PAIR_MM,

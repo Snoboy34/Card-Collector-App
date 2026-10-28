@@ -6,7 +6,7 @@
  * centering finder through measureFile and does not write the centering
  * answer key, the flatbed manifest, or the centering overlays.
  *
- * Run: node scripts/measure_corners.js [--flatbed DIR] [--card TD-01] [--face front|back|both]
+ * Run: node scripts/measure_corners.js [--flatbed DIR] [--card TD-01] [--face front|back|both] [--worn]
  */
 'use strict';
 
@@ -25,12 +25,13 @@ const LABELS = {
 };
 
 function parseArgs(argv) {
-  const opts = { flatbed: null, card: null, face: 'front' };
+  const opts = { flatbed: null, card: null, face: 'front', worn: false };
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--flatbed') opts.flatbed = argv[++i];
     else if (arg === '--card') opts.card = String(argv[++i] || '').toUpperCase();
     else if (arg === '--face') opts.face = String(argv[++i] || '').toLowerCase();
+    else if (arg === '--worn') opts.worn = true;
     else throw new Error('unknown argument ' + arg);
   }
   if (opts.face !== 'front' && opts.face !== 'back' && opts.face !== 'both') {
@@ -89,6 +90,8 @@ function loadManifest() {
   const raw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'reference', 'flatbed_manifest.json'), 'utf8'));
   const fronts = {};
   const backs = {};
+  const wornFronts = {};
+  const wornBacks = {};
   Object.keys(raw).forEach(function (name) {
     if (name === 'backs' && raw.backs && raw.backs.files) {
       Object.keys(raw.backs.files).forEach(function (file) {
@@ -96,9 +99,16 @@ function loadManifest() {
       });
       return;
     }
+    if (name === 'worn' && raw.worn && raw.worn.files) {
+      Object.keys(raw.worn.files).forEach(function (file) {
+        const entry = raw.worn.files[file];
+        addScan(entry && entry.face === 'back' ? wornBacks : wornFronts, file, entry);
+      });
+      return;
+    }
     addScan(fronts, name, raw[name]);
   });
-  return { fronts: fronts, backs: backs };
+  return { fronts: fronts, backs: backs, wornFronts: wornFronts, wornBacks: wornBacks };
 }
 
 function centeringWithheld(cardId) {
@@ -235,19 +245,21 @@ async function thumbnail(file, reading, label) {
   return { buffer: buffer, width: width, height: height };
 }
 
-async function writeSheet(dest, cardId, up, down, paired) {
+async function writeSheet(dest, cardId, up, down, paired, note) {
   const headerBits = NAMES.map(function (name) {
     const rounding = paired.corners[name].rounding;
     return name.toUpperCase() + ' ' + roundingPhrase(rounding);
   });
-  const header = '<svg width="780" height="78" xmlns="http://www.w3.org/2000/svg">' +
-    '<rect width="780" height="78" fill="#111111"/>' +
-    '<text x="16" y="28" fill="#ffffff" font-family="sans-serif" font-size="20">' + esc(cardId + ' corners · unapproved') + '</text>' +
-    '<text x="16" y="50" fill="#d5d5d5" font-family="sans-serif" font-size="12">' + esc(headerBits.slice(0, 2).join('    ')) + '</text>' +
-    '<text x="16" y="68" fill="#d5d5d5" font-family="sans-serif" font-size="12">' + esc(headerBits.slice(2).join('    ')) + '</text>' +
+  const headerH = note ? 96 : 78;
+  const header = '<svg width="780" height="' + headerH + '" xmlns="http://www.w3.org/2000/svg">' +
+    '<rect width="780" height="' + headerH + '" fill="#111111"/>' +
+    '<text x="16" y="26" fill="#ffffff" font-family="sans-serif" font-size="20">' + esc(cardId + ' corners · unapproved') + '</text>' +
+    (note ? '<text x="16" y="46" fill="#f0c674" font-family="sans-serif" font-size="13">' + esc(note) + '</text>' : '') +
+    '<text x="16" y="' + (note ? 68 : 50) + '" fill="#d5d5d5" font-family="sans-serif" font-size="12">' + esc(headerBits.slice(0, 2).join('    ')) + '</text>' +
+    '<text x="16" y="' + (note ? 86 : 68) + '" fill="#d5d5d5" font-family="sans-serif" font-size="12">' + esc(headerBits.slice(2).join('    ')) + '</text>' +
     '</svg>';
   const composites = [{ input: Buffer.from(header), top: 0, left: 0 }];
-  let y = 86;
+  let y = headerH + 8;
   if (up && up.ok) {
     const thumb = await thumbnail(up.path, up.reading, 'up');
     composites.push({ input: thumb.buffer, top: y, left: 16 });
@@ -420,6 +432,12 @@ async function measureSet(ids, manifest, dir, face, overlayDir) {
     );
     const record = publicCard(up, down, paired);
     record.face = face;
+    const meta = corners.WORN_SET[id];
+    if (meta) {
+      record.role = meta.role;
+      record.owner = meta.name;
+      record.ownerNote = meta.note;
+    }
     const suffix = face === 'back' ? '_back_review.jpg' : '_review.jpg';
     record.overlay = 'reference/corner_overlays/' + id + suffix;
     record.scanCheck = { up: scanCheck(up), '180': scanCheck(down) };
@@ -429,7 +447,9 @@ async function measureSet(ids, manifest, dir, face, overlayDir) {
     }
     cards[id] = record;
     const sheet = path.join(overlayDir, id + suffix);
-    const bytes = await writeSheet(sheet, face === 'back' ? id + ' back' : id, up, down, paired);
+    const title = (face === 'back' ? id + ' back' : id) + (meta ? ' · ' + meta.name : '');
+    const note = meta ? meta.role + ' — ' + meta.note : '';
+    const bytes = await writeSheet(sheet, title, up, down, paired, note);
     const tl = record.corners.tl.rounding;
     const rise = record.corners.tl.up && record.corners.tl.up.riseMm;
     console.log(id + '\t' + face + '\t' + (tl.label || tl.reason || tl.radiusMm) + '\t' + JSON.stringify(rise) + '\t' + bytes);
@@ -449,15 +469,11 @@ async function measureSet(ids, manifest, dir, face, overlayDir) {
   return cards;
 }
 
-function writeReview(face, measured, onlyCard) {
+function writeReview(face, measured) {
   const jsonPath = path.join(__dirname, '..', 'reference', 'corner_review.json');
   const prev = fs.existsSync(jsonPath) ? JSON.parse(fs.readFileSync(jsonPath, 'utf8')) : {};
-  let cards = face === 'back' ? (prev.cards || {}) : measured.fronts;
-  let backs = face === 'front' ? (prev.backs || {}) : measured.backs;
-  if (onlyCard) {
-    if (face !== 'back') cards = Object.assign({}, prev.cards || {}, measured.fronts);
-    if (face !== 'front') backs = Object.assign({}, prev.backs || {}, measured.backs);
-  }
+  const cards = Object.assign({}, prev.cards || {}, face === 'back' ? {} : (measured.fronts || {}));
+  const backs = Object.assign({}, prev.backs || {}, face === 'front' ? {} : (measured.backs || {}));
   const doc = corners.reviewDocument(cards, backs);
   fs.writeFileSync(jsonPath, JSON.stringify(doc, null, 2) + '\n');
   console.log('wrote ' + jsonPath);
@@ -473,8 +489,12 @@ async function main() {
   const faces = opts.face === 'both' ? ['front', 'back'] : [opts.face];
   for (let f = 0; f < faces.length; f++) {
     const face = faces[f];
-    const table = face === 'back' ? manifest.backs : manifest.fronts;
-    const scanDir = face === 'back' ? path.join(dir, 'backs') : dir;
+    const table = opts.worn
+      ? (face === 'back' ? manifest.wornBacks : manifest.wornFronts)
+      : (face === 'back' ? manifest.backs : manifest.fronts);
+    const scanDir = opts.worn
+      ? path.join(dir, 'worn')
+      : (face === 'back' ? path.join(dir, 'backs') : dir);
     const ids = Object.keys(table).filter(corners.isCornerCard).sort(function (a, b) {
       return deckOrder(a) - deckOrder(b) || (a < b ? -1 : a > b ? 1 : 0);
     }).filter(function (id) { return !opts.card || id === opts.card; });
@@ -482,7 +502,7 @@ async function main() {
     if (face === 'back') measured.backs = cards;
     else measured.fronts = cards;
   }
-  writeReview(opts.face, measured, opts.card);
+  writeReview(opts.face, measured);
 }
 
 if (require.main === module) {

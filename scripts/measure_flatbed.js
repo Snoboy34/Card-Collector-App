@@ -63,7 +63,8 @@
  * dimension covers the real cards plus the repeat and rejects the lost edge.
  * Otherwise every side is withheld with reason not-card-sized.
  *
- * A short quad is measured again at the outermost step off the background.
+ * A short quad is measured again at the outermost step off the background,
+ * out to 70 mm, so an inner printed block does not stay the cut.
  * A darker shade of the same paper hue is still the sheet. The line is fit
  * to those contact points, so it follows the cut. Peaks closer than 0.2 mm
  * are one edge, the same runner-up separation the server uses. An inner
@@ -2639,7 +2640,7 @@ function offPaper(r, g, b, paper) {
 
 function backgroundShiftMm(data, w, h, paper, line, a, b, ppm, u0, u1) {
   const step = 0.05;
-  const far = 8;
+  const far = 70;
   const inwardReach = 1.5;
   const uStart = u0 == null ? 0.3 : u0;
   const uStop = u1 == null ? 0.7 : u1;
@@ -2659,8 +2660,10 @@ function backgroundShiftMm(data, w, h, paper, line, a, b, ppm, u0, u1) {
     prof[i] = samples.length ? median(samples) : null;
   }
   const bgCount = Math.round(1.5 / step);
+  let origin = 0;
+  while (origin <= n && prof[origin] == null) origin++;
   const bgSamples = [];
-  for (let i = 0; i < bgCount; i++) {
+  for (let i = origin; i < origin + bgCount && i <= n; i++) {
     if (prof[i] != null) bgSamples.push(prof[i]);
   }
   if (bgSamples.length < 4) return 0;
@@ -2671,7 +2674,7 @@ function backgroundShiftMm(data, w, h, paper, line, a, b, ppm, u0, u1) {
   const nearN = Math.max(1, Math.round(0.2 / step));
   const sepN = Math.max(1, Math.round(RUNNER_UP_SEPARATION_MM / step));
   let cross = -1;
-  for (let i = 0; i < n - sustainN; i++) {
+  for (let i = origin; i < n - sustainN; i++) {
     if (prof[i] == null || prof[i + 1] == null) continue;
     if (prof[i] > rise || prof[i + 1] < rise) continue;
     const near = [];
@@ -3404,7 +3407,16 @@ async function loadRaster(file) {
     return { error: 'no-card', sourceWidth: w, sourceHeight: h };
   }
   const scale = w / preview.info.width;
-  const pad = Math.round(8 * pxPerMm(DEFAULT_DPI));
+  const ppm = pxPerMm(DEFAULT_DPI);
+  const bboxWmm = (bbox.right - bbox.left) * scale / ppm;
+  const bboxHmm = (bbox.bottom - bbox.top) * scale / ppm;
+  const uprightShort = Math.max(0, NOMINAL_W_MM - bboxWmm, NOMINAL_H_MM - bboxHmm);
+  const turnedShort = Math.max(0, NOMINAL_H_MM - bboxWmm, NOMINAL_W_MM - bboxHmm);
+  const betterShort = Math.min(uprightShort, turnedShort);
+  // A dark inner block can be the component. Pad the short side out past a
+  // card, including the case where the whole miss is on one side.
+  const padMm = betterShort > 1 ? Math.max(uprightShort, turnedShort) + 12 : 8;
+  const pad = Math.round(padMm * ppm);
   let left = Math.max(0, Math.floor(bbox.left * scale) - pad);
   let top = Math.max(0, Math.floor(bbox.top * scale) - pad);
   let right = Math.min(w, Math.ceil(bbox.right * scale) + pad);
