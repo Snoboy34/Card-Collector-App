@@ -59,7 +59,6 @@ struct CardScannerView: View {
     @State private var isLoadingPrice = false
     @State private var isSaveConfirmed = false
     @State private var isCardDetected = false
-    @State private var cardMissStreak = 0
     @State private var automaticCardIdentifier = "unknown"
 
 
@@ -89,6 +88,11 @@ struct CardScannerView: View {
     @State private var pxSmoother = DistanceGuide.Smoother()
     @State private var outerTracker = OuterCut.Tracker()
     @State private var liveFrame: OuterCut.Result?
+    @State private var liveHasQuad = false
+    @State private var liveFaceOK = false
+    @State private var liveCutConfident = false
+    @State private var liveAbsence = "no quad"
+    @State private var shutterDebug = "no quad"
     @State private var judgeServerURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
     @State private var helpImprove = CenteringAssistStore.helpImprove()
     @State private var deckIdInput = UserDefaults.standard.string(forKey: JudgeTestDeck.deckIdDefaultsKey) ?? ""
@@ -244,6 +248,9 @@ struct CardScannerView: View {
             } else {
                 distanceBanner
             }
+            Text(shutterDebug == "open" ? "shutter open" : "shutter closed: \(shutterDebug)")
+                .font(.system(.caption2, design: .monospaced))
+                .frame(maxWidth: .infinity, alignment: .leading)
             if !sweepActive && !calibrationEngine.isPerfectlyLevel {
                 Text("LEVEL THE PHONE")
                     .font(.caption2).bold()
@@ -1158,10 +1165,15 @@ struct CardScannerView: View {
         resetCurrentScanState()
     }
     private func resetCurrentScanState() {
-        pendingServerLedger = nil; pendingScanId = ""; isSaveConfirmed = false; isCardDetected = false; cardMissStreak = 0
+        pendingServerLedger = nil; pendingScanId = ""; isSaveConfirmed = false; isCardDetected = false
         automaticCardIdentifier = "unknown"
         outerTracker.reset()
         liveFrame = nil
+        liveHasQuad = false
+        liveFaceOK = false
+        liveCutConfident = false
+        liveAbsence = "no quad"
+        shutterDebug = "no quad"
         pxSmoother.reset()
         distanceGuide = .idle
     }
@@ -1174,11 +1186,27 @@ struct CardScannerView: View {
             stillWidth: sessionFacts.sensorWidth,
             stillHeight: sessionFacts.sensorHeight
         )
-        distanceGuide = DistanceGuide.decide(
+        let reading = DistanceGuide.decide(
             pxPerMm: pxSmoother.pxPerMm,
             band: measured,
             focusSettled: sessionFacts.focusSettled,
             edgeSharp: pxSmoother.edgeSharp
+        )
+        let label = liveHasQuad
+            ? DistanceGuide.shutterDebug(
+                hasCardQuad: true,
+                faceAspectOK: liveFaceOK,
+                cutConfident: liveCutConfident,
+                freshFrames: outerTracker.freshCount,
+                prompt: reading.prompt
+            )
+            : liveAbsence
+        shutterDebug = label
+        distanceGuide = DistanceGuide.Reading(
+            pxPerMm: reading.pxPerMm,
+            prompt: reading.prompt,
+            shutterAllowed: label == "open",
+            bandSource: reading.bandSource
         )
     }
 
@@ -1189,22 +1217,19 @@ struct CardScannerView: View {
         let sensorWidth = sessionFacts.sensorWidth
         let sensorHeight = sessionFacts.sensorHeight
         let face = CardFaceSize.size(for: selectedCategory)
+        let token = targetNow
         Task(priority: .userInitiated) {
-            await MainActor.run { self.lastProcessedFrameTime = targetNow }
-            guard let found = OuterCut.find(in: imageFrame, face: face) else {
+            await MainActor.run { self.lastProcessedFrameTime = token }
+            let located = OuterCut.locate(in: imageFrame, face: face)
+            guard case .quad(let hit) = located else {
                 await MainActor.run {
-                    self.cardMissStreak += 1
-                    guard self.cardMissStreak >= 3 else { return }
-                    self.isCardDetected = false
-                    self.pxSmoother.reset()
-                    self.outerTracker.reset()
-                    self.liveFrame = nil
-                    self.distanceGuide = .idle
+                    guard self.lastProcessedFrameTime == token else { return }
+                    self.noteLiveMiss(located)
                 }
                 return
             }
-            let stable = await MainActor.run { self.outerTracker.push(found.norm) }
-            let frame = self.pixelFrame(stable, image: found)
+            let measured = self.pixelFrame(hit.result.norm, image: hit.result)
+            let frame = measured
             let quad = DistanceGuide.NormQuad(
                 tl: self.visionPoint(frame.tl, image: frame),
                 tr: self.visionPoint(frame.tr, image: frame),
@@ -1244,13 +1269,34 @@ struct CardScannerView: View {
                 }
             }
             await MainActor.run {
-                self.cardMissStreak = 0
+                guard self.lastProcessedFrameTime == token else { return }
+                let stable = self.outerTracker.push(hit.result.norm, strict: hit.matchesFace && hit.result.confident)
                 self.isCardDetected = true
-                self.liveFrame = frame
+                self.liveFrame = self.pixelFrame(stable, image: hit.result)
+                self.liveHasQuad = true
+                self.liveFaceOK = hit.matchesFace
+                self.liveCutConfident = hit.result.confident
                 self.pxSmoother.push(pxPerMm: px, edgeSharp: sharp)
                 self.refreshDistanceGuide()
             }
         }
+    }
+
+    /// A missed frame keeps the last box and is searched again on the next frame.
+    private func noteLiveMiss(_ located: OuterCut.Locate) {
+        liveHasQuad = false
+        liveFaceOK = false
+        liveCutConfident = false
+        if case .aspectFail = located {
+            liveAbsence = "aspect fail"
+        } else {
+            liveAbsence = "no quad"
+        }
+        if let kept = outerTracker.miss(), let previous = liveFrame {
+            liveFrame = pixelFrame(kept, image: previous)
+            isCardDetected = true
+        }
+        refreshDistanceGuide()
     }
 
     private func pixelFrame(_ quad: OuterCut.Norm, image: OuterCut.Result) -> OuterCut.Result {

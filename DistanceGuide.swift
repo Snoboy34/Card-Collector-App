@@ -218,6 +218,26 @@ enum DistanceGuide {
         return Reading(pxPerMm: pxPerMm, prompt: .hold, shutterAllowed: true, bandSource: band.source)
     }
 
+    /// Why the live shutter is closed. The box can be up while this is not "open".
+    /// Order matches the on-screen debug line the capture test reads back.
+    static func shutterDebug(hasCardQuad: Bool, faceAspectOK: Bool, cutConfident: Bool, freshFrames: Int, prompt: Prompt) -> String {
+        if !hasCardQuad { return "no quad" }
+        if !faceAspectOK { return "aspect fail" }
+        if !cutConfident { return "runner-up" }
+        switch prompt {
+        case .holdSoft:
+            return "soft"
+        case .moveCloser, .tooClose:
+            return "out of band"
+        case .holdFocusing:
+            return "focusing"
+        case .hold:
+            return freshFrames >= 3 ? "open" : "settling"
+        case .findCard:
+            return "settling"
+        }
+    }
+
     /// Sensor pixels in the same orientation as the preview. A 4032×3024
     /// still shown in a portrait preview is 3024×4032 upright.
     static func uprightStillPixels(sensorWidth: Int, sensorHeight: Int, previewWidth: Int, previewHeight: Int) -> (width: Int, height: Int)? {
@@ -522,6 +542,17 @@ enum DistanceGuide {
         expect(smoother.pxPerMm == 30 && smoother.edgeSharp == false, "the latest edge check closes the shutter and the px/mm is the median")
         smoother.reset()
         expect(smoother.pxPerMm == nil && smoother.edgeSharp == false, "a lost card clears the guide")
+
+        expect(shutterDebug(hasCardQuad: false, faceAspectOK: true, cutConfident: true, freshFrames: 3, prompt: .hold) == "no quad", "no quad closes the shutter")
+        expect(shutterDebug(hasCardQuad: true, faceAspectOK: false, cutConfident: true, freshFrames: 3, prompt: .hold) == "aspect fail", "a bad aspect closes the shutter")
+        expect(shutterDebug(hasCardQuad: true, faceAspectOK: true, cutConfident: false, freshFrames: 3, prompt: .hold) == "runner-up", "a second edge closes the shutter")
+        expect(shutterDebug(hasCardQuad: true, faceAspectOK: true, cutConfident: true, freshFrames: 3, prompt: .holdSoft) == "soft", "a soft edge closes the shutter")
+        expect(shutterDebug(hasCardQuad: true, faceAspectOK: true, cutConfident: true, freshFrames: 3, prompt: .tooClose) == "out of band", "too close is out of band")
+        expect(shutterDebug(hasCardQuad: true, faceAspectOK: true, cutConfident: true, freshFrames: 3, prompt: .moveCloser) == "out of band", "move closer is out of band")
+        expect(shutterDebug(hasCardQuad: true, faceAspectOK: true, cutConfident: true, freshFrames: 3, prompt: .holdFocusing) == "focusing", "focus keeps the shutter closed")
+        expect(shutterDebug(hasCardQuad: true, faceAspectOK: true, cutConfident: true, freshFrames: 1, prompt: .hold) == "settling", "one frame shows the box and does not open the shutter")
+        expect(shutterDebug(hasCardQuad: true, faceAspectOK: true, cutConfident: true, freshFrames: 3, prompt: .hold) == "open", "three strict frames open the shutter")
+        expect(shutterDebug(hasCardQuad: true, faceAspectOK: false, cutConfident: false, freshFrames: 3, prompt: .holdSoft) == "aspect fail", "aspect is reported ahead of the cut and the edge")
     }
     #endif
 }
