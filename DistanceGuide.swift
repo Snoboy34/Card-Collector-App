@@ -218,6 +218,25 @@ enum DistanceGuide {
         return Reading(pxPerMm: pxPerMm, prompt: .hold, shutterAllowed: true, bandSource: band.source)
     }
 
+    /// Why the shutter is closed. The box can be up while this is not "open".
+    /// `block` is the finder's reason. Empty means a quad is on screen and the
+    /// distance guide decides the rest. The outer cut is decided on the server.
+    static func shutterDebug(block: String, freshFrames: Int, prompt: Prompt) -> String {
+        if !block.isEmpty { return block }
+        switch prompt {
+        case .holdSoft:
+            return "soft"
+        case .moveCloser, .tooClose:
+            return "out of band"
+        case .holdFocusing:
+            return "focusing"
+        case .hold:
+            return freshFrames >= 3 ? "open" : "settling"
+        case .findCard:
+            return "settling"
+        }
+    }
+
     /// Sensor pixels in the same orientation as the preview. A 4032×3024
     /// still shown in a portrait preview is 3024×4032 upright.
     static func uprightStillPixels(sensorWidth: Int, sensorHeight: Int, previewWidth: Int, previewHeight: Int) -> (width: Int, height: Int)? {
@@ -522,6 +541,18 @@ enum DistanceGuide {
         expect(smoother.pxPerMm == 30 && smoother.edgeSharp == false, "the latest edge check closes the shutter and the px/mm is the median")
         smoother.reset()
         expect(smoother.pxPerMm == nil && smoother.edgeSharp == false, "a lost card clears the guide")
+
+        expect(shutterDebug(block: "no quad", freshFrames: 3, prompt: .hold) == "no quad", "no quad closes the shutter")
+        expect(shutterDebug(block: "aspect fail", freshFrames: 3, prompt: .hold) == "aspect fail", "a bad aspect closes the shutter")
+        expect(shutterDebug(block: "weak edge", freshFrames: 3, prompt: .hold) == "weak edge", "a weak edge closes the shutter")
+        expect(shutterDebug(block: "small", freshFrames: 3, prompt: .holdSoft) == "small", "a small rectangle is reported ahead of the edge")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .holdSoft) == "soft", "a soft edge closes the shutter")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .tooClose) == "out of band", "too close is out of band")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .moveCloser) == "out of band", "move closer is out of band")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .holdFocusing) == "focusing", "focus keeps the shutter closed")
+        expect(shutterDebug(block: "", freshFrames: 1, prompt: .hold) == "settling", "one frame shows the box and does not open the shutter")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .hold) == "open", "three frames open the shutter")
+        expect(shutterDebug(block: "", freshFrames: 2, prompt: .findCard) == "settling", "a quad with no px/mm is still settling")
     }
     #endif
 }
