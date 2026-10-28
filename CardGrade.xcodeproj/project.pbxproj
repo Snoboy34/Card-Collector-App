@@ -27,6 +27,7 @@
 		BB0000000000000000000015 /* CardGradeContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000015 /* CardGradeContractTests.swift */; };
 		BB0000000000000000000017 /* DistanceGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000017 /* DistanceGuide.swift */; };
 		BB0000000000000000000018 /* OuterCut.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000018 /* OuterCut.swift */; };
+		BB0000000000000000000019 /* CardVisionTrack.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000019 /* CardVisionTrack.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -52,6 +53,7 @@
 		AA0000000000000000000015 /* CardGradeContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardGradeContractTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000017 /* DistanceGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceGuide.swift; sourceTree = "<group>"; };
 		AA0000000000000000000018 /* OuterCut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OuterCut.swift; sourceTree = "<group>"; };
+		AA0000000000000000000019 /* CardVisionTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardVisionTrack.swift; sourceTree = "<group>"; };
 		AA0000000000000000000016 /* CardGradeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CardGradeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -118,6 +120,7 @@
 				AA000000000000000000000C /* JudgeAPIClient.swift */,
 				AA0000000000000000000006 /* LiveCameraView.swift */,
 				AA0000000000000000000018 /* OuterCut.swift */,
+				AA0000000000000000000019 /* CardVisionTrack.swift */,
 				AA0000000000000000000007 /* PortfolioState.swift */,
 				AA0000000000000000000008 /* PricingEngine.swift */,
 				AA0000000000000000000009 /* The Judge.swift */,
@@ -257,6 +260,7 @@
 				BB000000000000000000000C /* JudgeAPIClient.swift in Sources */,
 				BB0000000000000000000006 /* LiveCameraView.swift in Sources */,
 				BB0000000000000000000018 /* OuterCut.swift in Sources */,
+				BB0000000000000000000019 /* CardVisionTrack.swift in Sources */,
 				BB0000000000000000000007 /* PortfolioState.swift in Sources */,
 				BB0000000000000000000008 /* PricingEngine.swift in Sources */,
 				BB0000000000000000000009 /* The Judge.swift in Sources */,

@@ -38,6 +38,7 @@ final class CardGradeContractTests: XCTestCase {
         DistanceGuide.runContractChecks(report)
         CardAlignmentCrop.runContractChecks(report)
         OuterCut.runContractChecks(report)
+        CardVisionTrack.runContractChecks(report)
         #else
         XCTFail("Capture checks are part of the Debug app")
         #endif
