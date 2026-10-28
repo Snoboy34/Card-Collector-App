@@ -45,7 +45,7 @@ enum CardStillQuad {
 
     /// Outer cut only. A low-confidence cut returns nil so the upload stays
     /// the full still instead of cropping inside the card.
-    static func detect(cgImage: CGImage, face: CardFaceSize.Millimetres = .sports) -> JudgeAPIClient.CardQuad? {
+    static func detect(cgImage: CGImage, face: CardFaceSize.Millimetres = CardFaceSize.sports) -> JudgeAPIClient.CardQuad? {
         guard let found = OuterCut.find(in: cgImage, face: face), found.confident else { return nil }
         return found.cardQuad()
     }

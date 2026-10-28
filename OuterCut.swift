@@ -515,7 +515,7 @@ enum OuterCut {
         expect(CardFaceSize.size(for: .mtg).height == 88, "a Magic card uses the 88 mm height")
 
         let outer = syntheticCard()
-        let found = find(bytes: outer.bytes, width: outer.width, height: outer.height, face: .sports)
+        let found = find(bytes: outer.bytes, width: outer.width, height: outer.height, face: CardFaceSize.sports)
         let height = found.map { hypot($0.tl.x - $0.bl.x, $0.tl.y - $0.bl.y) }
         let width = found.map { hypot($0.tl.x - $0.tr.x, $0.tl.y - $0.tr.y) }
         expect(found != nil, "a white card on pink with a blue inner frame still has an outer quad")
@@ -524,7 +524,7 @@ enum OuterCut {
         expect(found?.confident == true, "the blue frame sits outside the 2% cut window, so the outer edge stays confident")
 
         let square = solid(width: 120, height: 120, color: (190, 110, 125), rect: (20, 20, 80, 80), fill: (245, 245, 245))
-        expect(find(bytes: square.bytes, width: 120, height: 120, face: .sports) == nil, "a square is not a card")
+        expect(find(bytes: square.bytes, width: 120, height: 120, face: CardFaceSize.sports) == nil, "a square is not a card")
 
         var tracker = Tracker()
         let steady = Norm(
