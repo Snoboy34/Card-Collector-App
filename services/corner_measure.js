@@ -8,14 +8,15 @@
  * The cut is the two edge lines already found for centering. Rounding is
  * the arc past those lines, beyond the 10–90% paper-to-card rise. Whitening
  * is paper showing against the same border at mid-edge. A ding is a local
- * notch in the cut. Fraying is card-colored fiber outside the cut.
+ * notch in the cut. Fraying is fiber outside the cut: a card-colored strand,
+ * or a pale fiber that continues past the scanner rise.
  *
  * The hinge is image-top. pairReadings() publishes the scan in which that
  * corner faces image-bottom (rule 2026.10.13-shadow-free-v1). A setback
  * inside the scanner limit, with little card missing, is the result "sharp",
  * with that limit stated. A corner that is not a clean arc publishes the
- * setback from the ideal corner and the area of card missing. Radius 0 is
- * never published.
+ * area of card missing as the primary measure and the setback from the ideal
+ * corner as the secondary measure. Radius 0 is never published.
  */
 'use strict';
 
@@ -97,6 +98,12 @@ const BGS_REFERENCE = {
 
 const PAIR_MM = 0.1;
 const FRAY_MIN_MM = 0.3;
+// A pale fiber counts only once it is past the outer half of the edge rise
+// and that beard runs this far along the corner. The clean controls' longest
+// speck at this height is one station, 0.05 mm.
+const FRAY_HALO_EXTRA_MM = 0.18;
+const FRAY_HALO_MIN_MM = 0.20;
+const FRAY_HALO_WINDOW_MM = 1.6;
 const DING_MIN_MM = 0.15;
 // A square corner's rise does not remove this much card. Past it, the
 // corner is wear even when the bisector setback sits inside a widened rise.
@@ -111,10 +118,10 @@ const STATION_MM = 0.05;
 
 const DEFINITION = [
   'A corner is the cut, where two card edges meet. It is not the printed frame.',
-  'Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm. The hinge is image-top. A corner is read from the scan in which that corner faces image-bottom, rule 2026.10.13-shadow-free-v1. Top corners come from the 180 scan. Bottom corners come from the upright scan. The other scan stays on the sheet. A setback inside the scanner limit, with missing area under 0.20 mm², is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published. A corner that is not a clean arc publishes the setback from the ideal corner point and the area of card missing. It does not publish a radius.',
+  'Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm. The hinge is image-top. A corner is read from the scan in which that corner faces image-bottom, rule 2026.10.13-shadow-free-v1. Top corners come from the 180 scan. Bottom corners come from the upright scan. The other scan stays on the sheet. A setback inside the scanner limit, with missing area under 0.20 mm², is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published. A corner that is not a clean arc publishes the area of card missing as the primary measure and the setback from the ideal corner point as the secondary measure. Missing area repeats across the two scans. The hinge moves the color crossing, so the setback does not. It does not publish a radius.',
   'Whitening is paper showing against the same border at mid-edge, read on the same clear scan as the corner. Whitening on a border that is already paper-white is not applicable. A pale patch that is foil glare is withheld.',
   'A ding is a local notch in the cut. It is read on the same clear scan as the corner.',
-  'Fraying is fiber outside the fitted cut. It is read on the same clear scan as the corner. Length 0 means that scan shows no run of fiber at least 0.3 mm long.',
+  'Fraying is fiber outside the fitted cut. It is read on the same clear scan as the corner. A card-colored strand counts when it runs at least 0.3 mm. A pale or tan fiber counts when it continues past the scanner rise and that beard runs at least 0.20 mm along the corner. One missed sample does not break the beard. Length 0 means neither is present. The clean controls set that floor: their longest pale speck is 0.05 mm.',
   'A side the centering key has withheld does not grow a corner grade.',
   'TD-12 is excluded. TD-14 through TD-21 are an unapproved worn and control review. TD-18 and TD-21 are the clean controls. Flatbed backs of TD-01 through TD-11 and Karros are a separate unapproved corner review. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9.',
   'A quad that is not card-sized, or an unclear step with no missing card, stays withheld.',
@@ -411,6 +418,68 @@ function outwardFray(points) {
     }
   }
   if (runStart != null && points.length) close(points[points.length - 1].t + STATION_MM);
+  return best || { lengthMm: 0, stickOutMm: 0 };
+}
+
+function fiberHalo(ctx, tip, u, n, points, riseMm) {
+  const ppm = ctx.ppm;
+  const paperLuma = luma(ctx.paper);
+  const blur = Math.max(0, riseMm) * 0.5;
+  const hits = [];
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    if (p.t < 0.05 || p.t > FRAY_HALO_WINDOW_MM) continue;
+    let last = 0;
+    let clean = 0;
+    for (let out = 0.02; out <= 0.85 + 1e-9; out += 0.02) {
+      const inward = p.inwardMm - out;
+      const ix = Math.round(tip.x + u.x * p.t * ppm + n.x * inward * ppm);
+      const iy = Math.round(tip.y + u.y * p.t * ppm + n.y * inward * ppm);
+      const rgb = sampleRgb(ctx.data, ctx.width, ctx.height, ix, iy);
+      if (!rgb) break;
+      const dp = colorDist(rgb, ctx.paper);
+      const y = luma(rgb);
+      const isPaper = dp < 20 && y > paperLuma - 12;
+      const isShadow = y < paperLuma - 14 && dp < 50 && (rgb[0] - rgb[2]) > 15;
+      if (isPaper || isShadow) {
+        clean += 1;
+        if (clean >= 2) break;
+      } else {
+        clean = 0;
+        last = out;
+      }
+    }
+    hits.push({ t: p.t, extra: last - blur, stick: last });
+  }
+  let best = null;
+  let runStart = null;
+  let runStick = 0;
+  let gap = 0;
+  let lastGood = null;
+  // A single missed station is a gap between hairs, not the end of the beard.
+  function close() {
+    if (runStart == null || !lastGood) return;
+    const length = lastGood.t + STATION_MM - runStart;
+    if (length + 1e-6 >= FRAY_HALO_MIN_MM && (!best || length > best.lengthMm)) {
+      best = { lengthMm: length, stickOutMm: runStick };
+    }
+    runStart = null;
+    runStick = 0;
+    gap = 0;
+    lastGood = null;
+  }
+  for (let i = 0; i < hits.length; i++) {
+    if (hits[i].extra + 1e-6 >= FRAY_HALO_EXTRA_MM) {
+      if (runStart == null) runStart = hits[i].t;
+      if (hits[i].stick > runStick) runStick = hits[i].stick;
+      lastGood = hits[i];
+      gap = 0;
+    } else if (runStart != null) {
+      gap += 1;
+      if (gap > 1) close();
+    }
+  }
+  if (runStart != null) close();
   return best || { lengthMm: 0, stickOutMm: 0 };
 }
 
@@ -746,9 +815,11 @@ function measureCorner(ctx, name) {
   const frayB = frayOnEdge(ctx, tip, uB, nB, riseB.insideRgb);
   const outA = outwardFray(silA);
   const outB = outwardFray(silB);
+  const haloA = fiberHalo(ctx, tip, uA, nA, silA, riseA.riseMm);
+  const haloB = fiberHalo(ctx, tip, uB, nB, silB, riseB.riseMm);
   let fray = frayA;
   let fraySide = sides[0];
-  [[frayB, sides[1]], [outA, sides[0]], [outB, sides[1]]].forEach(function (pair) {
+  [[frayB, sides[1]], [outA, sides[0]], [outB, sides[1]], [haloA, sides[0]], [haloB, sides[1]]].forEach(function (pair) {
     if (pair[0].lengthMm > fray.lengthMm) {
       fray = pair[0];
       fraySide = pair[1];
@@ -892,7 +963,7 @@ function withheldRounding(reason) {
 }
 
 function wearLabel(setbackMm, missingMm2) {
-  return 'setback ' + setbackMm.toFixed(3) + ' mm, missing ' + missingMm2.toFixed(3) + ' mm²';
+  return 'missing ' + missingMm2.toFixed(3) + ' mm², setback ' + setbackMm.toFixed(3) + ' mm';
 }
 
 function publishRounding(scan) {

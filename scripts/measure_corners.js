@@ -140,7 +140,7 @@ function roundingPhrase(rounding) {
   if (rounding.label) return rounding.label;
   const worn = rounding.setbackMm != null && rounding.missingMm2 != null &&
     (rounding.reason === 'not-an-arc' || (rounding.reason === 'unclear' && rounding.missingMm2 >= 0.2));
-  if (worn) return 'setback ' + fmt(rounding.setbackMm) + ' mm, missing ' + fmt(rounding.missingMm2) + ' mm²';
+  if (worn) return 'missing ' + fmt(rounding.missingMm2) + ' mm², setback ' + fmt(rounding.setbackMm) + ' mm';
   if (rounding.reason) return rounding.reason;
   if (rounding.radiusMm != null) return 'radius ' + fmt(rounding.radiusMm) + ' mm';
   return 'no reading';
@@ -158,10 +158,14 @@ function captionLines(tag, corner, publishes) {
     ? 'whitening not applicable'
     : (white.withheld ? 'whitening ' + (white.reason || 'withheld') : 'whitening ' + fmt(white.areaMm2) + ' mm²');
   const frayText = fray.withheld ? 'fray ' + (fray.reason || 'withheld') : 'fray ' + fmt(fray.lengthMm) + ' mm';
+  const phrase = roundingPhrase(rounding);
+  const detail = phrase.indexOf('missing ') === 0
+    ? (riseText ? 'rise ' + riseText : '')
+    : 'setback ' + fmt(rounding.setbackMm) + ' mm' + (riseText ? '   rise ' + riseText : '');
   return [
     tag + (publishes ? ' · publishes' : ''),
-    'setback ' + fmt(rounding.setbackMm) + ' mm' + (riseText ? '   rise ' + riseText : ''),
-    roundingPhrase(rounding),
+    detail,
+    phrase,
     whiteText + '    ' + frayText
   ];
 }

@@ -3,7 +3,7 @@
   "approved": false,
   "dpi": 1199.9976,
   "pairMm": 0.1,
-  "definition": "A corner is the cut, where two card edges meet. It is not the printed frame. Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm. The hinge is image-top. A corner is read from the scan in which that corner faces image-bottom, rule 2026.10.13-shadow-free-v1. Top corners come from the 180 scan. Bottom corners come from the upright scan. The other scan stays on the sheet. A setback inside the scanner limit, with missing area under 0.20 mm², is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published. A corner that is not a clean arc publishes the setback from the ideal corner point and the area of card missing. It does not publish a radius. Whitening is paper showing against the same border at mid-edge, read on the same clear scan as the corner. Whitening on a border that is already paper-white is not applicable. A pale patch that is foil glare is withheld. A ding is a local notch in the cut. It is read on the same clear scan as the corner. Fraying is fiber outside the fitted cut. It is read on the same clear scan as the corner. Length 0 means that scan shows no run of fiber at least 0.3 mm long. A side the centering key has withheld does not grow a corner grade. TD-12 is excluded. TD-14 through TD-21 are an unapproved worn and control review. TD-18 and TD-21 are the clean controls. Flatbed backs of TD-01 through TD-11 and Karros are a separate unapproved corner review. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9. A quad that is not card-sized, or an unclear step with no missing card, stays withheld. Unapproved until the owner checks the overlay. No 0–10 corner score is assigned. This review does not change grading.",
+  "definition": "A corner is the cut, where two card edges meet. It is not the printed frame. Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm. The hinge is image-top. A corner is read from the scan in which that corner faces image-bottom, rule 2026.10.13-shadow-free-v1. Top corners come from the 180 scan. Bottom corners come from the upright scan. The other scan stays on the sheet. A setback inside the scanner limit, with missing area under 0.20 mm², is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published. A corner that is not a clean arc publishes the area of card missing as the primary measure and the setback from the ideal corner point as the secondary measure. Missing area repeats across the two scans. The hinge moves the color crossing, so the setback does not. It does not publish a radius. Whitening is paper showing against the same border at mid-edge, read on the same clear scan as the corner. Whitening on a border that is already paper-white is not applicable. A pale patch that is foil glare is withheld. A ding is a local notch in the cut. It is read on the same clear scan as the corner. Fraying is fiber outside the fitted cut. It is read on the same clear scan as the corner. A card-colored strand counts when it runs at least 0.3 mm. A pale or tan fiber counts when it continues past the scanner rise and that beard runs at least 0.20 mm along the corner. One missed sample does not break the beard. Length 0 means neither is present. The clean controls set that floor: their longest pale speck is 0.05 mm. A side the centering key has withheld does not grow a corner grade. TD-12 is excluded. TD-14 through TD-21 are an unapproved worn and control review. TD-18 and TD-21 are the clean controls. Flatbed backs of TD-01 through TD-11 and Karros are a separate unapproved corner review. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9. A quad that is not card-sized, or an unclear step with no missing card, stays withheld. Unapproved until the owner checks the overlay. No 0–10 corner score is assigned. This review does not change grading.",
   "excluded": [
     "TD-12"
   ],
@@ -419,9 +419,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.52,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.306,
@@ -754,7 +754,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.065,
-            "label": "setback 0.103 mm, missing 0.089 mm²",
+            "label": "missing 0.089 mm², setback 0.103 mm",
             "radiusMm": null,
             "setbackMm": 0.103,
             "missingMm2": 0.089,
@@ -859,9 +859,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.3,
+              "stickOutMm": 0.3,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.065,
@@ -906,8 +906,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.3,
+            "stickOutMm": 0.3,
             "approved": false
           },
           "up": {
@@ -1888,7 +1888,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.262,
-            "label": "setback 1.025 mm, missing 1.473 mm²",
+            "label": "missing 1.473 mm², setback 1.025 mm",
             "radiusMm": null,
             "setbackMm": 1.025,
             "missingMm2": 1.473,
@@ -2015,7 +2015,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.179,
-            "label": "setback 1.015 mm, missing 1.370 mm²",
+            "label": "missing 1.370 mm², setback 1.015 mm",
             "radiusMm": null,
             "setbackMm": 1.015,
             "missingMm2": 1.37,
@@ -2142,7 +2142,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.455,
-            "label": "setback -0.926 mm, missing 1.243 mm²",
+            "label": "missing 1.243 mm², setback -0.926 mm",
             "radiusMm": null,
             "setbackMm": -0.926,
             "missingMm2": 1.243,
@@ -2269,7 +2269,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.205,
-            "label": "setback 1.062 mm, missing 1.442 mm²",
+            "label": "missing 1.442 mm², setback 1.062 mm",
             "radiusMm": null,
             "setbackMm": 1.062,
             "missingMm2": 1.442,
@@ -2582,7 +2582,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.249,
-            "label": "setback 0.247 mm, missing 0.365 mm²",
+            "label": "missing 0.365 mm², setback 0.247 mm",
             "radiusMm": null,
             "setbackMm": 0.247,
             "missingMm2": 0.365,
@@ -2709,7 +2709,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.381,
-            "label": "setback 0.262 mm, missing 0.203 mm²",
+            "label": "missing 0.203 mm², setback 0.262 mm",
             "radiusMm": null,
             "setbackMm": 0.262,
             "missingMm2": 0.203,
@@ -3149,7 +3149,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.056,
-            "label": "setback 0.109 mm, missing 0.064 mm²",
+            "label": "missing 0.064 mm², setback 0.109 mm",
             "radiusMm": null,
             "setbackMm": 0.109,
             "missingMm2": 0.064,
@@ -3271,7 +3271,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.13,
-            "label": "setback 0.745 mm, missing 0.154 mm²",
+            "label": "missing 0.154 mm², setback 0.745 mm",
             "radiusMm": null,
             "setbackMm": 0.745,
             "missingMm2": 0.154,
@@ -3393,7 +3393,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.256,
-            "label": "setback 0.323 mm, missing 0.272 mm²",
+            "label": "missing 0.272 mm², setback 0.323 mm",
             "radiusMm": null,
             "setbackMm": 0.323,
             "missingMm2": 0.272,
@@ -3801,9 +3801,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 1.45,
+              "stickOutMm": 0.6,
+              "edge": "top"
             },
             "riseMm": {
               "top": 0.046,
@@ -3848,8 +3848,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 1.35,
+            "stickOutMm": 0.58,
             "approved": false
           },
           "up": {
@@ -3884,9 +3884,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 1.35,
+              "stickOutMm": 0.58,
+              "edge": "left"
             },
             "riseMm": {
               "bottom": 0.066,
@@ -3928,9 +3928,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 1.55,
+              "stickOutMm": 0.46,
+              "edge": "top"
             },
             "riseMm": {
               "top": 0.046,
@@ -4363,9 +4363,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.38,
+              "edge": "top"
             },
             "riseMm": {
               "top": 0.229,
@@ -5074,7 +5074,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.383,
-            "label": "setback 0.244 mm, missing 0.200 mm²",
+            "label": "missing 0.200 mm², setback 0.244 mm",
             "radiusMm": null,
             "setbackMm": 0.244,
             "missingMm2": 0.2,
@@ -5805,9 +5805,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 1.55,
+              "stickOutMm": 0.34,
+              "edge": "right"
             },
             "riseMm": {
               "bottom": 0.225,
@@ -5852,8 +5852,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 1.55,
+            "stickOutMm": 0.34,
             "approved": false
           },
           "up": {
@@ -6059,9 +6059,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.45,
+              "stickOutMm": 0.4,
+              "edge": "top"
             },
             "riseMm": {
               "top": 0.144,
@@ -6372,9 +6372,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.3,
+              "edge": "right"
             },
             "riseMm": {
               "bottom": 0.239,
@@ -6419,8 +6419,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.2,
+            "stickOutMm": 0.3,
             "approved": false
           },
           "up": {
@@ -6455,9 +6455,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.3,
+              "stickOutMm": 0.58,
+              "edge": "left"
             },
             "riseMm": {
               "top": 0.189,
@@ -6499,9 +6499,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.3,
+              "stickOutMm": 0.4,
+              "edge": "left"
             },
             "riseMm": {
               "bottom": 0.239,
@@ -6546,8 +6546,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.3,
+            "stickOutMm": 0.4,
             "approved": false
           },
           "up": {
@@ -6582,9 +6582,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.45,
+              "stickOutMm": 0.76,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.189,
@@ -6753,9 +6753,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.4,
+              "stickOutMm": 0.84,
+              "edge": "left"
             },
             "riseMm": {
               "top": 0.155,
@@ -6961,7 +6961,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.372,
-            "label": "setback 0.493 mm, missing 0.501 mm²",
+            "label": "missing 0.501 mm², setback 0.493 mm",
             "radiusMm": null,
             "setbackMm": 0.493,
             "missingMm2": 0.501,
@@ -7320,9 +7320,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.25,
+              "stickOutMm": 0.84,
+              "edge": "top"
             },
             "riseMm": {
               "top": 0.097,
@@ -7531,7 +7531,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.375,
-            "label": "setback -0.671 mm, missing 0.619 mm²",
+            "label": "missing 0.619 mm², setback -0.671 mm",
             "radiusMm": null,
             "setbackMm": -0.671,
             "missingMm2": 0.619,
@@ -7658,7 +7658,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.375,
-            "label": "setback 0.820 mm, missing 0.673 mm²",
+            "label": "missing 0.673 mm², setback 0.820 mm",
             "radiusMm": null,
             "setbackMm": 0.82,
             "missingMm2": 0.673,
@@ -7785,7 +7785,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.216,
-            "label": "setback 0.308 mm, missing 0.504 mm²",
+            "label": "missing 0.504 mm², setback 0.308 mm",
             "radiusMm": null,
             "setbackMm": 0.308,
             "missingMm2": 0.504,
@@ -7912,7 +7912,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.197,
-            "label": "setback 0.362 mm, missing 1.048 mm²",
+            "label": "missing 1.048 mm², setback 0.362 mm",
             "radiusMm": null,
             "setbackMm": 0.362,
             "missingMm2": 1.048,
@@ -7937,8 +7937,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.65,
+            "stickOutMm": 0.84,
             "approved": false
           },
           "up": {
@@ -7973,9 +7973,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.65,
+              "stickOutMm": 0.84,
+              "edge": "right"
             },
             "riseMm": {
               "bottom": 0.197,
@@ -8671,7 +8671,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.415,
-            "label": "setback 0.226 mm, missing 0.701 mm²",
+            "label": "missing 0.701 mm², setback 0.226 mm",
             "radiusMm": null,
             "setbackMm": 0.226,
             "missingMm2": 0.701,
@@ -8798,7 +8798,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.348,
-            "label": "setback 0.228 mm, missing 0.240 mm²",
+            "label": "missing 0.240 mm², setback 0.228 mm",
             "radiusMm": null,
             "setbackMm": 0.228,
             "missingMm2": 0.24,
@@ -8925,7 +8925,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.245,
-            "label": "setback 0.575 mm, missing 0.381 mm²",
+            "label": "missing 0.381 mm², setback 0.575 mm",
             "radiusMm": null,
             "setbackMm": 0.575,
             "missingMm2": 0.381,
@@ -9030,9 +9030,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.5,
+              "edge": "top"
             },
             "riseMm": {
               "top": 0.213,
@@ -9052,7 +9052,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.246,
-            "label": "setback 0.451 mm, missing 0.465 mm²",
+            "label": "missing 0.465 mm², setback 0.451 mm",
             "radiusMm": null,
             "setbackMm": 0.451,
             "missingMm2": 0.465,
@@ -9302,9 +9302,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.3,
+              "edge": "top"
             },
             "riseMm": {
               "top": 0.029,
@@ -9429,9 +9429,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.56,
+              "edge": "top"
             },
             "riseMm": {
               "top": 0.029,
@@ -9811,7 +9811,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.223,
-            "label": "setback 0.201 mm, missing 0.218 mm²",
+            "label": "missing 0.218 mm², setback 0.201 mm",
             "radiusMm": null,
             "setbackMm": 0.201,
             "missingMm2": 0.218,
@@ -9938,7 +9938,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.126,
-            "label": "setback 0.203 mm, missing 0.141 mm²",
+            "label": "missing 0.141 mm², setback 0.203 mm",
             "radiusMm": null,
             "setbackMm": 0.203,
             "missingMm2": 0.141,
@@ -10043,9 +10043,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.56,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.107,
@@ -10090,8 +10090,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.2,
+            "stickOutMm": 0.26,
             "approved": false
           },
           "up": {
@@ -10126,9 +10126,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.26,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.064,
@@ -10359,9 +10359,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.35,
+              "stickOutMm": 0.54,
+              "edge": "right"
             },
             "riseMm": {
               "bottom": 0.344,
@@ -10381,7 +10381,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.344,
-            "label": "setback 0.457 mm, missing 0.831 mm²",
+            "label": "missing 0.831 mm², setback 0.457 mm",
             "radiusMm": null,
             "setbackMm": 0.457,
             "missingMm2": 0.831,
@@ -10406,8 +10406,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.35,
+            "stickOutMm": 0.54,
             "approved": false
           },
           "up": {
@@ -10442,9 +10442,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0.35,
-              "stickOutMm": 0.1,
-              "edge": "top"
+              "lengthMm": 0.5,
+              "stickOutMm": 0.36,
+              "edge": "left"
             },
             "riseMm": {
               "top": 0.276,
@@ -10486,9 +10486,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.25,
+              "stickOutMm": 0.62,
+              "edge": "left"
             },
             "riseMm": {
               "bottom": 0.344,
@@ -10508,7 +10508,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.344,
-            "label": "setback 0.365 mm, missing 0.626 mm²",
+            "label": "missing 0.626 mm², setback 0.365 mm",
             "radiusMm": null,
             "setbackMm": 0.365,
             "missingMm2": 0.626,
@@ -10533,8 +10533,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.25,
+            "stickOutMm": 0.62,
             "approved": false
           },
           "up": {
@@ -10635,7 +10635,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.085,
-            "label": "setback 0.106 mm, missing 0.610 mm²",
+            "label": "missing 0.610 mm², setback 0.106 mm",
             "radiusMm": null,
             "setbackMm": 0.106,
             "missingMm2": 0.61,
@@ -10660,8 +10660,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0.3,
-            "stickOutMm": 0.352,
+            "lengthMm": 0.65,
+            "stickOutMm": 0.7,
             "approved": false
           },
           "up": {
@@ -10696,8 +10696,8 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0.3,
-              "stickOutMm": 0.352,
+              "lengthMm": 0.65,
+              "stickOutMm": 0.7,
               "edge": "bottom"
             },
             "riseMm": {
@@ -10762,7 +10762,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.328,
-            "label": "setback 0.827 mm, missing 1.094 mm²",
+            "label": "missing 1.094 mm², setback 0.827 mm",
             "radiusMm": null,
             "setbackMm": 0.827,
             "missingMm2": 1.094,
@@ -10787,8 +10787,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0.3,
-            "stickOutMm": 0.184,
+            "lengthMm": 1.45,
+            "stickOutMm": 0.84,
             "approved": false
           },
           "up": {
@@ -10823,9 +10823,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0.3,
-              "stickOutMm": 0.184,
-              "edge": "right"
+              "lengthMm": 1.45,
+              "stickOutMm": 0.84,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.085,
@@ -13214,7 +13214,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.319,
-            "label": "setback 1.075 mm, missing 1.914 mm²",
+            "label": "missing 1.914 mm², setback 1.075 mm",
             "radiusMm": null,
             "setbackMm": 1.075,
             "missingMm2": 1.914,
@@ -13341,7 +13341,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.319,
-            "label": "setback 1.092 mm, missing 1.705 mm²",
+            "label": "missing 1.705 mm², setback 1.092 mm",
             "radiusMm": null,
             "setbackMm": 1.092,
             "missingMm2": 1.705,
@@ -13402,9 +13402,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.3,
+              "stickOutMm": 0.4,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.365,
@@ -13468,7 +13468,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.367,
-            "label": "setback 1.013 mm, missing 1.393 mm²",
+            "label": "missing 1.393 mm², setback 1.013 mm",
             "radiusMm": null,
             "setbackMm": 1.013,
             "missingMm2": 1.393,
@@ -13595,7 +13595,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.124,
-            "label": "setback 0.984 mm, missing 1.086 mm²",
+            "label": "missing 1.086 mm², setback 0.984 mm",
             "radiusMm": null,
             "setbackMm": 0.984,
             "missingMm2": 1.086,
@@ -14449,9 +14449,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.3,
+              "stickOutMm": 0.76,
+              "edge": "left"
             },
             "riseMm": {
               "top": 0.196,
@@ -14957,9 +14957,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.48,
+              "edge": "right"
             },
             "riseMm": {
               "bottom": 0.145,
@@ -15049,9 +15049,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.35,
+              "stickOutMm": 0.56,
+              "edge": "left"
             },
             "riseMm": {
               "top": 0.22,
@@ -15185,9 +15185,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.4,
+              "stickOutMm": 0.84,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.22,
@@ -15229,9 +15229,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0.3,
-              "stickOutMm": 0.05,
-              "edge": "top"
+              "lengthMm": 0.35,
+              "stickOutMm": 0.74,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.216,
@@ -15457,9 +15457,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.6,
+              "stickOutMm": 0.42,
+              "edge": "right"
             },
             "riseMm": {
               "bottom": 0.116,
@@ -15696,9 +15696,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.3,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.157,
@@ -15924,9 +15924,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.34,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.124,
@@ -16571,8 +16571,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.25,
+            "stickOutMm": 0.36,
             "approved": false
           },
           "up": {
@@ -16607,9 +16607,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.25,
+              "stickOutMm": 0.36,
+              "edge": "right"
             },
             "riseMm": {
               "bottom": 0.255,
@@ -16954,9 +16954,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.9,
+              "stickOutMm": 0.84,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.026,
@@ -17081,8 +17081,8 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0.3,
-              "stickOutMm": 0.05,
+              "lengthMm": 0.55,
+              "stickOutMm": 0.46,
               "edge": "top"
             },
             "riseMm": {
@@ -17267,9 +17267,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.36,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.079,
@@ -17870,9 +17870,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.25,
+              "stickOutMm": 0.74,
+              "edge": "right"
             },
             "riseMm": {
               "bottom": 0.213,
@@ -18459,9 +18459,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.46,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.004,
@@ -18481,7 +18481,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.374,
-            "label": "setback 0.391 mm, missing 0.388 mm²",
+            "label": "missing 0.388 mm², setback 0.391 mm",
             "radiusMm": null,
             "setbackMm": 0.391,
             "missingMm2": 0.388,
@@ -18506,8 +18506,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.2,
+            "stickOutMm": 0.46,
             "approved": false
           },
           "up": {
@@ -18586,9 +18586,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.75,
+              "stickOutMm": 0.84,
+              "edge": "left"
             },
             "riseMm": {
               "bottom": 0.004,
@@ -18608,7 +18608,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.077,
-            "label": "setback 0.913 mm, missing 1.113 mm²",
+            "label": "missing 1.113 mm², setback 0.913 mm",
             "radiusMm": null,
             "setbackMm": 0.913,
             "missingMm2": 1.113,
@@ -18633,8 +18633,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.75,
+            "stickOutMm": 0.84,
             "approved": false
           },
           "up": {
@@ -18840,9 +18840,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0.55,
-              "stickOutMm": 0.1,
-              "edge": "top"
+              "lengthMm": 0.6,
+              "stickOutMm": 0.84,
+              "edge": "left"
             },
             "riseMm": {
               "top": 0.293,
@@ -18862,7 +18862,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.41,
-            "label": "setback 0.009 mm, missing 0.204 mm²",
+            "label": "missing 0.204 mm², setback 0.009 mm",
             "radiusMm": null,
             "setbackMm": 0.009,
             "missingMm2": 0.204,
@@ -18887,8 +18887,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.2,
+            "stickOutMm": 0.48,
             "approved": false
           },
           "up": {
@@ -18923,9 +18923,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.48,
+              "edge": "right"
             },
             "riseMm": {
               "bottom": 0.41,
@@ -19029,9 +19029,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.9,
+              "stickOutMm": 0.84,
+              "edge": "right"
             },
             "riseMm": {
               "bottom": 0.226,
@@ -19051,7 +19051,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.394,
-            "label": "setback 0.553 mm, missing 0.764 mm²",
+            "label": "missing 0.764 mm², setback 0.553 mm",
             "radiusMm": null,
             "setbackMm": 0.553,
             "missingMm2": 0.764,
@@ -19076,8 +19076,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.9,
+            "stickOutMm": 0.84,
             "approved": false
           },
           "up": {
@@ -19112,9 +19112,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.66,
+              "edge": "left"
             },
             "riseMm": {
               "top": 0.318,
@@ -19156,9 +19156,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.9,
+              "stickOutMm": 0.84,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.226,
@@ -19178,7 +19178,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.398,
-            "label": "setback 0.351 mm, missing 0.880 mm²",
+            "label": "missing 0.880 mm², setback 0.351 mm",
             "radiusMm": null,
             "setbackMm": 0.351,
             "missingMm2": 0.88,
@@ -19203,8 +19203,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.9,
+            "stickOutMm": 0.84,
             "approved": false
           },
           "up": {
@@ -19239,9 +19239,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.3,
+              "stickOutMm": 0.82,
+              "edge": "top"
             },
             "riseMm": {
               "top": 0.318,
@@ -19283,9 +19283,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.5,
+              "stickOutMm": 0.84,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.188,
@@ -19305,7 +19305,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.469,
-            "label": "setback 0.369 mm, missing 0.546 mm²",
+            "label": "missing 0.546 mm², setback 0.369 mm",
             "radiusMm": null,
             "setbackMm": 0.369,
             "missingMm2": 0.546,
@@ -19330,8 +19330,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.2,
+            "stickOutMm": 0.58,
             "approved": false
           },
           "up": {
@@ -19366,9 +19366,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.58,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.469,
@@ -19410,9 +19410,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.4,
+              "stickOutMm": 0.84,
+              "edge": "left"
             },
             "riseMm": {
               "top": 0.188,
@@ -19432,7 +19432,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.469,
-            "label": "setback 0.499 mm, missing 0.501 mm²",
+            "label": "missing 0.501 mm², setback 0.499 mm",
             "radiusMm": null,
             "setbackMm": 0.499,
             "missingMm2": 0.501,
@@ -20191,7 +20191,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.167,
-            "label": "setback 0.371 mm, missing 0.256 mm²",
+            "label": "missing 0.256 mm², setback 0.371 mm",
             "radiusMm": null,
             "setbackMm": 0.371,
             "missingMm2": 0.256,
@@ -20296,9 +20296,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.62,
+              "edge": "left"
             },
             "riseMm": {
               "bottom": 0.167,
@@ -20318,7 +20318,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.186,
-            "label": "setback -0.339 mm, missing 0.421 mm²",
+            "label": "missing 0.421 mm², setback -0.339 mm",
             "radiusMm": null,
             "setbackMm": -0.339,
             "missingMm2": 0.421,
@@ -20343,8 +20343,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.2,
+            "stickOutMm": 0.62,
             "approved": false
           },
           "up": {
@@ -20379,9 +20379,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 1.4,
+              "stickOutMm": 0.84,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.345,
@@ -20423,9 +20423,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.3,
+              "stickOutMm": 0.84,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.145,
@@ -20445,7 +20445,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.471,
-            "label": "setback 0.238 mm, missing 0.594 mm²",
+            "label": "missing 0.594 mm², setback 0.238 mm",
             "radiusMm": null,
             "setbackMm": 0.238,
             "missingMm2": 0.594,
@@ -20470,8 +20470,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0.3,
-            "stickOutMm": 0.163,
+            "lengthMm": 0.4,
+            "stickOutMm": 0.78,
             "approved": false
           },
           "up": {
@@ -20506,8 +20506,8 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0.3,
-              "stickOutMm": 0.163,
+              "lengthMm": 0.4,
+              "stickOutMm": 0.78,
               "edge": "left"
             },
             "riseMm": {
@@ -20572,7 +20572,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.471,
-            "label": "setback 0.687 mm, missing 0.290 mm²",
+            "label": "missing 0.290 mm², setback 0.687 mm",
             "radiusMm": null,
             "setbackMm": 0.687,
             "missingMm2": 0.29,
@@ -21331,7 +21331,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.2,
-            "label": "setback 0.341 mm, missing 0.245 mm²",
+            "label": "missing 0.245 mm², setback 0.341 mm",
             "radiusMm": null,
             "setbackMm": 0.341,
             "missingMm2": 0.245,
@@ -21392,9 +21392,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.35,
+              "stickOutMm": 0.58,
+              "edge": "left"
             },
             "riseMm": {
               "top": 0.459,
@@ -21563,9 +21563,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.58,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.201,
@@ -21879,9 +21879,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 1.5,
+              "stickOutMm": 0.84,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.093,
@@ -21901,7 +21901,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.128,
-            "label": "setback 0.645 mm, missing 1.209 mm²",
+            "label": "missing 1.209 mm², setback 0.645 mm",
             "radiusMm": null,
             "setbackMm": 0.645,
             "missingMm2": 1.209,
@@ -21926,8 +21926,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 1.5,
+            "stickOutMm": 0.84,
             "approved": false
           },
           "up": {
@@ -21962,9 +21962,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.5,
+              "stickOutMm": 0.78,
+              "edge": "left"
             },
             "riseMm": {
               "top": 0.309,
@@ -22006,9 +22006,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.8,
+              "stickOutMm": 0.64,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.093,
@@ -22028,7 +22028,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.142,
-            "label": "setback 0.440 mm, missing 0.844 mm²",
+            "label": "missing 0.844 mm², setback 0.440 mm",
             "radiusMm": null,
             "setbackMm": 0.44,
             "missingMm2": 0.844,
@@ -22053,8 +22053,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.8,
+            "stickOutMm": 0.64,
             "approved": false
           },
           "up": {
@@ -22089,9 +22089,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.48,
+              "edge": "top"
             },
             "riseMm": {
               "top": 0.309,
@@ -22133,9 +22133,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.28,
+              "edge": "right"
             },
             "riseMm": {
               "top": 0.249,
@@ -22155,7 +22155,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.293,
-            "label": "setback 0.730 mm, missing 0.924 mm²",
+            "label": "missing 0.924 mm², setback 0.730 mm",
             "radiusMm": null,
             "setbackMm": 0.73,
             "missingMm2": 0.924,
@@ -22180,8 +22180,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.8,
+            "stickOutMm": 0.52,
             "approved": false
           },
           "up": {
@@ -22216,9 +22216,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.8,
+              "stickOutMm": 0.52,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.136,
@@ -22260,9 +22260,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.2,
+              "stickOutMm": 0.32,
+              "edge": "left"
             },
             "riseMm": {
               "top": 0.249,
@@ -22282,7 +22282,7 @@
             "reason": null,
             "sharp": false,
             "limitMm": 0.313,
-            "label": "setback 0.543 mm, missing 0.537 mm²",
+            "label": "missing 0.537 mm², setback 0.543 mm",
             "radiusMm": null,
             "setbackMm": 0.543,
             "missingMm2": 0.537,
@@ -22307,8 +22307,8 @@
           "fray": {
             "withheld": false,
             "reason": null,
-            "lengthMm": 0,
-            "stickOutMm": 0,
+            "lengthMm": 0.25,
+            "stickOutMm": 0.42,
             "approved": false
           },
           "up": {
@@ -22343,9 +22343,9 @@
             "fray": {
               "withheld": false,
               "reason": null,
-              "lengthMm": 0,
-              "stickOutMm": 0,
-              "edge": null
+              "lengthMm": 0.25,
+              "stickOutMm": 0.42,
+              "edge": "bottom"
             },
             "riseMm": {
               "bottom": 0.136,

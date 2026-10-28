@@ -86,6 +86,10 @@ function paint(w, h, rect, opts) {
         ink = card;
         t = 1;
       }
+      if (opts.halo && inHalo(x, y, rect, opts.halo)) {
+        ink = opts.halo.color;
+        t = 1;
+      }
       if (opts.pale && inPale(x, y, rect, opts.pale) && t > 0.8) ink = opts.pale.color;
       const i = (y * w + x) * 3;
       data[i] = paper[0] * (1 - t) + ink[0] * t;
@@ -117,6 +121,12 @@ function inFray(x, y, rect, fray) {
   const y0 = rect.top - fray.stickMm * PPM;
   const y1 = rect.top - 0.06 * PPM;
   return x >= x0 && x <= x1 && y >= y0 && y <= y1;
+}
+
+function inHalo(x, y, rect, halo) {
+  const along = (x - rect.left) / PPM;
+  const out = (rect.top - y) / PPM;
+  return along >= halo.t0 && along <= halo.t1 && out >= halo.out0 && out <= halo.out1;
 }
 
 function inPale(x, y, rect, pale) {
@@ -379,6 +389,56 @@ function run() {
     clearFray.corners.tl.fray
   );
 
+  const halo = paint(w, h, rect, {
+    radiusMm: 0,
+    riseMm: 0.08,
+    card: [36, 64, 140],
+    halo: { t0: 0.15, t1: 0.7, out0: 0.02, out1: 0.42, color: [242, 210, 200] }
+  });
+  const turnedHalo = rotate180(halo, w, h, geom);
+  const haloReading = corners.measureRaster({
+    data: turnedHalo.data,
+    width: w,
+    height: h,
+    dpi: DPI,
+    paper: paperColor(),
+    sizeOk: true,
+    corners: turnedHalo.corners,
+    edges: turnedHalo.edges
+  });
+  const paleFray = corners.pairReadings(cleanReading, haloReading, null);
+  check(
+    'a pale fiber past the rise publishes length',
+    paleFray.corners.tl.fray.withheld === false &&
+      paleFray.corners.tl.fray.lengthMm >= 0.2 &&
+      paleFray.corners.tl.fray.lengthMm <= 0.8 &&
+      paleFray.corners.tl.fray.stickOutMm >= 0.2,
+    paleFray.corners.tl.fray
+  );
+  const speck = paint(w, h, rect, {
+    radiusMm: 0,
+    riseMm: 0.08,
+    card: [36, 64, 140],
+    halo: { t0: 0.4, t1: 0.48, out0: 0.02, out1: 0.42, color: [242, 210, 200] }
+  });
+  const turnedSpeck = rotate180(speck, w, h, geom);
+  const speckReading = corners.measureRaster({
+    data: turnedSpeck.data,
+    width: w,
+    height: h,
+    dpi: DPI,
+    paper: paperColor(),
+    sizeOk: true,
+    corners: turnedSpeck.corners,
+    edges: turnedSpeck.edges
+  });
+  const speckPaired = corners.pairReadings(cleanReading, speckReading, null);
+  check(
+    'a pale speck shorter than the control floor stays 0',
+    speckPaired.corners.tl.fray.lengthMm === 0,
+    speckPaired.corners.tl.fray
+  );
+
   const chamfer = paint(w, h, rect, { radiusMm: 0, riseMm: 0.08, card: [36, 64, 140], chamferMm: 0.9 });
   const chamferUp = corners.measureRaster({
     data: sharp,
@@ -404,15 +464,15 @@ function run() {
   const chip = corners.pairReadings(chamferUp, chamferDown, null);
   const chipTl = chip.corners.tl.rounding;
   check(
-    'a chamfer publishes setback and missing area',
+    'a chamfer publishes missing area ahead of setback',
     chip.corners.tl.pickedFrom === '180-image-bottom' &&
       chipTl.withheld === false &&
       chipTl.radiusMm == null &&
       chipTl.sharp === false &&
       chipTl.setbackMm > 0.4 && chipTl.setbackMm < 0.9 &&
       chipTl.missingMm2 >= 0.2 &&
-      chipTl.label.indexOf('setback ') === 0 &&
-      chipTl.label.indexOf('missing ') > 0,
+      chipTl.label.indexOf('missing ') === 0 &&
+      chipTl.label.indexOf('setback ') > 0,
     chipTl
   );
   check(
@@ -473,6 +533,7 @@ function run() {
       doc.definition.indexOf('TD-14 through TD-21 are an unapproved worn and control review') >= 0 &&
       doc.definition.indexOf('faces image-bottom') >= 0 &&
       doc.definition.indexOf('area of card missing') >= 0 &&
+      doc.definition.indexOf('past the scanner rise') >= 0 &&
       doc.wornSet['TD-18'].role === 'control' &&
       doc.wornSet['TD-21'].role === 'control' &&
       doc.wornSet['TD-14'].role === 'worn' &&
