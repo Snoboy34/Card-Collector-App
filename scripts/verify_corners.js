@@ -77,6 +77,11 @@ function paint(w, h, rect, opts) {
         if (inside < borderMm * PPM) ink = border;
       }
       if (opts.notch && inNotch(x, y, rect, opts.notch)) t = 0;
+      if (opts.chamferMm) {
+        const dx = (x - rect.left) / PPM;
+        const dy = (y - rect.top) / PPM;
+        if (dx >= 0 && dy >= 0 && dx + dy < opts.chamferMm) t = 0;
+      }
       if (opts.fray && inFray(x, y, rect, opts.fray)) {
         ink = card;
         t = 1;
@@ -336,11 +341,86 @@ function run() {
     corners: geom.corners,
     edges: geom.edges
   });
-  const dust = corners.pairReadings(upOnly, cleanReading, null);
+  const downClean = corners.measureRaster({
+    data: rotate180(clean, w, h, geom).data,
+    width: w,
+    height: h,
+    dpi: DPI,
+    paper: paperColor(),
+    sizeOk: true,
+    corners: rotate180(clean, w, h, geom).corners,
+    edges: rotate180(clean, w, h, geom).edges
+  });
+  const hingeOnly = corners.pairReadings(upOnly, downClean, null);
   check(
-    'a fiber on only one orientation is withheld',
-    dust.corners.tl.fray.withheld && dust.corners.tl.fray.reason === 'orientation-disagreement' && dust.corners.tl.fray.lengthMm == null,
-    dust.corners.tl.fray
+    'a fiber on the hinge side is not the published fray',
+    hingeOnly.corners.tl.pickedFrom === '180-image-bottom' &&
+      hingeOnly.corners.tl.fray.withheld === false &&
+      hingeOnly.corners.tl.fray.lengthMm === 0,
+    hingeOnly.corners.tl.fray
+  );
+  const turnedFray = rotate180(frayed, w, h, geom);
+  const clearFrayReading = corners.measureRaster({
+    data: turnedFray.data,
+    width: w,
+    height: h,
+    dpi: DPI,
+    paper: paperColor(),
+    sizeOk: true,
+    corners: turnedFray.corners,
+    edges: turnedFray.edges
+  });
+  const clearFray = corners.pairReadings(cleanReading, clearFrayReading, null);
+  check(
+    'a fiber on the clear scan publishes',
+    clearFray.corners.tl.fray.withheld === false &&
+      clearFray.corners.tl.fray.lengthMm >= 0.3 &&
+      clearFray.corners.tl.fray.lengthMm <= 0.9,
+    clearFray.corners.tl.fray
+  );
+
+  const chamfer = paint(w, h, rect, { radiusMm: 0, riseMm: 0.08, card: [36, 64, 140], chamferMm: 0.9 });
+  const chamferUp = corners.measureRaster({
+    data: sharp,
+    width: w,
+    height: h,
+    dpi: DPI,
+    paper: paperColor(),
+    sizeOk: true,
+    corners: geom.corners,
+    edges: geom.edges
+  });
+  const turnedChip = rotate180(chamfer, w, h, geom);
+  const chamferDown = corners.measureRaster({
+    data: turnedChip.data,
+    width: w,
+    height: h,
+    dpi: DPI,
+    paper: paperColor(),
+    sizeOk: true,
+    corners: turnedChip.corners,
+    edges: turnedChip.edges
+  });
+  const chip = corners.pairReadings(chamferUp, chamferDown, null);
+  const chipTl = chip.corners.tl.rounding;
+  check(
+    'a chamfer publishes setback and missing area',
+    chip.corners.tl.pickedFrom === '180-image-bottom' &&
+      chipTl.withheld === false &&
+      chipTl.radiusMm == null &&
+      chipTl.sharp === false &&
+      chipTl.setbackMm > 0.4 && chipTl.setbackMm < 0.9 &&
+      chipTl.missingMm2 >= 0.2 &&
+      chipTl.label.indexOf('setback ') === 0 &&
+      chipTl.label.indexOf('missing ') > 0,
+    chipTl
+  );
+  check(
+    'the clear bottom corner stays sharp when the hinge side is chipped',
+    chip.corners.bl.pickedFrom === 'up-image-bottom' &&
+      chip.corners.bl.rounding.sharp === true &&
+      chip.corners.bl.rounding.radiusMm == null,
+    chip.corners.bl.rounding
   );
 
   const blocked = corners.pairReadings(
@@ -391,6 +471,8 @@ function run() {
     doc.pendingScans.worn.length === 0 &&
       !doc.pendingScans.backs &&
       doc.definition.indexOf('TD-14 through TD-21 are an unapproved worn and control review') >= 0 &&
+      doc.definition.indexOf('faces image-bottom') >= 0 &&
+      doc.definition.indexOf('area of card missing') >= 0 &&
       doc.wornSet['TD-18'].role === 'control' &&
       doc.wornSet['TD-21'].role === 'control' &&
       doc.wornSet['TD-14'].role === 'worn' &&

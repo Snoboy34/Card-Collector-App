@@ -136,28 +136,39 @@ function fmt(value) {
 }
 
 function roundingPhrase(rounding) {
-  if (rounding && rounding.label) return rounding.label;
-  if (rounding && rounding.reason) return rounding.reason;
-  if (rounding && rounding.radiusMm != null) return 'radius ' + fmt(rounding.radiusMm) + ' mm';
+  if (!rounding) return 'no reading';
+  if (rounding.label) return rounding.label;
+  const worn = rounding.setbackMm != null && rounding.missingMm2 != null &&
+    (rounding.reason === 'not-an-arc' || (rounding.reason === 'unclear' && rounding.missingMm2 >= 0.2));
+  if (worn) return 'setback ' + fmt(rounding.setbackMm) + ' mm, missing ' + fmt(rounding.missingMm2) + ' mm²';
+  if (rounding.reason) return rounding.reason;
+  if (rounding.radiusMm != null) return 'radius ' + fmt(rounding.radiusMm) + ' mm';
   return 'no reading';
 }
 
-function captionLines(tag, corner) {
+function captionLines(tag, corner, publishes) {
   const rounding = corner && corner.rounding ? corner.rounding : {};
   const rise = corner && corner.riseMm ? corner.riseMm : {};
   const riseText = Object.keys(rise).map(function (name) {
     return name + ' ' + fmt(rise[name]);
   }).join('  ');
+  const white = corner && corner.whitening ? corner.whitening : {};
+  const fray = corner && corner.fray ? corner.fray : {};
+  const whiteText = white.label === 'not applicable'
+    ? 'whitening not applicable'
+    : (white.withheld ? 'whitening ' + (white.reason || 'withheld') : 'whitening ' + fmt(white.areaMm2) + ' mm²');
+  const frayText = fray.withheld ? 'fray ' + (fray.reason || 'withheld') : 'fray ' + fmt(fray.lengthMm) + ' mm';
   return [
-    tag,
+    tag + (publishes ? ' · publishes' : ''),
     'setback ' + fmt(rounding.setbackMm) + ' mm' + (riseText ? '   rise ' + riseText : ''),
-    roundingPhrase(rounding)
+    roundingPhrase(rounding),
+    whiteText + '    ' + frayText
   ];
 }
 
 async function blankCrop(lines) {
-  const svg = '<svg width="360" height="432" xmlns="http://www.w3.org/2000/svg">' +
-    '<rect width="360" height="432" fill="#1b1b1b"/>' +
+  const svg = '<svg width="360" height="448" xmlns="http://www.w3.org/2000/svg">' +
+    '<rect width="360" height="448" fill="#1b1b1b"/>' +
     '<text x="16" y="180" fill="#ffffff" font-family="sans-serif" font-size="18">' + esc(lines[0]) + '</text>' +
     '<text x="16" y="210" fill="#f0c674" font-family="sans-serif" font-size="16">' + esc(lines[2] || lines[1]) + '</text>' +
     '</svg>';
@@ -209,14 +220,15 @@ async function annotatedCrop(file, corner, ppm, lines) {
   const photo = await sharp(file).rotate().extract({ left: left, top: top, width: width, height: height })
     .resize(out, out).jpeg({ quality: 78 }).toBuffer();
   const drawn = await sharp(photo).composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).jpeg({ quality: 78 }).toBuffer();
-  const cap = '<svg width="360" height="72" xmlns="http://www.w3.org/2000/svg">' +
-    '<rect width="360" height="72" fill="#161616"/>' +
-    '<text x="8" y="22" fill="#ffffff" font-family="sans-serif" font-size="16">' + esc(lines[0]) + '</text>' +
-    '<text x="8" y="44" fill="#d5d5d5" font-family="sans-serif" font-size="13">' + esc(lines[1]) + '</text>' +
-    '<text x="8" y="64" fill="#f0c674" font-family="sans-serif" font-size="12">' + esc(lines[2]) + '</text>' +
+  const cap = '<svg width="360" height="88" xmlns="http://www.w3.org/2000/svg">' +
+    '<rect width="360" height="88" fill="#161616"/>' +
+    '<text x="8" y="18" fill="#ffffff" font-family="sans-serif" font-size="15">' + esc(lines[0]) + '</text>' +
+    '<text x="8" y="36" fill="#d5d5d5" font-family="sans-serif" font-size="12">' + esc(lines[1]) + '</text>' +
+    '<text x="8" y="54" fill="#f0c674" font-family="sans-serif" font-size="12">' + esc(lines[2]) + '</text>' +
+    '<text x="8" y="74" fill="#d5d5d5" font-family="sans-serif" font-size="12">' + esc(lines[3] || '') + '</text>' +
     '</svg>';
   return sharp({
-    create: { width: 360, height: 432, channels: 3, background: { r: 22, g: 22, b: 22 } }
+    create: { width: 360, height: 448, channels: 3, background: { r: 22, g: 22, b: 22 } }
   }).composite([
     { input: drawn, top: 0, left: 0 },
     { input: Buffer.from(cap), top: 360, left: 0 }
@@ -277,17 +289,17 @@ async function writeSheet(dest, cardId, up, down, paired, note) {
       up && up.path,
       upCorner,
       up && up.reading.ppm,
-      captionLines(LABELS[name] + ' · up', upCorner)
+      captionLines(LABELS[name] + ' · up', upCorner, name === 'bl' || name === 'br')
     );
     const downCrop = await annotatedCrop(
       down && down.path,
       downCorner,
       down && down.reading.ppm,
-      captionLines(LABELS[name] + ' · 180', downCorner)
+      captionLines(LABELS[name] + ' · 180', downCorner, name === 'tl' || name === 'tr')
     );
     composites.push({ input: upCrop, top: y, left: 24 });
     composites.push({ input: downCrop, top: y, left: 396 });
-    y += 444;
+    y += 460;
   }
   const height = y + 16;
   await sharp({
@@ -386,6 +398,7 @@ function publicCard(up, down, paired) {
       approved: false,
       adjacent: corner.adjacent,
       centeringSideWithheld: corner.centeringSideWithheld,
+      pickedFrom: corner.pickedFrom,
       rounding: corner.rounding,
       whitening: corner.whitening,
       ding: corner.ding,

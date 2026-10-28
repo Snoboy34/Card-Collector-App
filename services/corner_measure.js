@@ -10,9 +10,12 @@
  * is paper showing against the same border at mid-edge. A ding is a local
  * notch in the cut. Fraying is card-colored fiber outside the cut.
  *
- * A single scan does not publish. pairReadings() keeps a result only when
- * the upright scan and the 180° scan agree. A setback inside the scanner
- * limit is the result "sharp", with that limit stated. Radius 0 is never published.
+ * The hinge is image-top. pairReadings() publishes the scan in which that
+ * corner faces image-bottom (rule 2026.10.13-shadow-free-v1). A setback
+ * inside the scanner limit, with little card missing, is the result "sharp",
+ * with that limit stated. A corner that is not a clean arc publishes the
+ * setback from the ideal corner and the area of card missing. Radius 0 is
+ * never published.
  */
 'use strict';
 
@@ -93,9 +96,12 @@ const BGS_REFERENCE = {
 };
 
 const PAIR_MM = 0.1;
-const FRAY_PAIR_MM = 0.3;
 const FRAY_MIN_MM = 0.3;
 const DING_MIN_MM = 0.15;
+// A square corner's rise does not remove this much card. Past it, the
+// corner is wear even when the bisector setback sits inside a widened rise.
+const MISSING_WEAR_MM2 = 0.2;
+const CLEAR_CORNER = { tl: '180', tr: '180', bl: 'up', br: 'up' };
 const WHITE_LUMA = 230;
 const PAPER_CLOSE = 25;
 const GREY_SEP = 18;
@@ -105,13 +111,13 @@ const STATION_MM = 0.05;
 
 const DEFINITION = [
   'A corner is the cut, where two card edges meet. It is not the printed frame.',
-  'Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm, and the upright and 180° scans must agree within 0.1 mm. A setback inside the scanner limit is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published.',
-  'Whitening is paper showing against the same border at mid-edge. Whitening on a border that is already paper-white is not applicable. A pale patch that is foil glare is withheld.',
-  'A ding is a local notch in the cut. It is withheld when only one orientation shows it.',
-  'Fraying is card-colored fiber outside the fitted cut. It is withheld when it does not rotate with the card. Length 0 is published only when both orientations are clean.',
+  'Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm. The hinge is image-top. A corner is read from the scan in which that corner faces image-bottom, rule 2026.10.13-shadow-free-v1. Top corners come from the 180 scan. Bottom corners come from the upright scan. The other scan stays on the sheet. A setback inside the scanner limit, with missing area under 0.20 mm², is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published. A corner that is not a clean arc publishes the setback from the ideal corner point and the area of card missing. It does not publish a radius.',
+  'Whitening is paper showing against the same border at mid-edge, read on the same clear scan as the corner. Whitening on a border that is already paper-white is not applicable. A pale patch that is foil glare is withheld.',
+  'A ding is a local notch in the cut. It is read on the same clear scan as the corner.',
+  'Fraying is fiber outside the fitted cut. It is read on the same clear scan as the corner. Length 0 means that scan shows no run of fiber at least 0.3 mm long.',
   'A side the centering key has withheld does not grow a corner grade.',
   'TD-12 is excluded. TD-14 through TD-21 are an unapproved worn and control review. TD-18 and TD-21 are the clean controls. Flatbed backs of TD-01 through TD-11 and Karros are a separate unapproved corner review. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9.',
-  'A disagreement between the two orientations, a quad that is not card-sized, or an unclear step stays withheld.',
+  'A quad that is not card-sized, or an unclear step with no missing card, stays withheld.',
   'Unapproved until the owner checks the overlay. No 0–10 corner score is assigned. This review does not change grading.'
 ].join(' ');
 
@@ -369,6 +375,43 @@ function lineShiftAlongBisector(nA, nB, bisector, offA, offB) {
   const a = (offA - d * offB) / det;
   const b = (offB - d * offA) / det;
   return (a * nA.x + b * nB.x) * bisector.x + (a * nA.y + b * nB.y) * bisector.y;
+}
+
+function integrateGap(points) {
+  let acc = 0;
+  for (let i = 1; i < points.length; i++) {
+    const g0 = Math.max(0, points[i - 1].corrected || 0);
+    const g1 = Math.max(0, points[i].corrected || 0);
+    acc += 0.5 * (g0 + g1) * (points[i].t - points[i - 1].t);
+  }
+  return acc;
+}
+
+function outwardFray(points) {
+  let best = null;
+  let runStart = null;
+  let runStick = 0;
+  function close(endT) {
+    if (runStart == null) return;
+    const length = endT - runStart;
+    if (length + 1e-6 >= FRAY_MIN_MM && (!best || length > best.lengthMm)) {
+      best = { lengthMm: length, stickOutMm: runStick };
+    }
+    runStart = null;
+    runStick = 0;
+  }
+  for (let i = 0; i < points.length; i++) {
+    const out = -(points[i].corrected || 0);
+    if (out >= 0.08) {
+      if (runStart == null) runStart = points[i].t;
+      if (out > runStick) runStick = out;
+    } else if (runStart != null) {
+      const prev = points[i - 1];
+      close(prev.t + (points[i].t - prev.t));
+    }
+  }
+  if (runStart != null && points.length) close(points[points.length - 1].t + STATION_MM);
+  return best || { lengthMm: 0, stickOutMm: 0 };
 }
 
 function localDing(points, tip, u, n, bisector, alpha, ppm, radiusMm) {
@@ -669,13 +712,15 @@ function measureCorner(ctx, name) {
   const sinA = Math.sin(alpha);
   const denom = (1 / sinA) - 1;
   const rSet = setback == null ? null : setback / denom;
+  const missingMm2 = roundMm(integrateGap(silA) + integrateGap(silB));
+  const wear = missingMm2 != null && missingMm2 >= MISSING_WEAR_MM2;
   let roundingReason = null;
   let sharp = false;
   let fit = null;
   const withinLimit = setback != null && setback <= riseGate && setback >= -riseGate;
   if (setback == null) roundingReason = 'weak-edge';
-  else if (setback < -riseGate) roundingReason = 'unclear';
-  else if (withinLimit) sharp = true;
+  else if (setback < -riseGate && !wear) roundingReason = 'unclear';
+  else if (withinLimit && !wear) sharp = true;
   else {
     fit = fitRadius(
       [
@@ -699,14 +744,22 @@ function measureCorner(ctx, name) {
   }
   const frayA = frayOnEdge(ctx, tip, uA, nA, riseA.insideRgb);
   const frayB = frayOnEdge(ctx, tip, uB, nB, riseB.insideRgb);
-  const fray = frayA.lengthMm >= frayB.lengthMm ? frayA : frayB;
-  const fraySide = frayA.lengthMm >= frayB.lengthMm ? sides[0] : sides[1];
+  const outA = outwardFray(silA);
+  const outB = outwardFray(silB);
+  let fray = frayA;
+  let fraySide = sides[0];
+  [[frayB, sides[1]], [outA, sides[0]], [outB, sides[1]]].forEach(function (pair) {
+    if (pair[0].lengthMm > fray.lengthMm) {
+      fray = pair[0];
+      fraySide = pair[1];
+    }
+  });
   const white = whitening(
     ctx,
     tip,
     [
-      { u: uA, n: nA, lengthMm: edgeLengthMm(edgeA, ctx.ppm) },
-      { u: uB, n: nB, lengthMm: edgeLengthMm(edgeB, ctx.ppm) }
+      { u: uA, n: nA, lengthMm: edgeLengthMm(edgeA, ctx.ppm), riseMm: riseA.riseMm },
+      { u: uB, n: nB, lengthMm: edgeLengthMm(edgeB, ctx.ppm), riseMm: riseB.riseMm }
     ],
     luma(ctx.paper)
   );
@@ -730,6 +783,7 @@ function measureCorner(ctx, name) {
       limitMm: limitMm,
       label: sharpLabel(limitMm),
       setbackMm: roundMm(setback),
+      missingMm2: missingMm2,
       radiusFromSetbackMm: null,
       radiusFitMm: null,
       residualMm: null,
@@ -741,6 +795,7 @@ function measureCorner(ctx, name) {
       limitMm: limitMm,
       label: null,
       setbackMm: roundMm(setback),
+      missingMm2: missingMm2,
       radiusFromSetbackMm: roundingReason === 'weak-edge' || roundingReason === 'unclear' ? null : roundMm(rSet),
       radiusFitMm: roundMm(radiusFit),
       residualMm: fit ? roundMm(fit.residualMm) : null,
@@ -821,16 +876,6 @@ function measureRaster(opts) {
   };
 }
 
-function numsAgree(a, b, tol) {
-  if (a == null || b == null || !isFinite(a) || !isFinite(b)) return false;
-  return Math.abs(a - b) <= tol;
-}
-
-function meanOrNull(a, b) {
-  if (a == null || b == null) return null;
-  return roundMm((a + b) / 2);
-}
-
 function withheldRounding(reason) {
   return {
     withheld: true,
@@ -840,15 +885,20 @@ function withheldRounding(reason) {
     label: null,
     radiusMm: null,
     setbackMm: null,
+    missingMm2: null,
     residualMm: null,
     approved: false
   };
 }
 
-function pairRounding(a, b) {
-  if (!a || !b) return withheldRounding('needs-both-orientations');
-  if (a.sharp && b.sharp && !a.withheld && !b.withheld) {
-    const limitMm = roundMm(Math.max(a.limitMm, b.limitMm));
+function wearLabel(setbackMm, missingMm2) {
+  return 'setback ' + setbackMm.toFixed(3) + ' mm, missing ' + missingMm2.toFixed(3) + ' mm²';
+}
+
+function publishRounding(scan) {
+  if (!scan) return withheldRounding('needs-both-orientations');
+  if (scan.sharp && !scan.withheld) {
+    const limitMm = roundMm(scan.limitMm);
     return {
       withheld: false,
       reason: null,
@@ -857,96 +907,76 @@ function pairRounding(a, b) {
       label: sharpLabel(limitMm),
       radiusMm: null,
       setbackMm: null,
+      missingMm2: null,
       residualMm: null,
       approved: false
     };
   }
-  if (a.withheld || b.withheld || a.sharp || b.sharp) {
-    const reason = a.withheld && b.withheld && a.reason === b.reason ? a.reason : 'orientation-disagreement';
-    return withheldRounding(reason);
-  }
-  if (!numsAgree(a.radiusMm, b.radiusMm, PAIR_MM) || !numsAgree(a.setbackMm, b.setbackMm, PAIR_MM)) {
-    return withheldRounding('orientation-disagreement');
-  }
-  return {
-    withheld: false,
-    reason: null,
-    sharp: false,
-    limitMm: null,
-    label: null,
-    radiusMm: meanOrNull(a.radiusMm, b.radiusMm),
-    setbackMm: meanOrNull(a.setbackMm, b.setbackMm),
-    residualMm: meanOrNull(a.residualMm, b.residualMm),
-    approved: false
-  };
-}
-
-function pairWhitening(a, b) {
-  if (!a || !b) return { withheld: true, reason: 'needs-both-orientations', lengthMm: null, areaMm2: null, approved: false };
-  if (a.withheld || b.withheld) {
-    const reason = a.withheld && b.withheld && a.reason === b.reason ? a.reason : 'orientation-disagreement';
+  if (!scan.withheld && scan.radiusMm != null) {
     return {
-      withheld: true,
-      reason: reason,
-      label: reason === 'white-border' ? 'not applicable' : null,
-      lengthMm: null,
-      areaMm2: null,
+      withheld: false,
+      reason: null,
+      sharp: false,
+      limitMm: scan.limitMm,
+      label: null,
+      radiusMm: scan.radiusMm,
+      setbackMm: scan.setbackMm,
+      missingMm2: scan.missingMm2,
+      residualMm: scan.residualMm,
       approved: false
     };
   }
-  const areaTol = Math.max(0.08, 0.5 * Math.abs((a.areaMm2 + b.areaMm2) / 2));
-  if (!numsAgree(a.lengthMm, b.lengthMm, PAIR_MM) || !numsAgree(a.areaMm2, b.areaMm2, areaTol)) {
-    return { withheld: true, reason: 'orientation-disagreement', lengthMm: null, areaMm2: null, approved: false };
+  const worn = scan.setbackMm != null && scan.missingMm2 != null &&
+    (scan.reason === 'not-an-arc' || (scan.reason === 'unclear' && scan.missingMm2 >= MISSING_WEAR_MM2));
+  if (worn) {
+    return {
+      withheld: false,
+      reason: null,
+      sharp: false,
+      limitMm: scan.limitMm,
+      label: wearLabel(scan.setbackMm, scan.missingMm2),
+      radiusMm: null,
+      setbackMm: scan.setbackMm,
+      missingMm2: scan.missingMm2,
+      residualMm: null,
+      approved: false
+    };
   }
+  return withheldRounding(scan.reason || 'unclear');
+}
+
+function publishWhitening(scan) {
+  if (!scan) return { withheld: true, reason: 'needs-both-orientations', lengthMm: null, areaMm2: null, label: null, approved: false };
   return {
-    withheld: false,
-    reason: null,
-    lengthMm: meanOrNull(a.lengthMm, b.lengthMm),
-    areaMm2: meanOrNull(a.areaMm2, b.areaMm2),
+    withheld: !!scan.withheld,
+    reason: scan.withheld ? (scan.reason || 'unclear') : null,
+    label: scan.label || null,
+    lengthMm: scan.withheld ? null : scan.lengthMm,
+    areaMm2: scan.withheld ? null : scan.areaMm2,
     approved: false
   };
 }
 
-function pairDing(a, b) {
-  if (!a || !b) return { withheld: true, reason: 'needs-both-orientations', depthMm: null, fromTipMm: null, approved: false };
-  if (a.withheld || b.withheld) {
-    return { withheld: true, reason: 'orientation-disagreement', depthMm: null, fromTipMm: null, approved: false };
-  }
-  const aNone = !(a.depthMm > 0);
-  const bNone = !(b.depthMm > 0);
-  if (aNone && bNone) {
-    return { withheld: false, reason: null, depthMm: 0, fromTipMm: null, approved: false };
-  }
-  if (aNone || bNone || !numsAgree(a.depthMm, b.depthMm, PAIR_MM) || !numsAgree(a.fromTipMm, b.fromTipMm, FRAY_PAIR_MM)) {
-    return { withheld: true, reason: 'orientation-disagreement', depthMm: null, fromTipMm: null, approved: false };
-  }
+function publishDing(scan) {
+  if (!scan) return { withheld: true, reason: 'needs-both-orientations', depthMm: null, fromTipMm: null, approved: false };
+  if (scan.withheld) return { withheld: true, reason: scan.reason || 'unclear', depthMm: null, fromTipMm: null, approved: false };
   return {
     withheld: false,
     reason: null,
-    depthMm: meanOrNull(a.depthMm, b.depthMm),
-    fromTipMm: meanOrNull(a.fromTipMm, b.fromTipMm),
+    depthMm: scan.depthMm,
+    fromTipMm: scan.fromTipMm,
     approved: false
   };
 }
 
-function pairFray(a, b) {
-  if (!a || !b) return { withheld: true, reason: 'needs-both-orientations', lengthMm: null, stickOutMm: null, approved: false };
-  if (a.withheld || b.withheld) {
-    return { withheld: true, reason: 'orientation-disagreement', lengthMm: null, stickOutMm: null, approved: false };
-  }
-  const aNone = !(a.lengthMm > 0);
-  const bNone = !(b.lengthMm > 0);
-  if (aNone && bNone) {
-    return { withheld: false, reason: null, lengthMm: 0, stickOutMm: 0, approved: false };
-  }
-  if (aNone || bNone || !numsAgree(a.lengthMm, b.lengthMm, FRAY_PAIR_MM) || !numsAgree(a.stickOutMm, b.stickOutMm, FRAY_PAIR_MM)) {
-    return { withheld: true, reason: 'orientation-disagreement', lengthMm: null, stickOutMm: null, approved: false };
-  }
+function publishFray(scan) {
+  if (!scan) return { withheld: true, reason: 'needs-both-orientations', lengthMm: null, stickOutMm: null, approved: false };
+  if (scan.withheld) return { withheld: true, reason: scan.reason || 'unclear', lengthMm: null, stickOutMm: null, approved: false };
   return {
     withheld: false,
     reason: null,
-    lengthMm: meanOrNull(a.lengthMm, b.lengthMm),
-    stickOutMm: meanOrNull(a.stickOutMm, b.stickOutMm),
+    lengthMm: scan.lengthMm,
+    stickOutMm: scan.stickOutMm,
     approved: false
   };
 }
@@ -1007,6 +1037,8 @@ function pairReadings(up, down, centeringWithheld) {
     let whiteningQ;
     let ding;
     let fray;
+    const clearName = CLEAR_CORNER[name];
+    const clear = clearName === '180' ? b : a;
     if (!upOk || !downOk) {
       const reason = missing ? 'needs-both-orientations' : 'not-card-sized';
       rounding = withheldRounding(reason);
@@ -1014,14 +1046,14 @@ function pairReadings(up, down, centeringWithheld) {
       ding = { withheld: true, reason: reason, depthMm: null, fromTipMm: null, approved: false };
       fray = { withheld: true, reason: reason, lengthMm: null, stickOutMm: null, approved: false };
     } else {
-      rounding = pairRounding(a.rounding, b.rounding);
-      whiteningQ = pairWhitening(a.whitening, b.whitening);
-      ding = pairDing(a.ding, b.ding);
-      fray = pairFray(a.fray, b.fray);
+      rounding = publishRounding(clear && clear.rounding);
+      whiteningQ = publishWhitening(clear && clear.whitening);
+      ding = publishDing(clear && clear.ding);
+      fray = publishFray(clear && clear.fray);
     }
     const sides = ADJACENT[name];
     const blocked = !!(centeringWithheld && (centeringWithheld[sides[0]] || centeringWithheld[sides[1]]));
-    rounding = blockForCentering(rounding, blocked, ['radiusMm', 'setbackMm', 'residualMm', 'limitMm']);
+    rounding = blockForCentering(rounding, blocked, ['radiusMm', 'setbackMm', 'residualMm', 'limitMm', 'missingMm2']);
     whiteningQ = blockForCentering(whiteningQ, blocked, ['lengthMm', 'areaMm2']);
     ding = blockForCentering(ding, blocked, ['depthMm', 'fromTipMm']);
     fray = blockForCentering(fray, blocked, ['lengthMm', 'stickOutMm']);
@@ -1029,6 +1061,7 @@ function pairReadings(up, down, centeringWithheld) {
       approved: false,
       adjacent: sides,
       centeringSideWithheld: blocked,
+      pickedFrom: CLEAR_CORNER[name] === '180' ? '180-image-bottom' : 'up-image-bottom',
       rounding: rounding,
       whitening: whiteningQ,
       ding: ding,
@@ -1073,6 +1106,8 @@ module.exports = {
   BACK_IDS: BACK_IDS,
   BGS_REFERENCE: BGS_REFERENCE,
   PAIR_MM: PAIR_MM,
+  MISSING_WEAR_MM2: MISSING_WEAR_MM2,
+  CLEAR_CORNER: CLEAR_CORNER,
   DEFINITION: DEFINITION,
   pxPerMm: pxPerMm,
   isCornerCard: isCornerCard,
