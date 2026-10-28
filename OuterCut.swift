@@ -24,9 +24,13 @@ enum CardFaceSize {
 }
 
 /// The card's outer cut: the largest card-shaped quad whose outside is the
-/// mat, not an inner printed frame. Chroma (not brightness) keeps a pink
-/// shadow or a glare patch from counting as the card, and keeps a blue or
-/// black inner frame from winning just because it is a stronger edge.
+/// mat, not an inner printed frame. Chroma (not brightness) keeps a shadow
+/// or a glare patch from counting as the card, and keeps a blue or black
+/// inner frame from winning just because it is a stronger edge.
+///
+/// Live tracking uses `locate` and accepts any card-shaped quad, including
+/// one whose edge is clipped or whose corners are covered. The strict face
+/// aspect and the runner-up flag only decide the shutter and the upload.
 ///
 /// A second step in the same window the server uses (#92) marks the cut
 /// low-confidence. The quad is still the outer edge. The upload then sends
@@ -38,6 +42,10 @@ enum OuterCut {
     static let runnerUpMaxPx = 3.0
     static let runnerUpWideRatio = 0.8
     static let aspectTolerance = 0.10
+    /// Same window the previous rectangle finder used for acquisition.
+    /// The 10% face check is only for the shutter and the upload.
+    static let trackAspectMin = 0.55
+    static let trackAspectMax = 0.85
     static let chromaThreshold = 0.12
     static let searchLongSide = 640
 
@@ -93,34 +101,80 @@ enum OuterCut {
                 y: (tl.y + tr.y + br.y + bl.y) / 4
             )
         }
-    }
 
-    /// Median of the last three outer quads, so one frame cannot yank the
-    /// box onto a different edge.
-    struct Tracker {
-        private var history: [Norm] = []
-
-        mutating func reset() { history = [] }
-
-        mutating func push(_ quad: Norm) -> Norm {
-            history.append(quad)
-            if history.count > 3 { history.removeFirst() }
-            return Self.median(history)
+        var width: Double {
+            let top = hypot(tl.x - tr.x, tl.y - tr.y)
+            let bottom = hypot(bl.x - br.x, bl.y - br.y)
+            return (top + bottom) / 2
         }
 
-        static func median(_ quads: [Norm]) -> Norm {
-            func m(_ values: [Double]) -> Double {
-                let sorted = values.sorted()
-                let mid = sorted.count / 2
-                if sorted.count % 2 == 1 { return sorted[mid] }
-                return (sorted[mid - 1] + sorted[mid]) / 2
+        var aspect: Double {
+            let h = height
+            guard h > 1e-6 else { return 0 }
+            return width / h
+        }
+
+        /// Move the quad without changing its size or aspect.
+        func translated(to center: Point) -> Norm {
+            let dx = center.x - self.center.x
+            let dy = center.y - self.center.y
+            func shift(_ point: Point) -> Point { Point(x: point.x + dx, y: point.y + dy) }
+            return Norm(tl: shift(tl), tr: shift(tr), br: shift(br), bl: shift(bl))
+        }
+    }
+
+    /// Live acquisition. A card-shaped quad is enough to draw the box.
+    /// `aspectFail` means a region was found and it is not card-shaped.
+    enum Locate: Equatable {
+        case noQuad
+        case aspectFail
+        case quad(Hit)
+
+        struct Hit: Equatable {
+            var result: Result
+            /// Within 10% of the selected card type. The shutter uses this.
+            var matchesFace: Bool
+        }
+    }
+
+    /// Position is the median of the last three centers. Size and aspect
+    /// stay on the latest quad, so moving closer does not skew the box.
+    /// The box is the first frame. The shutter waits for three strict frames.
+    struct Tracker {
+        private var centers: [Norm.Point] = []
+        private var last: Norm?
+        private(set) var freshCount = 0
+
+        mutating func reset() {
+            centers = []
+            last = nil
+            freshCount = 0
+        }
+
+        var shutterSettled: Bool { freshCount >= 3 }
+
+        mutating func push(_ quad: Norm, strict: Bool) -> Norm {
+            centers.append(quad.center)
+            if centers.count > 3 { centers.removeFirst() }
+            if strict {
+                freshCount += 1
+            } else {
+                freshCount = 0
             }
-            return Norm(
-                tl: Norm.Point(x: m(quads.map(\.tl.x)), y: m(quads.map(\.tl.y))),
-                tr: Norm.Point(x: m(quads.map(\.tr.x)), y: m(quads.map(\.tr.y))),
-                br: Norm.Point(x: m(quads.map(\.br.x)), y: m(quads.map(\.br.y))),
-                bl: Norm.Point(x: m(quads.map(\.bl.x)), y: m(quads.map(\.bl.y)))
-            )
+            let shown = quad.translated(to: Self.medianPoint(centers))
+            last = shown
+            return shown
+        }
+
+        /// This frame had no card. Keep the last box and search again.
+        mutating func miss() -> Norm? {
+            freshCount = 0
+            centers = []
+            return last
+        }
+
+        static func medianPoint(_ points: [Norm.Point]) -> Norm.Point {
+            Norm.Point(x: OuterCut.median(points.map(\.x)), y: OuterCut.median(points.map(\.y)))
         }
     }
 
@@ -148,29 +202,54 @@ enum OuterCut {
     }
 
     static func find(in image: CGImage, face: CardFaceSize.Millimetres) -> Result? {
-        let sourceW = image.width
-        let sourceH = image.height
-        guard sourceW > 8, sourceH > 8 else { return nil }
-        let scale = min(1.0, Double(searchLongSide) / Double(max(sourceW, sourceH)))
-        let sw = max(1, Int((Double(sourceW) * scale).rounded()))
-        let sh = max(1, Int((Double(sourceH) * scale).rounded()))
-        guard let bytes = rgbBytes(image, width: sw, height: sh) else { return nil }
-        guard let found = find(bytes: bytes, width: sw, height: sh, face: face) else { return nil }
-        let sx = Double(sourceW) / Double(sw)
-        let sy = Double(sourceH) / Double(sh)
-        func s(_ p: Point) -> Point { Point(x: p.x * sx, y: p.y * sy) }
-        return Result(
-            tl: s(found.tl), tr: s(found.tr), br: s(found.br), bl: s(found.bl),
-            confident: found.confident, imageWidth: sourceW, imageHeight: sourceH
-        )
+        guard case .quad(let hit) = search(in: image, face: face, tracking: false) else { return nil }
+        return hit.result
+    }
+
+    /// Card-shaped quad for the live box. The strict face aspect and the
+    /// runner-up flag travel with it and do not hide the box.
+    static func locate(in image: CGImage, face: CardFaceSize.Millimetres) -> Locate {
+        search(in: image, face: face, tracking: true)
     }
 
     /// `bytes` is packed RGB, row-major, origin top-left.
     static func find(bytes: [UInt8], width: Int, height: Int, face: CardFaceSize.Millimetres) -> Result? {
-        guard width > 16, height > 16, bytes.count == width * height * 3, face.height > 1, face.aspect > 0 else {
+        guard case .quad(let hit) = search(bytes: bytes, width: width, height: height, face: face, tracking: false) else {
             return nil
         }
-        guard let bg = backgroundChroma(bytes: bytes, width: width, height: height) else { return nil }
+        return hit.result
+    }
+
+    static func locate(bytes: [UInt8], width: Int, height: Int, face: CardFaceSize.Millimetres) -> Locate {
+        search(bytes: bytes, width: width, height: height, face: face, tracking: true)
+    }
+
+    private static func search(in image: CGImage, face: CardFaceSize.Millimetres, tracking: Bool) -> Locate {
+        let sourceW = image.width
+        let sourceH = image.height
+        guard sourceW > 8, sourceH > 8 else { return .noQuad }
+        let scale = min(1.0, Double(searchLongSide) / Double(max(sourceW, sourceH)))
+        let sw = max(1, Int((Double(sourceW) * scale).rounded()))
+        let sh = max(1, Int((Double(sourceH) * scale).rounded()))
+        guard let bytes = rgbBytes(image, width: sw, height: sh) else { return .noQuad }
+        let found = search(bytes: bytes, width: sw, height: sh, face: face, tracking: tracking)
+        guard case .quad(let hit) = found else { return found }
+        let sx = Double(sourceW) / Double(sw)
+        let sy = Double(sourceH) / Double(sh)
+        func s(_ p: Point) -> Point { Point(x: p.x * sx, y: p.y * sy) }
+        let scaled = Result(
+            tl: s(hit.result.tl), tr: s(hit.result.tr), br: s(hit.result.br), bl: s(hit.result.bl),
+            confident: hit.result.confident, imageWidth: sourceW, imageHeight: sourceH
+        )
+        return .quad(Locate.Hit(result: scaled, matchesFace: hit.matchesFace))
+    }
+
+    /// `bytes` is packed RGB, row-major, origin top-left.
+    private static func search(bytes: [UInt8], width: Int, height: Int, face: CardFaceSize.Millimetres, tracking: Bool) -> Locate {
+        guard width > 16, height > 16, bytes.count == width * height * 3, face.height > 1, face.aspect > 0 else {
+            return .noQuad
+        }
+        guard let bg = backgroundChroma(bytes: bytes, width: width, height: height, loose: tracking) else { return .noQuad }
         var mask = [Bool](repeating: false, count: width * height)
         for i in 0..<(width * height) {
             let o = i * 3
@@ -187,7 +266,7 @@ enum OuterCut {
         let xs = (0..<width).filter { Double(colSum[$0]) / Double(height) > 0.12 }
         let ys = (0..<height).filter { Double(rowSum[$0]) / Double(width) > 0.12 }
         guard let xLo = xs.first, let xHi = xs.last, let yLo = ys.first, let yHi = ys.last,
-              xHi - xLo > 10, yHi - yLo > 10 else { return nil }
+              xHi - xLo > 10, yHi - yLo > 10 else { return .noQuad }
 
         func points(side: String) -> [Point] {
             var pts: [Point] = []
@@ -235,30 +314,46 @@ enum OuterCut {
             return pts
         }
 
-        guard let top = fitLine(points(side: "top"), vary: "y"),
-              let bottom = fitLine(points(side: "bottom"), vary: "y"),
-              let left = fitLine(points(side: "left"), vary: "x"),
-              let right = fitLine(points(side: "right"), vary: "x"),
+        let fittedTop = fitLine(points(side: "top"), vary: "y", loose: tracking)
+        let fittedBottom = fitLine(points(side: "bottom"), vary: "y", loose: tracking)
+        let fittedLeft = fitLine(points(side: "left"), vary: "x", loose: tracking)
+        let fittedRight = fitLine(points(side: "right"), vary: "x", loose: tracking)
+        func side(_ fitted: Line?, _ box: Line) -> Line? {
+            if let fitted { return fitted }
+            if tracking { return box }
+            return nil
+        }
+        let top = side(fittedTop, Line(a: 0, b: Double(yLo)))
+        let bottom = side(fittedBottom, Line(a: 0, b: Double(yHi)))
+        let left = side(fittedLeft, Line(a: 0, b: Double(xLo)))
+        let right = side(fittedRight, Line(a: 0, b: Double(xHi)))
+        let fallback = fittedTop == nil || fittedBottom == nil || fittedLeft == nil || fittedRight == nil
+        guard let top, let bottom, let left, let right,
               let tl = intersect(horizontal: top, vertical: left),
               let tr = intersect(horizontal: top, vertical: right),
               let br = intersect(horizontal: bottom, vertical: right),
-              let bl = intersect(horizontal: bottom, vertical: left) else { return nil }
+              let bl = intersect(horizontal: bottom, vertical: left) else { return .noQuad }
 
         let widthPx = (hypot(tl.x - tr.x, tl.y - tr.y) + hypot(bl.x - br.x, bl.y - br.y)) / 2
         let heightPx = (hypot(tl.x - bl.x, tl.y - bl.y) + hypot(tr.x - br.x, tr.y - br.y)) / 2
-        guard heightPx > 8 else { return nil }
+        guard heightPx > 8 else { return .noQuad }
         let aspect = widthPx / heightPx
-        guard abs(aspect - face.aspect) / face.aspect <= aspectTolerance else { return nil }
-
-        let corners = [tl, tr, br, bl]
-        guard corners.allSatisfy({ $0.x > 1 && $0.y > 1 && $0.x < Double(width - 2) && $0.y < Double(height - 2) }) else {
-            return nil
-        }
-        guard outsideIsBackground(side: "top", line: top, atX: (tl.x + tr.x) / 2, bytes: bytes, width: width, height: height, bg: bg),
-              outsideIsBackground(side: "bottom", line: bottom, atX: (bl.x + br.x) / 2, bytes: bytes, width: width, height: height, bg: bg),
-              outsideIsBackground(side: "left", line: left, atY: (tl.y + bl.y) / 2, bytes: bytes, width: width, height: height, bg: bg),
-              outsideIsBackground(side: "right", line: right, atY: (tr.y + br.y) / 2, bytes: bytes, width: width, height: height, bg: bg) else {
-            return nil
+        let matchesFace = abs(aspect - face.aspect) / face.aspect <= aspectTolerance
+        let tracks = aspect >= trackAspectMin && aspect <= trackAspectMax
+        if tracking {
+            guard tracks else { return .aspectFail }
+        } else {
+            guard matchesFace else { return .noQuad }
+            let corners = [tl, tr, br, bl]
+            guard corners.allSatisfy({ $0.x > 1 && $0.y > 1 && $0.x < Double(width - 2) && $0.y < Double(height - 2) }) else {
+                return .noQuad
+            }
+            guard outsideIsBackground(side: "top", line: top, atX: (tl.x + tr.x) / 2, bytes: bytes, width: width, height: height, bg: bg),
+                  outsideIsBackground(side: "bottom", line: bottom, atX: (bl.x + br.x) / 2, bytes: bytes, width: width, height: height, bg: bg),
+                  outsideIsBackground(side: "left", line: left, atY: (tl.y + bl.y) / 2, bytes: bytes, width: width, height: height, bg: bg),
+                  outsideIsBackground(side: "right", line: right, atY: (tr.y + br.y) / 2, bytes: bytes, width: width, height: height, bg: bg) else {
+                return .noQuad
+            }
         }
 
         let pxPerMm = heightPx / face.height
@@ -268,8 +363,9 @@ enum OuterCut {
             edgeReport(side: "left", x0: left.a * (tl.y + bl.y) / 2 + left.b, y0: (tl.y + bl.y) / 2, dx: 1, dy: 0, sideLength: heightPx, bytes: bytes, width: width, height: height, pxPerMm: pxPerMm),
             edgeReport(side: "right", x0: right.a * (tr.y + br.y) / 2 + right.b, y0: (tr.y + br.y) / 2, dx: -1, dy: 0, sideLength: heightPx, bytes: bytes, width: width, height: height, pxPerMm: pxPerMm)
         ]
-        let confident = reports.allSatisfy { !cutIsLowConfidence(runnerUpRatio: $0.ratio, offsetAtTenPxPerMm: $0.offset10) }
-        return Result(tl: tl, tr: tr, br: br, bl: bl, confident: confident, imageWidth: width, imageHeight: height)
+        let confident = !fallback && reports.allSatisfy { !cutIsLowConfidence(runnerUpRatio: $0.ratio, offsetAtTenPxPerMm: $0.offset10) }
+        let result = Result(tl: tl, tr: tr, br: br, bl: bl, confident: confident, imageWidth: width, imageHeight: height)
+        return .quad(Locate.Hit(result: result, matchesFace: matchesFace))
     }
 
     private struct Line {
@@ -282,9 +378,14 @@ enum OuterCut {
         var offset10: Double?
     }
 
-    private static func backgroundChroma(bytes: [UInt8], width: Int, height: Int) -> (Double, Double, Double)? {
+    private static func backgroundChroma(bytes: [UInt8], width: Int, height: Int, loose: Bool) -> (Double, Double, Double)? {
         let m = max(6, Int(Double(min(width, height)) * 0.04))
-        let origins = [(0, 0), (width - m, 0), (0, height - m), (width - m, height - m)]
+        let midX = max(0, (width - m) / 2)
+        let midY = max(0, (height - m) / 2)
+        var origins = [(0, 0), (width - m, 0), (0, height - m), (width - m, height - m)]
+        if loose {
+            origins += [(midX, 0), (midX, height - m), (0, midY), (width - m, midY)]
+        }
         var medians: [(Double, Double, Double)] = []
         for origin in origins {
             var rs: [Double] = []
@@ -306,8 +407,11 @@ enum OuterCut {
             median(chromas.map(\.1)),
             median(chromas.map(\.2))
         )
+        if loose {
+            return looseBackground(medians: medians, bytes: bytes, width: width, height: height)
+        }
         let distances = chromas.map { chromaDistance($0.0, $0.1, $0.2, center) }
-        var keep = Array(repeating: true, count: 4)
+        var keep = Array(repeating: true, count: medians.count)
         if let worst = distances.enumerated().max(by: { $0.element < $1.element })?.offset, distances[worst] > 0.08 {
             keep[worst] = false
         }
@@ -317,8 +421,64 @@ enum OuterCut {
         return chroma(bg.0, bg.1, bg.2)
     }
 
-    private static func fitLine(_ pts: [Point], vary: String) -> Line? {
-        guard pts.count >= 8 else { return nil }
+    /// The mat is the border color that agrees with itself, even when the
+    /// card covers two corners. A split between card and mat does not follow
+    /// whichever sample happens to sit on the median.
+    private static func looseBackground(medians: [(Double, Double, Double)], bytes: [UInt8], width: Int, height: Int) -> (Double, Double, Double)? {
+        let chromas = medians.map { chroma($0.0, $0.1, $0.2) }
+        var best: [Int] = []
+        var bestVotes = -1
+        for seed in chromas.indices {
+            let group = medians.indices.filter {
+                chromaDistance(medians[$0].0, medians[$0].1, medians[$0].2, chromas[seed]) <= 0.08
+            }
+            guard group.count >= 2 else { continue }
+            let rgb = (
+                median(group.map { medians[$0].0 }),
+                median(group.map { medians[$0].1 }),
+                median(group.map { medians[$0].2 })
+            )
+            let votes = borderVotes(for: chroma(rgb.0, rgb.1, rgb.2), bytes: bytes, width: width, height: height)
+            if votes > bestVotes {
+                bestVotes = votes
+                best = Array(group)
+            }
+        }
+        guard best.count >= 2, bestVotes > 0 else { return nil }
+        let bg = (
+            median(best.map { medians[$0].0 }),
+            median(best.map { medians[$0].1 }),
+            median(best.map { medians[$0].2 })
+        )
+        return chroma(bg.0, bg.1, bg.2)
+    }
+
+    private static func borderVotes(for bg: (Double, Double, Double), bytes: [UInt8], width: Int, height: Int) -> Int {
+        var votes = 0
+        var seen = 0
+        func consider(_ x: Int, _ y: Int) {
+            seen += 1
+            if seen % 3 != 0 { return }
+            let o = (y * width + x) * 3
+            if chromaDistance(Double(bytes[o]), Double(bytes[o + 1]), Double(bytes[o + 2]), bg) <= chromaThreshold {
+                votes += 1
+            }
+        }
+        guard width > 2, height > 2 else { return 0 }
+        for x in 0..<width {
+            consider(x, 0)
+            consider(x, height - 1)
+        }
+        for y in 1..<(height - 1) {
+            consider(0, y)
+            consider(width - 1, y)
+        }
+        return votes
+    }
+
+    private static func fitLine(_ pts: [Point], vary: String, loose: Bool) -> Line? {
+        let minimumPoints = loose ? 4 : 8
+        guard pts.count >= minimumPoints else { return nil }
         let sorted: [Point]
         if vary == "y" {
             sorted = pts.sorted { $0.x < $1.x }
@@ -334,22 +494,23 @@ enum OuterCut {
             let left = Point(x: median(head.map(\.x)), y: median(head.map(\.y)))
             let right = Point(x: median(tail.map(\.x)), y: median(tail.map(\.y)))
             let span = right.x - left.x
-            guard abs(span) >= 4 else { return nil }
+            guard abs(span) >= (loose ? 2 : 4) else { return nil }
             a0 = (right.y - left.y) / span
             b0 = left.y - a0 * left.x
         } else {
             let top = Point(x: median(head.map(\.x)), y: median(head.map(\.y)))
             let bot = Point(x: median(tail.map(\.x)), y: median(tail.map(\.y)))
             let span = bot.y - top.y
-            guard abs(span) >= 4 else { return nil }
+            guard abs(span) >= (loose ? 2 : 4) else { return nil }
             a0 = (bot.x - top.x) / span
             b0 = top.x - a0 * top.y
         }
         let inliers = sorted.filter { p in
             let err = vary == "y" ? abs(p.y - (a0 * p.x + b0)) : abs(p.x - (a0 * p.y + b0))
-            return err <= 4.5
+            return err <= (loose ? 8 : 4.5)
         }
-        guard inliers.count >= max(6, Int(0.45 * Double(sorted.count))) else { return nil }
+        let minimumInliers = loose ? max(4, Int(0.30 * Double(sorted.count))) : max(6, Int(0.45 * Double(sorted.count)))
+        guard inliers.count >= minimumInliers else { return nil }
         if vary == "y" {
             guard let line = leastSquares(xs: inliers.map(\.x), ys: inliers.map(\.y)) else { return nil }
             return line
@@ -525,20 +686,58 @@ enum OuterCut {
 
         let square = solid(width: 120, height: 120, color: (190, 110, 125), rect: (20, 20, 80, 80), fill: (245, 245, 245))
         expect(find(bytes: square.bytes, width: 120, height: 120, face: CardFaceSize.sports) == nil, "a square is not a card")
+        if case .aspectFail = locate(bytes: square.bytes, width: 120, height: 120, face: CardFaceSize.sports) {
+            expect(true, "a square is an aspect fail")
+        } else {
+            expect(false, "a square is an aspect fail, not a vanished detector")
+        }
 
+        if case .quad(let tracked) = locate(bytes: outer.bytes, width: outer.width, height: outer.height, face: CardFaceSize.sports) {
+            expect(tracked.matchesFace && tracked.result.confident, "a clean outer cut still matches the face and stays confident")
+        } else {
+            expect(false, "a clean outer cut still matches the face and stays confident")
+        }
+
+        let clipped = solid(width: 200, height: 260, color: (190, 110, 125), rect: (20, 20, 160, 260), fill: (245, 245, 245))
+        expect(find(bytes: clipped.bytes, width: 200, height: 260, face: CardFaceSize.sports) == nil, "a card cut off by the frame is not uploaded as a confident crop")
+        if case .quad(let partial) = locate(bytes: clipped.bytes, width: 200, height: 260, face: CardFaceSize.sports) {
+            expect(!partial.result.confident, "a clipped side does not open the shutter")
+            expect(partial.result.imageWidth == 200, "a clipped card still produces a tracking quad")
+        } else {
+            expect(false, "a card that touches the frame still tracks")
+        }
+
+        func rect(cx: Double, cy: Double, height: Double, aspect: Double) -> Norm {
+            let halfH = height / 2
+            let halfW = height * aspect / 2
+            return Norm(
+                tl: Norm.Point(x: cx - halfW, y: cy - halfH),
+                tr: Norm.Point(x: cx + halfW, y: cy - halfH),
+                br: Norm.Point(x: cx + halfW, y: cy + halfH),
+                bl: Norm.Point(x: cx - halfW, y: cy + halfH)
+            )
+        }
         var tracker = Tracker()
-        let steady = Norm(
-            tl: Norm.Point(x: 0.2, y: 0.1), tr: Norm.Point(x: 0.8, y: 0.1),
-            br: Norm.Point(x: 0.8, y: 0.9), bl: Norm.Point(x: 0.2, y: 0.9)
-        )
-        let jumped = Norm(
-            tl: Norm.Point(x: 0.28, y: 0.18), tr: Norm.Point(x: 0.72, y: 0.18),
-            br: Norm.Point(x: 0.72, y: 0.82), bl: Norm.Point(x: 0.28, y: 0.82)
-        )
-        _ = tracker.push(steady)
-        _ = tracker.push(steady)
-        let held = tracker.push(jumped)
-        expect(abs(held.tl.x - 0.2) < 0.001 && abs(held.tl.y - 0.1) < 0.001, "one inner jump does not move the box")
+        let far = rect(cx: 0.50, cy: 0.50, height: 0.40, aspect: 0.714)
+        let near = rect(cx: 0.50, cy: 0.50, height: 0.70, aspect: 0.714)
+        let first = tracker.push(far, strict: false)
+        expect(abs(first.height - 0.40) < 0.001 && tracker.freshCount == 0, "the first frame shows a box and does not open the shutter")
+        _ = tracker.push(far, strict: true)
+        _ = tracker.push(far, strict: true)
+        let grown = tracker.push(near, strict: true)
+        expect(abs(grown.height - 0.70) < 0.02, "moving closer updates the box size")
+        expect(abs(grown.aspect - 0.714) < 0.02, "a size change keeps the card aspect")
+        expect(tracker.shutterSettled, "three strict frames settle the shutter")
+
+        var moved = Tracker()
+        let steady = rect(cx: 0.50, cy: 0.50, height: 0.60, aspect: 0.714)
+        let shifted = rect(cx: 0.68, cy: 0.50, height: 0.60, aspect: 0.714)
+        _ = moved.push(steady, strict: true)
+        _ = moved.push(steady, strict: true)
+        let held = moved.push(shifted, strict: true)
+        expect(abs(held.center.x - 0.50) < 0.02, "one position jump does not move the box")
+        let kept = moved.miss()
+        expect(kept != nil && moved.freshCount == 0 && !moved.shutterSettled, "a missed frame keeps the last quad and closes the shutter")
 
         let center = aspectFill(x: 0.5, y: 0.5, imageWidth: 100, imageHeight: 200, viewWidth: 100, viewHeight: 100)
         expect(abs(center.x - 50) < 0.1 && abs(center.y - 50) < 0.1, "aspect fill keeps the card center in the view center")
