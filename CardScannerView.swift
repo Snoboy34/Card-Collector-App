@@ -64,6 +64,8 @@ struct CardScannerView: View {
 
 
     @State private var showingActiveScanReport = false
+    @State private var showFirstRunGuide = false
+    @State private var guideTier: CaptureTier? = nil
     @State private var selectedVaultCard: SavedCard? = nil
 
     @State private var selectedCategory: CardCategory = .sports
@@ -206,14 +208,26 @@ struct CardScannerView: View {
                         pendingServerLedger = updated
                     }, onCommit: { updated in
                         commitAndResetScan(ledger: updated)
+                    }, onDelete: {
+                        portfolio.deleteCard(scanId: ledger.scanId)
+                        pendingServerLedger = nil
+                        showingActiveScanReport = false
                     })
                 }
+            }
+            .sheet(isPresented: $showFirstRunGuide) {
+                FirstRunGuideSheet(tier: guideTier, onContinue: {
+                    ShopBetaStore.shared.continuedThisLaunch = true
+                }, onSkip: {
+                    ShopBetaStore.shared.dismissForever()
+                })
             }
             .onAppear {
                 if !CaptureMetadata.backgrounds.contains(scanBackground) {
                     scanBackground = ""
                 }
                 calibrationEngine.startDeviceLevelMonitoring()
+                Task { await ShopBetaStore.shared.refresh(serverURL: judgeServerURL) }
             }
             .onDisappear { calibrationEngine.stopDeviceLevelMonitoring() }
             .onReceive(sweepClock) { date in
@@ -364,6 +378,7 @@ struct CardScannerView: View {
                 Text("Off by default. A correction stays on this phone and the home server.")
                     .font(.caption2)
                     .foregroundColor(.secondary)
+                ShopBetaControls(serverURL: judgeServerURL, portfolio: portfolio)
                 HStack(spacing: 8) {
                     TextField("Deck card (TD-01)", text: $deckIdInput)
                         .textInputAutocapitalization(.characters)
@@ -639,6 +654,8 @@ struct CardScannerView: View {
                     portfolio.replaceSavedCard(id: vaultCard.id, ledger: updated, adoptServerRecord: true)
                 }, onOffline: {
                     portfolio.markOfflineCopy(id: vaultCard.id)
+                }, onDeleted: {
+                    portfolio.deleteCard(scanId: vaultCard.scanId)
                 })
             }
         }
@@ -869,6 +886,10 @@ struct CardScannerView: View {
     }
 
     private func requestNativeStillGrade() {
+        if ShopBetaStore.shared.shouldHoldShutter {
+            showFirstRunGuide = true
+            return
+        }
         lastRemoteError = nil
         remoteGradeSummary = ""
         guard JudgeAPIClient.normalizedBaseURL(judgeServerURL) != nil else {
@@ -1121,12 +1142,15 @@ struct CardScannerView: View {
                     } else if side == "back" {
                         let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId, timestamp: pendingLevelCapturedAt)
                         pendingServerLedger = ledger
+                        guideTier = ledger.captureTier
                         showingActiveScanReport = true
                         sweepStatus = "Uploaded the back."
+                        ShopBetaStore.shared.notePairCompleted()
                         finishPair()
                     } else {
                         let ledger = JudgeAPIClient.ledger(from: report, clientScanId: pendingScanId, timestamp: pendingLevelCapturedAt)
                         pendingServerLedger = ledger
+                        guideTier = ledger.captureTier
                         showingActiveScanReport = true
                         frontPairId = pendingScanId
                         awaitingBack = true
@@ -1373,16 +1397,18 @@ struct VaultDetailSheet: View {
     let card: SavedCard
     let onSaved: (ScanLedger) -> Void
     let onOffline: () -> Void
+    let onDeleted: () -> Void
     @Environment(\.dismiss) var dismiss
     @State private var ledger: ScanLedger
     @State private var offlineCopy: Bool
     @State private var refreshGeneration = 0
     private let serverURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
 
-    init(card: SavedCard, onSaved: @escaping (ScanLedger) -> Void, onOffline: @escaping () -> Void) {
+    init(card: SavedCard, onSaved: @escaping (ScanLedger) -> Void, onOffline: @escaping () -> Void, onDeleted: @escaping () -> Void) {
         self.card = card
         self.onSaved = onSaved
         self.onOffline = onOffline
+        self.onDeleted = onDeleted
         _ledger = State(initialValue: card.asLedger)
         _offlineCopy = State(initialValue: card.offlineCopy)
     }
@@ -1393,6 +1419,13 @@ struct VaultDetailSheet: View {
                 Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
                 Text("VAULT RECORD AUDIT").font(.headline).bold().foregroundColor(.purple)
                 ScanLedgerRows(ledger: ledger, offlineCopy: offlineCopy)
+                ShopBetaReportExtras(ledger: $ledger, serverURL: serverURL, onDeleted: {
+                    onDeleted()
+                    dismiss()
+                }, onChanged: { updated in
+                    ledger = updated
+                    onSaved(updated)
+                })
                 centeringEditor(ledger)
                 Button("Dismiss Audit Ledger") { dismiss() }
                     .font(.subheadline).bold().foregroundColor(.secondary).padding()
@@ -1443,13 +1476,15 @@ struct ActiveScanReportSheet: View {
     let serverURL: String
     let onLedger: (ScanLedger) -> Void
     let onCommit: (ScanLedger) -> Void
+    var onDelete: () -> Void = {}
     @Environment(\.dismiss) var dismiss
     @State private var ledger: ScanLedger
 
-    init(ledger: ScanLedger, serverURL: String, onLedger: @escaping (ScanLedger) -> Void, onCommit: @escaping (ScanLedger) -> Void) {
+    init(ledger: ScanLedger, serverURL: String, onLedger: @escaping (ScanLedger) -> Void, onCommit: @escaping (ScanLedger) -> Void, onDelete: @escaping () -> Void = {}) {
         self.serverURL = serverURL
         self.onLedger = onLedger
         self.onCommit = onCommit
+        self.onDelete = onDelete
         _ledger = State(initialValue: ledger)
     }
 
@@ -1459,6 +1494,10 @@ struct ActiveScanReportSheet: View {
                 Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 40, height: 6).padding(.top, 12)
                 Text("SERVER GRADE REPORT").font(.headline).bold().foregroundColor(.blue)
                 ScanLedgerRows(ledger: ledger)
+                ShopBetaReportExtras(ledger: $ledger, serverURL: serverURL, onDeleted: onDelete, onChanged: { updated in
+                    ledger = updated
+                    onLedger(updated)
+                })
                 if let snapshot = ledger.centeringAssist {
                     CenteringAssistEditor(scanId: ledger.scanId, serverURL: serverURL, snapshot: snapshot) { updated, _ in
                         let merged = ScanLedger.applyingServerRecord(local: self.ledger, server: updated)
