@@ -1,8 +1,8 @@
 import UIKit
 
 /// On-screen 2.5×3.5 frame, the same shape as `cardFrameRect` in
-/// `public/scan_level.js`. It is a composition aid. The upload is the card
-/// quad plus a margin, at the still's own pixels.
+/// `public/scan_level.js`. It is a composition aid. The upload is the upright
+/// full still. The server finds the cut.
 enum CardAlignmentCrop {
     static let cardAspect: CGFloat = 2.5 / 3.5
     static let jpegQuality: CGFloat = 0.92
@@ -78,9 +78,19 @@ enum CardAlignmentCrop {
         )
     }
 
+    /// Upright full still, with no crop. An already-upright JPEG is returned
+    /// unchanged. The server measures the cut from these pixels.
+    static func uprightJPEG(_ data: Data) throws -> Data {
+        guard let source = UIImage(data: data) else { throw CropError.undecodableJPEG }
+        if source.imageOrientation == .up { return data }
+        let upright = uprightImage(source)
+        guard let jpeg = upright.jpegData(compressionQuality: jpegQuality) else { throw CropError.jpegEncodeFailed }
+        return jpeg
+    }
+
     /// Quad plus margin from the full still, in the still's own pixels.
     /// No quad: the upright full still, so the server can detect the card.
-    /// This does not cut the preview's 2.5×3.5 window.
+    /// The capture path does not call this. The upload is `uprightJPEG`.
     static func cropToQuadMargin(_ data: Data, face: CardFaceSize.Millimetres = CardFaceSize.sports) throws -> QuadCrop {
         guard let source = UIImage(data: data) else { throw CropError.undecodableJPEG }
         let upright = uprightImage(source)
