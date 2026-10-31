@@ -46,8 +46,8 @@ enum CardVisionTrack {
 
         var center: Point {
             Point(
-                x: (tl.x + tr.x + br.x + bl.x) / 4,
-                y: (tl.y + tr.y + br.y + bl.y) / 4
+                x: (tl.x + tr.x + br.x + bl.x) / 4.0,
+                y: (tl.y + tr.y + br.y + bl.y) / 4.0
             )
         }
 
@@ -158,13 +158,12 @@ enum CardVisionTrack {
     static func edgeContrast(samples: [UInt8], width: Int, height: Int, quad: Quad) -> Double {
         guard width > 4, height > 4, samples.count == width * height * 3 else { return 0 }
         func pixel(_ point: Quad.Point) -> (x: Double, y: Double) {
-            (point.x * Double(width - 1), (1 - point.y) * Double(height - 1))
+            (point.x * Double(width - 1), (1.0 - point.y) * Double(height - 1))
         }
         let corners = [pixel(quad.tl), pixel(quad.tr), pixel(quad.br), pixel(quad.bl)]
-        let center = (
-            x: corners.map(\.x).reduce(0, +) / 4,
-            y: corners.map(\.y).reduce(0, +) / 4
-        )
+        let centerX = corners.map(\.x).reduce(0.0, +) / 4.0
+        let centerY = corners.map(\.y).reduce(0.0, +) / 4.0
+        let center = (x: centerX, y: centerY)
         var sideContrast: [Double] = []
         for index in 0..<4 {
             let a = corners[index]
@@ -182,11 +181,11 @@ enum CardVisionTrack {
             ny /= norm
             var steps: [Double] = []
             for step in 0..<7 {
-                let t = 0.30 + (0.40 * Double(step) / 6)
+                let t = 0.30 + (0.40 * Double(step) / 6.0)
                 let x = a.x + (b.x - a.x) * t
                 let y = a.y + (b.y - a.y) * t
-                let outside = sampleRGB(samples, width: width, height: height, x: x + nx * 5, y: y + ny * 5)
-                let inside = sampleRGB(samples, width: width, height: height, x: x - nx * 5, y: y - ny * 5)
+                let outside = sampleRGB(samples, width: width, height: height, x: x + nx * 5.0, y: y + ny * 5.0)
+                let inside = sampleRGB(samples, width: width, height: height, x: x - nx * 5.0, y: y - ny * 5.0)
                 if let outside, let inside {
                     steps.append(deltaE76(outside, inside))
                 }
@@ -240,8 +239,8 @@ enum CardVisionTrack {
 
         private func mix(_ current: Quad.Point, _ measured: Quad.Point) -> Quad.Point {
             Quad.Point(
-                x: current.x * (1 - blend) + measured.x * blend,
-                y: current.y * (1 - blend) + measured.y * blend
+                x: current.x * (1.0 - blend) + measured.x * blend,
+                y: current.y * (1.0 - blend) + measured.y * blend
             )
         }
     }
@@ -275,7 +274,7 @@ enum CardVisionTrack {
             defer { gate.unlock() }
             let width = image.width
             let height = image.height
-            guard let color = Self.rgbSamples(image), color.width == width, color.height == height else {
+            guard let color = CardVisionTrack.rgbSamples(image), color.width == width, color.height == height else {
                 lock.miss()
                 tracked = nil
                 shrinkHolds = 0
@@ -401,9 +400,10 @@ enum CardVisionTrack {
 
     private static func lab(_ r: Double, _ g: Double, _ b: Double) -> (L: Double, a: Double, b: Double) {
         func linear(_ channel: Double) -> Double {
-            let x = channel / 255
+            let x = channel / 255.0
             if x <= 0.04045 { return x / 12.92 }
-            return pow((x + 0.055) / 1.055, 2.4)
+            let base = (x + 0.055) / 1.055
+            return pow(base, 2.4)
         }
         let red = linear(r)
         let green = linear(g)
@@ -412,13 +412,19 @@ enum CardVisionTrack {
         let y = red * 0.2126729 + green * 0.7151522 + blue * 0.0721750
         let z = red * 0.0193339 + green * 0.1191920 + blue * 0.9503041
         func cube(_ t: Double) -> Double {
-            if t > 0.008856 { return pow(t, 1.0 / 3.0) }
+            if t > 0.008856 {
+                let third = 1.0 / 3.0
+                return pow(t, third)
+            }
             return 7.787037 * t + 16.0 / 116.0
         }
         let fx = cube(x / 0.95047)
         let fy = cube(y)
         let fz = cube(z / 1.08883)
-        return (116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz))
+        let lStar = 116.0 * fy - 16.0
+        let aStar = 500.0 * (fx - fy)
+        let bStar = 200.0 * (fy - fz)
+        return (lStar, aStar, bStar)
     }
 
     private static func rgbSamples(_ image: CGImage) -> (width: Int, height: Int, samples: [UInt8])? {
@@ -533,31 +539,40 @@ enum CardVisionTrack {
         lock.miss()
         expect(lock.shown == nil && lock.freshFrames == 0, "a lost card clears the box")
 
-        let pale = deltaE76((250.0, 250.0, 250.0), (250.0, 220.0, 210.0))
-        let paleLuma = abs((0.299 * 250 + 0.587 * 250 + 0.114 * 250) - (0.299 * 250 + 0.587 * 220 + 0.114 * 210))
-        expect(pale >= minimumEdgeContrast && paleLuma < 32, "white on pale pink is a color step and a weak gray step")
-        let textureStep = deltaE76((215.0, 76.0, 70.0), (221.0, 82.0, 76.0))
+        let whiteRGB: (Double, Double, Double) = (250.0, 250.0, 250.0)
+        let pinkRGB: (Double, Double, Double) = (250.0, 220.0, 210.0)
+        let pale = deltaE76(whiteRGB, pinkRGB)
+        let whiteLuma = 0.299 * 250.0 + 0.587 * 250.0 + 0.114 * 250.0
+        let pinkLuma = 0.299 * 250.0 + 0.587 * 220.0 + 0.114 * 210.0
+        let paleLuma = abs(whiteLuma - pinkLuma)
+        expect(pale >= minimumEdgeContrast, "white on pale pink is a color step")
+        expect(paleLuma < 32.0, "the same pair is a weak gray step")
+        let matRGB: (Double, Double, Double) = (215.0, 76.0, 70.0)
+        let matShift: (Double, Double, Double) = (221.0, 82.0, 76.0)
+        let textureStep = deltaE76(matRGB, matShift)
         expect(textureStep < minimumEdgeContrast, "a few levels of mat texture stay under the color floor")
         let card = paintedCard()
-        let cardQuad = axisQuad(minX: 30.0 / 199, minY: 1 - 250.0 / 299, maxX: 170.0 / 199, maxY: 1 - 40.0 / 299)
+        let spanX = 199.0
+        let spanY = 299.0
+        let cardQuad = axisQuad(minX: 30.0 / spanX, minY: 1.0 - 250.0 / spanY, maxX: 170.0 / spanX, maxY: 1.0 - 40.0 / spanY)
         let cardContrast = edgeContrast(samples: card.samples, width: card.width, height: card.height, quad: cardQuad)
         expect(cardContrast >= minimumEdgeContrast, "the white card edge on pale pink clears the color floor")
-        let matQuad = axisQuad(minX: 4.0 / 199, minY: 1 - 36.0 / 299, maxX: 36.0 / 199, maxY: 1 - 4.0 / 299)
+        let matQuad = axisQuad(minX: 4.0 / spanX, minY: 1.0 - 36.0 / spanY, maxX: 36.0 / spanX, maxY: 1.0 - 4.0 / spanY)
         let matContrast = edgeContrast(samples: card.samples, width: card.width, height: card.height, quad: matQuad)
         expect(matContrast < minimumEdgeContrast, "bare mat has no card-level edge")
-        let overshoot = axisQuad(minX: 8.0 / 199, minY: 1 - 290.0 / 299, maxX: 192.0 / 199, maxY: 1 - 10.0 / 299)
+        let overshoot = axisQuad(minX: 8.0 / spanX, minY: 1.0 - 290.0 / spanY, maxX: 192.0 / spanX, maxY: 1.0 - 10.0 / spanY)
         let overshootContrast = edgeContrast(samples: card.samples, width: card.width, height: card.height, quad: overshoot)
         expect(overshootContrast < minimumEdgeContrast, "a quad past the card sits on mat, not on the color step")
-        expect(rejectReason(quad: overshoot, contrast: overshootContrast, imageWidth: 200, imageHeight: 300) == "weak edge", "an oversized card-shaped quad is a weak edge")
-        let oneSide = axisQuad(minX: 30.0 / 199, minY: 1 - 250.0 / 299, maxX: 185.0 / 199, maxY: 1 - 40.0 / 299)
+        expect(rejectReason(quad: overshoot, contrast: overshootContrast, imageWidth: 200.0, imageHeight: 300.0) == "weak edge", "an oversized card-shaped quad is a weak edge")
+        let oneSide = axisQuad(minX: 30.0 / spanX, minY: 1.0 - 250.0 / spanY, maxX: 185.0 / spanX, maxY: 1.0 - 40.0 / spanY)
         let oneSideContrast = edgeContrast(samples: card.samples, width: card.width, height: card.height, quad: oneSide)
         expect(oneSideContrast < minimumEdgeContrast, "one side off the card-to-mat step rejects the quad")
-        expect(rejectReason(quad: matQuad, contrast: matContrast, imageWidth: 200, imageHeight: 300) == "small", "a mat patch is too small to be a card")
-        expect(rejectReason(quad: cardQuad, contrast: cardContrast, imageWidth: 200, imageHeight: 300) == nil, "a card-sized color step is accepted")
+        expect(rejectReason(quad: matQuad, contrast: matContrast, imageWidth: 200.0, imageHeight: 300.0) == "small", "a mat patch is too small to be a card")
+        expect(rejectReason(quad: cardQuad, contrast: cardContrast, imageWidth: 200.0, imageHeight: 300.0) == nil, "a card-sized color step is accepted")
         let weakCard = axisQuad(minX: 0.15, minY: 0.15, maxX: 0.85, maxY: 0.85)
-        expect(rejectReason(quad: weakCard, contrast: 4, imageWidth: 100, imageHeight: 140) == "weak edge", "a card-shaped rectangle on bare mat is a weak edge")
-        expect(failureLabel(quads: [texture], contrasts: [4], imageWidth: 100, imageHeight: 140) == "small", "texture reports small")
-        expect(failureLabel(quads: [], contrasts: [], imageWidth: 100, imageHeight: 140) == "no quad", "nothing to detect reports no quad")
+        expect(rejectReason(quad: weakCard, contrast: 4.0, imageWidth: 100.0, imageHeight: 140.0) == "weak edge", "a card-shaped rectangle on bare mat is a weak edge")
+        expect(failureLabel(quads: [texture], contrasts: [4.0], imageWidth: 100.0, imageHeight: 140.0) == "small", "texture reports small")
+        expect(failureLabel(quads: [], contrasts: [], imageWidth: 100.0, imageHeight: 140.0) == "no quad", "nothing to detect reports no quad")
     }
 
     private static func axisQuad(minX: Double, minY: Double, maxX: Double, maxY: Double) -> Quad {
