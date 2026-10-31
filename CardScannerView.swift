@@ -93,6 +93,7 @@ struct CardScannerView: View {
     @State private var liveBlock = "no quad"
     @State private var liveFreshFrames = 0
     @State private var shutterDebug = "no quad"
+    @State private var autoCapture = DistanceGuide.AutoCapture()
     @State private var judgeServerURL = UserDefaults.standard.string(forKey: JudgeAPIClient.serverURLDefaultsKey) ?? ""
     @State private var helpImprove = CenteringAssistStore.helpImprove()
     @State private var deckIdInput = UserDefaults.standard.string(forKey: JudgeTestDeck.deckIdDefaultsKey) ?? ""
@@ -292,13 +293,13 @@ struct CardScannerView: View {
         if sweepActive {
             return "Hold the highlighted tick. Keep the whole card inside the frame with a little background showing."
         }
-        return "Leave background showing on all four sides. The shutter opens on Hold."
+        return "Leave background showing on all four sides. The shutter opens when the card is level and sharp."
     }
 
     private var compactActions: some View {
         HStack(spacing: 8) {
             if awaitingBack {
-                Button(action: requestBackCapture) {
+                Button(action: { requestBackCapture() }) {
                     Text(isRemoteGrading ? "Uploading…" : "Capture back")
                         .font(.subheadline).bold()
                         .lineLimit(1)
@@ -322,7 +323,7 @@ struct CardScannerView: View {
                 .disabled(isRemoteGrading)
             }
             if !awaitingBack {
-            Button(action: requestNativeStillGrade) {
+            Button(action: { requestNativeStillGrade() }) {
                 HStack {
                     if isRemoteGrading { ProgressView().tint(.black) }
                     Text(captureButtonTitle)
@@ -876,7 +877,7 @@ struct CardScannerView: View {
         .cornerRadius(8)
     }
 
-    private func requestNativeStillGrade() {
+    private func requestNativeStillGrade(automatic: Bool = false) {
         lastRemoteError = nil
         remoteGradeSummary = ""
         guard JudgeAPIClient.normalizedBaseURL(judgeServerURL) != nil else {
@@ -895,9 +896,11 @@ struct CardScannerView: View {
         pendingPreSubmission = preSubmission
         pendingIntendedGrader = JudgeTestDeck.graders.contains(intendedGrader) ? intendedGrader : nil
         pendingScanBackground = CaptureMetadata.backgrounds.contains(scanBackground) ? scanBackground : nil
-        guard distanceGuide.shutterAllowed else {
-            lastRemoteError = distanceGuide.statusLine
-            return
+        if !automatic {
+            guard distanceGuide.shutterAllowed else {
+                lastRemoteError = distanceGuide.statusLine
+                return
+            }
         }
         pendingSharpBand = distanceGuide.bandSource.rawValue
         pendingServerLedger = nil
@@ -906,21 +909,25 @@ struct CardScannerView: View {
         awaitingBack = false
         frontPairId = nil
         resetSweepSession()
+        autoCapture.noteCaptured()
         stillCaptureNonce += 1
     }
 
-    private func requestBackCapture() {
+    private func requestBackCapture(automatic: Bool = false) {
         guard awaitingBack, frontPairId != nil else { return }
         lastRemoteError = nil
         remoteGradeSummary = ""
-        guard distanceGuide.shutterAllowed else {
-            lastRemoteError = distanceGuide.statusLine
-            return
+        if !automatic {
+            guard distanceGuide.shutterAllowed else {
+                lastRemoteError = distanceGuide.statusLine
+                return
+            }
         }
         pendingSharpBand = distanceGuide.bandSource.rawValue
         pendingScanId = UUID().uuidString
         captureSide = "back"
         resetSweepSession()
+        autoCapture.noteCaptured()
         stillCaptureNonce += 1
     }
 
@@ -1174,6 +1181,7 @@ struct CardScannerView: View {
         liveBlock = "no quad"
         liveFreshFrames = 0
         shutterDebug = "no quad"
+        autoCapture.reset()
         pxSmoother.reset()
         distanceGuide = .idle
     }
@@ -1190,18 +1198,48 @@ struct CardScannerView: View {
             pxPerMm: pxSmoother.pxPerMm,
             band: measured,
             focusSettled: sessionFacts.focusSettled,
-            edgeSharp: pxSmoother.edgeSharp
+            edgeSharp: pxSmoother.edgeSharp,
+            level: calibrationEngine.isPerfectlyLevel
         )
         let label = DistanceGuide.shutterDebug(
             block: liveBlock,
             freshFrames: liveFreshFrames,
-            prompt: reading.prompt
+            prompt: reading.prompt,
+            level: calibrationEngine.isPerfectlyLevel
         )
         if label != "open" {
             reading.shutterAllowed = false
         }
         distanceGuide = reading
         shutterDebug = label
+        considerAutoCapture(band: measured)
+    }
+
+    /// One shot after the card, a level phone, a sharp edge, and the best
+    /// band have held for half a second.
+    private func considerAutoCapture(band: DistanceGuide.ActiveBand) {
+        if sweepActive || isRemoteGrading || showingActiveScanReport {
+            autoCapture.pause()
+            return
+        }
+        if !isCardDetected {
+            autoCapture.noteCardLost()
+            return
+        }
+        let ready = DistanceGuide.autoCaptureReady(
+            cardFound: liveBlock.isEmpty,
+            level: calibrationEngine.isPerfectlyLevel,
+            focusSettled: sessionFacts.focusSettled,
+            edgeSharp: pxSmoother.edgeSharp,
+            pxPerMm: pxSmoother.pxPerMm,
+            band: band
+        )
+        guard autoCapture.tick(ready: ready, now: Date()) else { return }
+        if awaitingBack {
+            requestBackCapture(automatic: true)
+        } else {
+            requestNativeStillGrade(automatic: true)
+        }
     }
 
     private func processLiveCameraFrame(_ imageFrame: CGImage) {

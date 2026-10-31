@@ -4,9 +4,9 @@ import Vision
 
 /// Live distance guide. The on-screen card quad is mapped into the still the
 /// shutter will take, and px/mm is that card's height divided by 88.9 mm.
-/// A measured device uses its capture-test band. Every other device uses a
-/// conservative band from the still size the camera reports, and the shutter
-/// still opens once focus has settled and the edge check passes.
+/// The band is guidance for the person holding the phone. The shutter opens
+/// when the card is in frame, the phone is level, and the edge is sharp.
+/// The server labels each scan from the px/mm it measures on the still.
 enum DistanceGuide {
     static let cardHeightMm = 88.9
     /// Wider than the 0.31 mm transition measured on the sharp 11 cm still.
@@ -147,8 +147,8 @@ enum DistanceGuide {
         var headline: String {
             switch prompt {
             case .findCard: return "Find the card"
-            case .moveCloser: return "Move closer"
-            case .tooClose: return "Too close"
+            case .moveCloser: return "closer for best accuracy"
+            case .tooClose: return "farther for best accuracy"
             case .hold, .holdFocusing: return "Hold"
             case .holdSoft: return "Edge soft"
             }
@@ -201,13 +201,11 @@ enum DistanceGuide {
         }
     }
 
-    static func decide(pxPerMm: Double?, band: ActiveBand, focusSettled: Bool, edgeSharp: Bool) -> Reading {
+    /// The band does not close the shutter. Focus, a sharp edge, and a level
+    /// phone do. Outside the band the words ask for a closer or farther card.
+    static func decide(pxPerMm: Double?, band: ActiveBand, focusSettled: Bool, edgeSharp: Bool, level: Bool) -> Reading {
         guard let pxPerMm, pxPerMm > 0 else {
             return Reading(pxPerMm: nil, prompt: .findCard, shutterAllowed: false, bandSource: band.source)
-        }
-        if !band.contains(pxPerMm) {
-            let prompt: Prompt = pxPerMm < band.minPxPerMm ? .moveCloser : .tooClose
-            return Reading(pxPerMm: pxPerMm, prompt: prompt, shutterAllowed: false, bandSource: band.source)
         }
         if !focusSettled {
             return Reading(pxPerMm: pxPerMm, prompt: .holdFocusing, shutterAllowed: false, bandSource: band.source)
@@ -215,25 +213,88 @@ enum DistanceGuide {
         if !edgeSharp {
             return Reading(pxPerMm: pxPerMm, prompt: .holdSoft, shutterAllowed: false, bandSource: band.source)
         }
-        return Reading(pxPerMm: pxPerMm, prompt: .hold, shutterAllowed: true, bandSource: band.source)
+        let prompt: Prompt
+        if band.contains(pxPerMm) {
+            prompt = .hold
+        } else if pxPerMm < band.minPxPerMm {
+            prompt = .moveCloser
+        } else {
+            prompt = .tooClose
+        }
+        return Reading(pxPerMm: pxPerMm, prompt: prompt, shutterAllowed: level, bandSource: band.source)
+    }
+
+    /// Card, level, a sharp edge, and the best band. An open band has no
+    /// measured distance, so it never auto-captures. The manual shutter
+    /// stays available outside the band.
+    static func autoCaptureReady(cardFound: Bool, level: Bool, focusSettled: Bool, edgeSharp: Bool, pxPerMm: Double?, band: ActiveBand) -> Bool {
+        guard cardFound, level, focusSettled, edgeSharp, let pxPerMm, pxPerMm > 0 else { return false }
+        guard band.source == .measured || band.source == .default else { return false }
+        return band.contains(pxPerMm)
+    }
+
+    /// Fires once after `holdSeconds` of `autoCaptureReady`. Any drop restarts
+    /// the hold. A second fire waits until the card leaves the frame.
+    struct AutoCapture: Equatable {
+        private(set) var armedAt: Date?
+        private(set) var fired = false
+        static let holdSeconds: TimeInterval = 0.5
+
+        mutating func reset() {
+            armedAt = nil
+            fired = false
+        }
+
+        mutating func noteCardLost() {
+            armedAt = nil
+            fired = false
+        }
+
+        /// A capture already started. The next automatic shot waits until the card leaves.
+        mutating func noteCaptured() {
+            armedAt = nil
+            fired = true
+        }
+
+        /// Sweep, upload, or the report sheet. The hold starts over afterward.
+        mutating func pause() {
+            armedAt = nil
+        }
+
+        mutating func tick(ready: Bool, now: Date) -> Bool {
+            if fired { return false }
+            guard ready else {
+                armedAt = nil
+                return false
+            }
+            if armedAt == nil {
+                armedAt = now
+                return false
+            }
+            if let armedAt, now.timeIntervalSince(armedAt) + 1e-6 >= Self.holdSeconds {
+                fired = true
+                self.armedAt = nil
+                return true
+            }
+            return false
+        }
     }
 
     /// Why the shutter is closed. The box can be up while this is not "open".
-    /// `block` is the finder's reason. Empty means a quad is on screen and the
-    /// distance guide decides the rest. The outer cut is decided on the server.
-    static func shutterDebug(block: String, freshFrames: Int, prompt: Prompt) -> String {
+    /// `block` is the finder's reason. Empty means a quad is on screen.
+    /// Distance is guidance, not a close reason. The outer cut stays on the server.
+    static func shutterDebug(block: String, freshFrames: Int, prompt: Prompt, level: Bool) -> String {
         if !block.isEmpty { return block }
         switch prompt {
         case .holdSoft:
             return "soft"
-        case .moveCloser, .tooClose:
-            return "out of band"
         case .holdFocusing:
             return "focusing"
-        case .hold:
-            return freshFrames >= 3 ? "open" : "settling"
         case .findCard:
             return "settling"
+        case .hold, .moveCloser, .tooClose:
+            if !level { return "level" }
+            return freshFrames >= 3 ? "open" : "settling"
         }
     }
 
@@ -266,8 +327,11 @@ enum DistanceGuide {
     }
 
     /// Preview card height scaled into the upright still, then divided by
-    /// 88.9 mm. Matching aspects scale by height. A mismatched aspect uses
-    /// the shared axis of an aspect-fill.
+    /// the face height. Aspect-fill shares one axis. A narrower preview, or
+    /// a matching aspect, cropped the still's left and right, so the heights
+    /// see the same field. A wider preview cropped the top and bottom, so
+    /// the widths see the same field. The upright still's long side is the
+    /// vertical axis: 4032 on a 4032×3024 sensor in a portrait preview.
     static func pxPerMm(cardHeightPreviewPx: Double, previewWidth: Double, previewHeight: Double, stillWidth: Double, stillHeight: Double, cardHeightMm: Double = DistanceGuide.cardHeightMm) -> Double? {
         guard cardHeightPreviewPx > 1, previewWidth > 1, previewHeight > 1, stillWidth > 1, stillHeight > 1 else {
             return nil
@@ -275,10 +339,10 @@ enum DistanceGuide {
         let previewAspect = previewWidth / previewHeight
         let stillAspect = stillWidth / stillHeight
         let scale: Double
-        if abs(previewAspect - stillAspect) / stillAspect <= 0.03 || previewAspect > stillAspect {
-            scale = stillHeight / previewHeight
-        } else {
+        if previewAspect > stillAspect * 1.03 {
             scale = stillWidth / previewWidth
+        } else {
+            scale = stillHeight / previewHeight
         }
         return (cardHeightPreviewPx * scale) / cardHeightMm
     }
@@ -463,48 +527,103 @@ enum DistanceGuide {
         expect(band(model: "Pixel 8", camera: "back") == nil, "an unmeasured phone is absent from the measured table")
         expect(measuredBands.count == 1, "only the measured phone is in the band table")
 
-        let hold = decide(pxPerMm: 30.0, band: wide, focusSettled: true, edgeSharp: true)
+        let hold = decide(pxPerMm: 30.0, band: wide, focusSettled: true, edgeSharp: true, level: true)
         expect(hold.prompt == .hold && hold.shutterAllowed && hold.statusLine == "30.0 px/mm · Hold", "30.0 px/mm inside the band holds")
-        let lowEdge = decide(pxPerMm: 29.0, band: wide, focusSettled: true, edgeSharp: true)
+        let lowEdge = decide(pxPerMm: 29.0, band: wide, focusSettled: true, edgeSharp: true, level: true)
         expect(lowEdge.shutterAllowed && lowEdge.prompt == .hold, "29 px/mm is inside the band")
-        let highEdge = decide(pxPerMm: 31.0, band: wide, focusSettled: true, edgeSharp: true)
+        let highEdge = decide(pxPerMm: 31.0, band: wide, focusSettled: true, edgeSharp: true, level: true)
         expect(highEdge.shutterAllowed && highEdge.prompt == .hold, "31 px/mm is inside the band")
-        let closer = decide(pxPerMm: 26.4, band: wide, focusSettled: true, edgeSharp: true)
-        expect(!closer.shutterAllowed && closer.prompt == .moveCloser && closer.statusLine == "26.4 px/mm · Move closer", "26.4 px/mm says move closer")
-        let tooClose = decide(pxPerMm: 32.2, band: wide, focusSettled: true, edgeSharp: true)
-        expect(!tooClose.shutterAllowed && tooClose.prompt == .tooClose && tooClose.statusLine == "32.2 px/mm · Too close", "32.2 px/mm says too close")
-        let focusing = decide(pxPerMm: 30.0, band: wide, focusSettled: false, edgeSharp: true)
+        let closer = decide(pxPerMm: 26.4, band: wide, focusSettled: true, edgeSharp: true, level: true)
+        expect(closer.shutterAllowed && closer.prompt == .moveCloser && closer.statusLine == "26.4 px/mm · closer for best accuracy", "26.4 px/mm asks for a closer card and leaves the shutter open")
+        let tooClose = decide(pxPerMm: 32.2, band: wide, focusSettled: true, edgeSharp: true, level: true)
+        expect(tooClose.shutterAllowed && tooClose.prompt == .tooClose && tooClose.statusLine == "32.2 px/mm · farther for best accuracy", "32.2 px/mm asks for a farther card and leaves the shutter open")
+        let tilted = decide(pxPerMm: 30.0, band: wide, focusSettled: true, edgeSharp: true, level: false)
+        expect(!tilted.shutterAllowed && tilted.prompt == .hold, "tilt closes the shutter inside the band")
+        let tiltedFar = decide(pxPerMm: 26.4, band: wide, focusSettled: true, edgeSharp: true, level: false)
+        expect(!tiltedFar.shutterAllowed && tiltedFar.prompt == .moveCloser, "tilt closes the shutter while the distance words stay")
+        let focusing = decide(pxPerMm: 30.0, band: wide, focusSettled: false, edgeSharp: true, level: true)
         expect(!focusing.shutterAllowed && focusing.prompt == .holdFocusing && focusing.statusLine.contains("Focusing"), "an unsettled focus keeps the shutter closed")
-        let soft = decide(pxPerMm: 30.0, band: wide, focusSettled: true, edgeSharp: false)
+        let soft = decide(pxPerMm: 30.0, band: wide, focusSettled: true, edgeSharp: false, level: true)
         expect(!soft.shutterAllowed && soft.prompt == .holdSoft && soft.headline == "Edge soft" && !soft.statusLine.contains("Hold"), "a soft frame does not say Hold")
-        let missing = decide(pxPerMm: nil, band: wide, focusSettled: true, edgeSharp: true)
+        let missing = decide(pxPerMm: nil, band: wide, focusSettled: true, edgeSharp: true, level: true)
         expect(!missing.shutterAllowed && missing.prompt == .findCard && missing.statusLine == "— px/mm · Find the card", "no card keeps the shutter closed")
 
         let fallback = activeBand(model: "Pixel 8", camera: "back", stillWidth: 4000, stillHeight: 3000)
         expect(fallback.source == .default && fallback.minPxPerMm == 15 && abs(fallback.maxPxPerMm - 31.5) < 0.05, "a 4000 px still defaults to 15–31.5 px/mm")
-        let defaultHold = decide(pxPerMm: 30.0, band: fallback, focusSettled: true, edgeSharp: true)
+        let defaultHold = decide(pxPerMm: 30.0, band: fallback, focusSettled: true, edgeSharp: true, level: true)
         expect(defaultHold.shutterAllowed && defaultHold.statusLine == "30.0 px/mm · Hold · Default band", "an unmeasured phone can capture inside the default band")
-        let defaultFar = decide(pxPerMm: 10.0, band: fallback, focusSettled: true, edgeSharp: true)
-        expect(!defaultFar.shutterAllowed && defaultFar.prompt == .moveCloser, "the default band still asks for a closer card under 15 px/mm")
-        let defaultClose = decide(pxPerMm: 40.0, band: fallback, focusSettled: true, edgeSharp: true)
-        expect(!defaultClose.shutterAllowed && defaultClose.prompt == .tooClose, "the default band stops short of filling the frame")
-        let defaultSoft = decide(pxPerMm: 30.0, band: fallback, focusSettled: true, edgeSharp: false)
+        let defaultFar = decide(pxPerMm: 10.0, band: fallback, focusSettled: true, edgeSharp: true, level: true)
+        expect(defaultFar.shutterAllowed && defaultFar.prompt == .moveCloser && defaultFar.statusLine.contains("closer for best accuracy"), "under 15 px/mm the words ask for a closer card and the shutter stays open")
+        let defaultClose = decide(pxPerMm: 40.0, band: fallback, focusSettled: true, edgeSharp: true, level: true)
+        expect(defaultClose.shutterAllowed && defaultClose.prompt == .tooClose, "past the default band the words ask for a farther card and the shutter stays open")
+        let defaultSoft = decide(pxPerMm: 30.0, band: fallback, focusSettled: true, edgeSharp: false, level: true)
         expect(!defaultSoft.shutterAllowed && defaultSoft.prompt == .holdSoft, "the default band still waits for a sharp edge")
         let tiny = defaultBand(stillWidth: 800, stillHeight: 600)
         expect(tiny?.source == .default && (tiny?.maxPxPerMm ?? 99) < 15, "a small still keeps a band inside what it can show")
-        let tinyHold = decide(pxPerMm: 5.0, band: tiny ?? .open, focusSettled: true, edgeSharp: true)
+        let tinyHold = decide(pxPerMm: 5.0, band: tiny ?? .open, focusSettled: true, edgeSharp: true, level: true)
         expect(tinyHold.shutterAllowed, "a small still is not locked out")
         let open = activeBand(model: "Pixel 8", camera: "back", stillWidth: 0, stillHeight: 0)
-        let openHold = decide(pxPerMm: 30.0, band: open, focusSettled: true, edgeSharp: true)
-        expect(open.source == .open && openHold.shutterAllowed && openHold.statusLine == "30.0 px/mm · Hold · Default band", "a missing still size leaves the shutter open once focus and the edge pass")
-        let openSoft = decide(pxPerMm: 30.0, band: open, focusSettled: false, edgeSharp: true)
+        let openHold = decide(pxPerMm: 30.0, band: open, focusSettled: true, edgeSharp: true, level: true)
+        expect(open.source == .open && openHold.shutterAllowed && openHold.statusLine == "30.0 px/mm · Hold · Default band", "a missing still size leaves the shutter open once focus, level, and the edge pass")
+        let openSoft = decide(pxPerMm: 30.0, band: open, focusSettled: false, edgeSharp: true, level: true)
         expect(!openSoft.shutterAllowed, "an open band still waits for focus")
+
+        expect(autoCaptureReady(cardFound: true, level: true, focusSettled: true, edgeSharp: true, pxPerMm: 30, band: wide), "the measured band arms auto-capture")
+        expect(!autoCaptureReady(cardFound: true, level: true, focusSettled: true, edgeSharp: true, pxPerMm: 26.4, band: wide), "outside the measured band does not auto-capture")
+        expect(!autoCaptureReady(cardFound: true, level: true, focusSettled: true, edgeSharp: true, pxPerMm: 32.2, band: wide), "too close does not auto-capture")
+        expect(!autoCaptureReady(cardFound: true, level: false, focusSettled: true, edgeSharp: true, pxPerMm: 30, band: wide), "tilt does not auto-capture")
+        expect(!autoCaptureReady(cardFound: true, level: true, focusSettled: false, edgeSharp: true, pxPerMm: 30, band: wide), "focus does not auto-capture")
+        expect(!autoCaptureReady(cardFound: true, level: true, focusSettled: true, edgeSharp: false, pxPerMm: 30, band: wide), "a soft edge does not auto-capture")
+        expect(!autoCaptureReady(cardFound: false, level: true, focusSettled: true, edgeSharp: true, pxPerMm: 30, band: wide), "no card does not auto-capture")
+        expect(!autoCaptureReady(cardFound: true, level: true, focusSettled: true, edgeSharp: true, pxPerMm: 30, band: open), "an open band does not auto-capture")
+        expect(autoCaptureReady(cardFound: true, level: true, focusSettled: true, edgeSharp: true, pxPerMm: 30, band: fallback), "a default band can auto-capture inside its range")
+        expect(!autoCaptureReady(cardFound: true, level: true, focusSettled: true, edgeSharp: true, pxPerMm: 10, band: fallback), "outside the default band does not auto-capture")
+        var clock = AutoCapture()
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        expect(!clock.tick(ready: true, now: t0), "the first good frame arms the timer")
+        expect(!clock.tick(ready: true, now: t0.addingTimeInterval(0.4)), "0.4 s does not fire")
+        expect(clock.tick(ready: true, now: t0.addingTimeInterval(0.5)), "0.5 s of the best band fires once")
+        expect(!clock.tick(ready: true, now: t0.addingTimeInterval(1.2)), "a second tick does not capture again")
+        clock.noteCardLost()
+        expect(!clock.tick(ready: true, now: t0.addingTimeInterval(2)), "after the card leaves, the hold starts over")
+        expect(clock.tick(ready: true, now: t0.addingTimeInterval(2.5)), "a new hold captures again")
+        var dropped = AutoCapture()
+        expect(!dropped.tick(ready: true, now: t0), "a dropped hold arms")
+        expect(!dropped.tick(ready: false, now: t0.addingTimeInterval(0.4)), "a dropped condition clears the timer")
+        expect(!dropped.tick(ready: true, now: t0.addingTimeInterval(0.4)), "the hold starts again")
+        expect(!dropped.tick(ready: true, now: t0.addingTimeInterval(0.8)), "0.4 s after a restart does not fire")
+        expect(dropped.tick(ready: true, now: t0.addingTimeInterval(0.9)), "0.5 s after a restart fires")
+        var taken = AutoCapture()
+        expect(!taken.tick(ready: true, now: t0), "a manual capture arms nothing extra")
+        taken.noteCaptured()
+        expect(!taken.tick(ready: true, now: t0.addingTimeInterval(0.6)), "a capture already started does not fire again")
+        var paused = AutoCapture()
+        expect(!paused.tick(ready: true, now: t0), "a sweep pauses an armed hold")
+        paused.pause()
+        expect(!paused.tick(ready: true, now: t0.addingTimeInterval(0.6)), "the hold starts over after the pause")
+        expect(paused.tick(ready: true, now: t0.addingTimeInterval(1.1)), "0.5 s after the pause fires")
 
         let upright = uprightStillPixels(sensorWidth: 4032, sensorHeight: 3024, previewWidth: 1440, previewHeight: 1920)
         expect(upright?.width == 3024 && upright?.height == 4032, "a portrait preview stands the 4032×3024 still upright")
         let previewCard = 2670.0 * (1920.0 / 4032.0)
-        let px = pxPerMm(cardHeightPreviewPx: previewCard, previewWidth: 1440, previewHeight: 1920, stillWidth: 3024, stillHeight: 4032)
-        expect(px != nil && abs((px ?? 0) - (2670.0 / cardHeightMm)) < 0.05, "preview height scales to the still's 30 px/mm")
+        let px = pxPerMm(
+            cardHeightPreviewPx: previewCard,
+            previewWidth: 1440,
+            previewHeight: 1920,
+            stillWidth: Double(upright?.width ?? 0),
+            stillHeight: Double(upright?.height ?? 0)
+        )
+        expect(px != nil && abs((px ?? 0) - (2670.0 / cardHeightMm)) < 0.05, "11 cm, 2670 px tall, reads about 30 px/mm")
+        let face = CardFaceSize.sports
+        let halfHeight = (1440.0 / 2) * (face.height / face.width)
+        let half = pxPerMm(cardHeightPreviewPx: halfHeight, previewWidth: 1440, previewHeight: 1920, stillWidth: 3024, stillHeight: 4032, cardHeightMm: face.height)
+        let halfExpected = ((1440.0 / 2) * (3024.0 / 1440.0)) / face.width
+        expect(half != nil && abs((half ?? 0) - halfExpected) < 0.05 && (half ?? 0) < 29 && (half ?? 0) > 20, "half the preview width reads about 23.8 px/mm")
+        let narrow = pxPerMm(cardHeightPreviewPx: previewCard, previewWidth: 1080, previewHeight: 1920, stillWidth: 3024, stillHeight: 4032)
+        expect(narrow != nil && abs((narrow ?? 0) - (2670.0 / cardHeightMm)) < 0.05, "a 16:9 preview of the 11 cm card still reads about 30 px/mm")
+        let widePreviewCard = 2670.0 * (1920.0 / 3024.0)
+        let widePreview = pxPerMm(cardHeightPreviewPx: widePreviewCard, previewWidth: 1920, previewHeight: 1920, stillWidth: 3024, stillHeight: 4032)
+        expect(widePreview != nil && abs((widePreview ?? 0) - (2670.0 / cardHeightMm)) < 0.05, "a wider preview scales on width and the 11 cm card still reads about 30 px/mm")
         expect(pxPerMm(cardHeightPreviewPx: previewCard, previewWidth: 1440, previewHeight: 1920, stillWidth: 0, stillHeight: 0) == nil, "a missing still size does not invent px/mm")
 
         let sharpStep = Array(repeating: 30.0, count: 16) + Array(repeating: 200.0, count: 16)
@@ -542,17 +661,19 @@ enum DistanceGuide {
         smoother.reset()
         expect(smoother.pxPerMm == nil && smoother.edgeSharp == false, "a lost card clears the guide")
 
-        expect(shutterDebug(block: "no quad", freshFrames: 3, prompt: .hold) == "no quad", "no quad closes the shutter")
-        expect(shutterDebug(block: "aspect fail", freshFrames: 3, prompt: .hold) == "aspect fail", "a bad aspect closes the shutter")
-        expect(shutterDebug(block: "weak edge", freshFrames: 3, prompt: .hold) == "weak edge", "a weak edge closes the shutter")
-        expect(shutterDebug(block: "small", freshFrames: 3, prompt: .holdSoft) == "small", "a small rectangle is reported ahead of the edge")
-        expect(shutterDebug(block: "", freshFrames: 3, prompt: .holdSoft) == "soft", "a soft edge closes the shutter")
-        expect(shutterDebug(block: "", freshFrames: 3, prompt: .tooClose) == "out of band", "too close is out of band")
-        expect(shutterDebug(block: "", freshFrames: 3, prompt: .moveCloser) == "out of band", "move closer is out of band")
-        expect(shutterDebug(block: "", freshFrames: 3, prompt: .holdFocusing) == "focusing", "focus keeps the shutter closed")
-        expect(shutterDebug(block: "", freshFrames: 1, prompt: .hold) == "settling", "one frame shows the box and does not open the shutter")
-        expect(shutterDebug(block: "", freshFrames: 3, prompt: .hold) == "open", "three frames open the shutter")
-        expect(shutterDebug(block: "", freshFrames: 2, prompt: .findCard) == "settling", "a quad with no px/mm is still settling")
+        expect(shutterDebug(block: "no quad", freshFrames: 3, prompt: .hold, level: true) == "no quad", "no quad closes the shutter")
+        expect(shutterDebug(block: "aspect fail", freshFrames: 3, prompt: .hold, level: true) == "aspect fail", "a bad aspect closes the shutter")
+        expect(shutterDebug(block: "weak edge", freshFrames: 3, prompt: .hold, level: true) == "weak edge", "a weak edge closes the shutter")
+        expect(shutterDebug(block: "small", freshFrames: 3, prompt: .holdSoft, level: true) == "small", "a small rectangle is reported ahead of the edge")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .holdSoft, level: true) == "soft", "a soft edge closes the shutter")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .tooClose, level: true) == "open", "too close does not close the shutter")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .moveCloser, level: true) == "open", "move closer does not close the shutter")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .hold, level: false) == "level", "tilt closes the shutter")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .moveCloser, level: false) == "level", "tilt closes the shutter ahead of the distance words")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .holdFocusing, level: true) == "focusing", "focus keeps the shutter closed")
+        expect(shutterDebug(block: "", freshFrames: 1, prompt: .hold, level: true) == "settling", "one frame shows the box and does not open the shutter")
+        expect(shutterDebug(block: "", freshFrames: 3, prompt: .hold, level: true) == "open", "three frames open the shutter")
+        expect(shutterDebug(block: "", freshFrames: 2, prompt: .findCard, level: true) == "settling", "a quad with no px/mm is still settling")
     }
     #endif
 }
