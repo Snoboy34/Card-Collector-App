@@ -158,6 +158,8 @@ function captionLines(tag, corner, publishes) {
     ? 'whitening not applicable'
     : (white.withheld ? 'whitening ' + (white.reason || 'withheld') : 'whitening ' + fmt(white.areaMm2) + ' mm²');
   const frayText = fray.withheld ? 'fray ' + (fray.reason || 'withheld') : 'fray ' + fmt(fray.lengthMm) + ' mm';
+  const soft = corner && corner.softness ? corner.softness : {};
+  const softText = soft.withheld ? 'soft ' + (soft.reason || 'withheld') : 'soft ' + fmt(soft.softMm) + ' mm';
   const phrase = roundingPhrase(rounding);
   const detail = phrase.indexOf('missing ') === 0
     ? (riseText ? 'rise ' + riseText : '')
@@ -166,7 +168,7 @@ function captionLines(tag, corner, publishes) {
     tag + (publishes ? ' · publishes' : ''),
     detail,
     phrase,
-    whiteText + '    ' + frayText
+    whiteText + '  ' + frayText + '  ' + softText
   ];
 }
 
@@ -229,7 +231,7 @@ async function annotatedCrop(file, corner, ppm, lines) {
     '<text x="8" y="18" fill="#ffffff" font-family="sans-serif" font-size="15">' + esc(lines[0]) + '</text>' +
     '<text x="8" y="36" fill="#d5d5d5" font-family="sans-serif" font-size="12">' + esc(lines[1]) + '</text>' +
     '<text x="8" y="54" fill="#f0c674" font-family="sans-serif" font-size="12">' + esc(lines[2]) + '</text>' +
-    '<text x="8" y="74" fill="#d5d5d5" font-family="sans-serif" font-size="12">' + esc(lines[3] || '') + '</text>' +
+    '<text x="8" y="74" fill="#d5d5d5" font-family="sans-serif" font-size="11">' + esc(lines[3] || '') + '</text>' +
     '</svg>';
   return sharp({
     create: { width: 360, height: 448, channels: 3, background: { r: 22, g: 22, b: 22 } }
@@ -407,6 +409,7 @@ function publicCard(up, down, paired) {
       whitening: corner.whitening,
       ding: corner.ding,
       fray: corner.fray,
+      softness: corner.softness,
       up: corner.up,
       '180': corner['180']
     };

@@ -9,7 +9,9 @@
  * the arc past those lines, beyond the 10–90% paper-to-card rise. Whitening
  * is paper showing against the same border at mid-edge. A ding is a local
  * notch in the cut. Fraying is fiber outside the cut: a card-colored strand,
- * or a pale fiber that continues past the scanner rise.
+ * or a pale fiber that continues past the scanner rise, followed out to
+ * 2.0 mm. Softness is the length of cut, from the tip, whose face does not
+ * match that same edge farther along.
  *
  * The hinge is image-top. pairReadings() publishes the scan in which that
  * corner faces image-bottom (rule 2026.10.13-shadow-free-v1). A setback
@@ -104,6 +106,13 @@ const FRAY_MIN_MM = 0.3;
 const FRAY_HALO_EXTRA_MM = 0.18;
 const FRAY_HALO_MIN_MM = 0.20;
 const FRAY_HALO_WINDOW_MM = 1.6;
+// The outward walk used to stop at 0.85 mm, so a longer hair published as 0.840.
+const FRAY_HALO_OUT_MM = 2.0;
+// Depths inside the cut where the corner face is compared with the same
+// edge 10–14 mm from the tip. The scanner lip is on the whole edge, so it
+// cancels. A run has to start at the tip.
+const SOFT_DEPTHS_MM = [0.22, 0.40];
+const SOFT_START_MM = 0.35;
 const DING_MIN_MM = 0.15;
 // A square corner's rise does not remove this much card. Past it, the
 // corner is wear even when the bisector setback sits inside a widened rise.
@@ -121,7 +130,8 @@ const DEFINITION = [
   'Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm. The hinge is image-top. A corner is read from the scan in which that corner faces image-bottom, rule 2026.10.13-shadow-free-v1. Top corners come from the 180 scan. Bottom corners come from the upright scan. The other scan stays on the sheet. A setback inside the scanner limit, with missing area under 0.20 mm², is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published. A corner that is not a clean arc publishes the area of card missing as the primary measure and the setback from the ideal corner point as the secondary measure. Missing area repeats across the two scans. The hinge moves the color crossing, so the setback does not. It does not publish a radius.',
   'Whitening is paper showing against the same border at mid-edge, read on the same clear scan as the corner. Whitening on a border that is already paper-white is not applicable. A pale patch that is foil glare is withheld.',
   'A ding is a local notch in the cut. It is read on the same clear scan as the corner.',
-  'Fraying is fiber outside the fitted cut. It is read on the same clear scan as the corner. A card-colored strand counts when it runs at least 0.3 mm. A pale or tan fiber counts when it continues past the scanner rise and that beard runs at least 0.20 mm along the corner. One missed sample does not break the beard. Length 0 means neither is present. The clean controls set that floor: their longest pale speck is 0.05 mm.',
+  'Fraying is fiber outside the fitted cut. It is read on the same clear scan as the corner. A card-colored strand counts when it runs at least 0.3 mm. A pale or tan fiber counts when it continues past the scanner rise and that beard runs at least 0.20 mm along the corner. One missed sample does not break the beard. The outward walk reaches 2.0 mm. It used to stop at 0.85 mm, which published a longer hair as 0.840 mm. Length 0 means neither is present. The clean controls set that floor: their longest pale speck is 0.05 mm.',
+  'Softness is how far along the cut, from the tip, the face 0.22 mm or 0.40 mm inside the cut fails to match that same edge. The edge color is the median of samples every 0.2 mm from 10 mm to 14 mm. The longer run is published, in millimetres. A short length means the corner matches its own edge. It is a result. No soft cutoff is assigned.',
   'A side the centering key has withheld does not grow a corner grade.',
   'TD-12 is excluded. TD-14 through TD-21 are an unapproved worn and control review. TD-18 and TD-21 are the clean controls. Flatbed backs of TD-01 through TD-11 and Karros are a separate unapproved corner review. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9.',
   'A quad that is not card-sized, or an unclear step with no missing card, stays withheld.',
@@ -431,7 +441,7 @@ function fiberHalo(ctx, tip, u, n, points, riseMm) {
     if (p.t < 0.05 || p.t > FRAY_HALO_WINDOW_MM) continue;
     let last = 0;
     let clean = 0;
-    for (let out = 0.02; out <= 0.85 + 1e-9; out += 0.02) {
+    for (let out = 0.02; out <= FRAY_HALO_OUT_MM + 1e-9; out += 0.02) {
       const inward = p.inwardMm - out;
       const ix = Math.round(tip.x + u.x * p.t * ppm + n.x * inward * ppm);
       const iy = Math.round(tip.y + u.y * p.t * ppm + n.y * inward * ppm);
@@ -481,6 +491,97 @@ function fiberHalo(ctx, tip, u, n, points, riseMm) {
   }
   if (runStart != null) close();
   return best || { lengthMm: 0, stickOutMm: 0 };
+}
+
+function nearestRgb(ctx, x, y) {
+  return sampleRgb(ctx.data, ctx.width, ctx.height, Math.round(x), Math.round(y));
+}
+
+function nearestStation(points, t) {
+  let best = null;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    if (!best || Math.abs(p.t - t) < Math.abs(best.t - t)) best = p;
+  }
+  return best;
+}
+
+function cornerSoftness(ctx, tip, edges) {
+  const ppm = ctx.ppm;
+  let best = { softMm: 0, edge: null, depthMm: null };
+  for (let e = 0; e < edges.length; e++) {
+    const edge = edges[e];
+    const patch = [];
+    for (let i = 0; i <= 16; i++) {
+      const t = 8 + i * 0.5;
+      for (let j = 0; j <= 5; j++) {
+        const depth = 0.55 + j * 0.1;
+        const rgb = nearestRgb(
+          ctx,
+          tip.x + edge.u.x * t * ppm + edge.n.x * depth * ppm,
+          tip.y + edge.u.y * t * ppm + edge.n.y * depth * ppm
+        );
+        if (rgb) patch.push({ rgb: rgb });
+      }
+    }
+    if (!patch.length) continue;
+    const border = medianRgb(patch);
+    const spread = median(patch.map(function (sample) {
+      return colorDist(sample.rgb, border);
+    })) || 0;
+    const gate = Math.max(32, spread * 2 + 16);
+    const refs = {};
+    for (let d = 0; d < SOFT_DEPTHS_MM.length; d++) {
+      const depth = SOFT_DEPTHS_MM[d];
+      const samples = [];
+      for (let i = 0; i <= 20; i++) {
+        const t = 10 + i * 0.2;
+        const rgb = nearestRgb(
+          ctx,
+          tip.x + edge.u.x * t * ppm + edge.n.x * depth * ppm,
+          tip.y + edge.u.y * t * ppm + edge.n.y * depth * ppm
+        );
+        if (rgb) samples.push({ rgb: rgb });
+      }
+      refs[depth] = samples.length ? medianRgb(samples) : null;
+    }
+    for (let d = 0; d < SOFT_DEPTHS_MM.length; d++) {
+      const depth = SOFT_DEPTHS_MM[d];
+      const ref = refs[depth];
+      if (!ref) continue;
+      let first = null;
+      let last = null;
+      let gap = 0;
+      for (let t = 0.1; t <= 1.5 + 1e-9; t += STATION_MM) {
+        const near = nearestStation(edge.points, t);
+        if (!near) continue;
+        const rgb = nearestRgb(
+          ctx,
+          tip.x + edge.u.x * near.t * ppm + edge.n.x * (near.inwardMm + depth) * ppm,
+          tip.y + edge.u.y * near.t * ppm + edge.n.y * (near.inwardMm + depth) * ppm
+        );
+        const off = !!(rgb && colorDist(rgb, ref) > gate);
+        if (off) {
+          if (first == null) first = near.t;
+          last = near.t;
+          gap = 0;
+        } else if (first != null) {
+          gap += 1;
+          if (gap > 2) break;
+        }
+      }
+      const fromTip = first != null && first <= SOFT_START_MM;
+      const length = fromTip && last != null ? (last - first + STATION_MM) : 0;
+      if (length > best.softMm) best = { softMm: length, edge: edge.side, depthMm: depth };
+    }
+  }
+  return {
+    withheld: false,
+    reason: null,
+    softMm: roundMm(best.softMm),
+    edge: best.softMm > 0 ? best.edge : null,
+    depthMm: best.softMm > 0 ? roundMm(best.depthMm) : null
+  };
 }
 
 function localDing(points, tip, u, n, bisector, alpha, ppm, radiusMm) {
@@ -715,6 +816,7 @@ function blankCorner(name, reason) {
     whitening: { withheld: true, reason: reason, lengthMm: null, areaMm2: null },
     ding: { withheld: true, reason: reason, depthMm: null, fromTipMm: null, edge: null },
     fray: { withheld: true, reason: reason, lengthMm: null, stickOutMm: null, edge: null },
+    softness: { withheld: true, reason: reason, softMm: null, edge: null, depthMm: null },
     silhouette: null,
     arc: null
   };
@@ -825,6 +927,10 @@ function measureCorner(ctx, name) {
       fraySide = pair[1];
     }
   });
+  const soft = cornerSoftness(ctx, tip, [
+    { side: sides[0], u: uA, n: nA, points: silA },
+    { side: sides[1], u: uB, n: nB, points: silB }
+  ]);
   const white = whitening(
     ctx,
     tip,
@@ -900,6 +1006,7 @@ function measureCorner(ctx, name) {
       stickOutMm: roundMm(fray.stickOutMm),
       edge: fray.lengthMm > 0 ? fraySide : null
     },
+    softness: soft,
     silhouette: {
       [sides[0]]: silA.map(compactPoint),
       [sides[1]]: silB.map(compactPoint)
@@ -1052,6 +1159,19 @@ function publishFray(scan) {
   };
 }
 
+function publishSoftness(scan) {
+  if (!scan) return { withheld: true, reason: 'needs-both-orientations', softMm: null, edge: null, depthMm: null, approved: false };
+  if (scan.withheld) return { withheld: true, reason: scan.reason || 'unclear', softMm: null, edge: null, depthMm: null, approved: false };
+  return {
+    withheld: false,
+    reason: null,
+    softMm: scan.softMm,
+    edge: scan.edge,
+    depthMm: scan.depthMm,
+    approved: false
+  };
+}
+
 function blockForCentering(quantity, blocked, fields) {
   if (!blocked) return quantity;
   const out = Object.assign({}, quantity, { centeringSideWithheld: true });
@@ -1091,6 +1211,13 @@ function slimCorner(corner) {
       stickOutMm: corner.fray.stickOutMm,
       edge: corner.fray.edge
     },
+    softness: corner.softness ? {
+      withheld: corner.softness.withheld,
+      reason: corner.softness.reason,
+      softMm: corner.softness.softMm,
+      edge: corner.softness.edge,
+      depthMm: corner.softness.depthMm
+    } : { withheld: true, reason: 'unclear', softMm: null, edge: null, depthMm: null },
     riseMm: corner.riseMm,
     alphaDeg: corner.alphaDeg
   };
@@ -1108,6 +1235,7 @@ function pairReadings(up, down, centeringWithheld) {
     let whiteningQ;
     let ding;
     let fray;
+    let softness;
     const clearName = CLEAR_CORNER[name];
     const clear = clearName === '180' ? b : a;
     if (!upOk || !downOk) {
@@ -1116,11 +1244,13 @@ function pairReadings(up, down, centeringWithheld) {
       whiteningQ = { withheld: true, reason: reason, lengthMm: null, areaMm2: null, approved: false };
       ding = { withheld: true, reason: reason, depthMm: null, fromTipMm: null, approved: false };
       fray = { withheld: true, reason: reason, lengthMm: null, stickOutMm: null, approved: false };
+      softness = { withheld: true, reason: reason, softMm: null, edge: null, depthMm: null, approved: false };
     } else {
       rounding = publishRounding(clear && clear.rounding);
       whiteningQ = publishWhitening(clear && clear.whitening);
       ding = publishDing(clear && clear.ding);
       fray = publishFray(clear && clear.fray);
+      softness = publishSoftness(clear && clear.softness);
     }
     const sides = ADJACENT[name];
     const blocked = !!(centeringWithheld && (centeringWithheld[sides[0]] || centeringWithheld[sides[1]]));
@@ -1128,6 +1258,7 @@ function pairReadings(up, down, centeringWithheld) {
     whiteningQ = blockForCentering(whiteningQ, blocked, ['lengthMm', 'areaMm2']);
     ding = blockForCentering(ding, blocked, ['depthMm', 'fromTipMm']);
     fray = blockForCentering(fray, blocked, ['lengthMm', 'stickOutMm']);
+    softness = blockForCentering(softness, blocked, ['softMm', 'depthMm']);
     corners[name] = {
       approved: false,
       adjacent: sides,
@@ -1137,6 +1268,7 @@ function pairReadings(up, down, centeringWithheld) {
       whitening: whiteningQ,
       ding: ding,
       fray: fray,
+      softness: softness,
       up: slimCorner(a),
       '180': slimCorner(b)
     };

@@ -91,6 +91,7 @@ function paint(w, h, rect, opts) {
         t = 1;
       }
       if (opts.pale && inPale(x, y, rect, opts.pale) && t > 0.8) ink = opts.pale.color;
+      if (opts.stain && inStain(x, y, rect, opts.stain) && t > 0.85) ink = opts.stain.color;
       const i = (y * w + x) * 3;
       data[i] = paper[0] * (1 - t) + ink[0] * t;
       data[i + 1] = paper[1] * (1 - t) + ink[1] * t;
@@ -127,6 +128,12 @@ function inHalo(x, y, rect, halo) {
   const along = (x - rect.left) / PPM;
   const out = (rect.top - y) / PPM;
   return along >= halo.t0 && along <= halo.t1 && out >= halo.out0 && out <= halo.out1;
+}
+
+function inStain(x, y, rect, stain) {
+  const along = (x - rect.left) / PPM;
+  const depth = (y - rect.top) / PPM;
+  return along >= stain.t0 && along <= stain.t1 && depth >= stain.d0 && depth <= stain.d1;
 }
 
 function inPale(x, y, rect, pale) {
@@ -245,6 +252,11 @@ function run() {
     'sharp corner publishes no ding and no fray',
     sharpTl.ding.depthMm === 0 && sharpTl.fray.lengthMm === 0 && sharpTl.whitening.areaMm2 === 0,
     { ding: sharpTl.ding, fray: sharpTl.fray, white: sharpTl.whitening }
+  );
+  check(
+    'a uniform corner matches its own edge',
+    sharpTl.softness.withheld === false && sharpTl.softness.softMm < 0.25,
+    sharpTl.softness
   );
 
   const rounded = paint(w, h, rect, { radiusMm: 0.4, riseMm: 0.08, card: [36, 64, 140] });
@@ -439,6 +451,50 @@ function run() {
     speckPaired.corners.tl.fray
   );
 
+  const stained = paint(w, h, rect, {
+    radiusMm: 0,
+    riseMm: 0.08,
+    card: [36, 64, 140],
+    stain: { t0: 0.1, t1: 0.9, d0: 0.15, d1: 0.55, color: [236, 214, 176] }
+  });
+  const stainedUp = corners.measureRaster({
+    data: stained,
+    width: w,
+    height: h,
+    dpi: DPI,
+    paper: paperColor(),
+    sizeOk: true,
+    corners: geom.corners,
+    edges: geom.edges
+  });
+  const stainOnHinge = corners.pairReadings(stainedUp, downClean, null);
+  check(
+    'a stain on the hinge side is not the published softness',
+    stainOnHinge.corners.tl.softness.softMm < 0.25 &&
+      stainOnHinge.corners.tl.up.softness.softMm >= 0.4,
+    { published: stainOnHinge.corners.tl.softness, up: stainOnHinge.corners.tl.up.softness }
+  );
+  const turnedStain = rotate180(stained, w, h, geom);
+  const stainReading = corners.measureRaster({
+    data: turnedStain.data,
+    width: w,
+    height: h,
+    dpi: DPI,
+    paper: paperColor(),
+    sizeOk: true,
+    corners: turnedStain.corners,
+    edges: turnedStain.edges
+  });
+  const stainClear = corners.pairReadings(cleanReading, stainReading, null);
+  check(
+    'a stained corner face publishes softness',
+    stainClear.corners.tl.pickedFrom === '180-image-bottom' &&
+      stainClear.corners.tl.softness.withheld === false &&
+      stainClear.corners.tl.softness.softMm >= 0.4 &&
+      stainClear.corners.tl.softness.softMm <= 1.2,
+    stainClear.corners.tl.softness
+  );
+
   const chamfer = paint(w, h, rect, { radiusMm: 0, riseMm: 0.08, card: [36, 64, 140], chamferMm: 0.9 });
   const chamferUp = corners.measureRaster({
     data: sharp,
@@ -504,6 +560,8 @@ function run() {
     sharpBlocked.corners.tl.rounding.reason === 'centering-side-withheld' &&
       sharpBlocked.corners.tl.rounding.label == null &&
       sharpBlocked.corners.tl.rounding.radiusMm == null &&
+      sharpBlocked.corners.tl.softness.reason === 'centering-side-withheld' &&
+      sharpBlocked.corners.tl.softness.softMm == null &&
       sharpBlocked.corners.tl.up.rounding.sharp === true &&
       sharpBlocked.corners.tl.up.rounding.label.indexOf('sharp: setback under ') === 0,
     sharpBlocked.corners.tl.rounding
@@ -519,7 +577,8 @@ function run() {
     check(
       name + ' withholds when the quad is not card-sized',
       got.rounding.reason === 'not-card-sized' && got.rounding.radiusMm == null &&
-        got.whitening.areaMm2 == null && got.ding.depthMm == null && got.fray.lengthMm == null,
+        got.whitening.areaMm2 == null && got.ding.depthMm == null && got.fray.lengthMm == null &&
+        got.softness.softMm == null,
       got.rounding
     );
   });
@@ -534,6 +593,8 @@ function run() {
       doc.definition.indexOf('faces image-bottom') >= 0 &&
       doc.definition.indexOf('area of card missing') >= 0 &&
       doc.definition.indexOf('past the scanner rise') >= 0 &&
+      doc.definition.indexOf('reaches 2.0 mm') >= 0 &&
+      doc.definition.indexOf('fails to match that same edge') >= 0 &&
       doc.wornSet['TD-18'].role === 'control' &&
       doc.wornSet['TD-21'].role === 'control' &&
       doc.wornSet['TD-14'].role === 'worn' &&

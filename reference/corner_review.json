@@ -3,7 +3,7 @@
   "approved": false,
   "dpi": 1199.9976,
   "pairMm": 0.1,
-  "definition": "A corner is the cut, where two card edges meet. It is not the printed frame. Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm. The hinge is image-top. A corner is read from the scan in which that corner faces image-bottom, rule 2026.10.13-shadow-free-v1. Top corners come from the 180 scan. Bottom corners come from the upright scan. The other scan stays on the sheet. A setback inside the scanner limit, with missing area under 0.20 mm², is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published. A corner that is not a clean arc publishes the area of card missing as the primary measure and the setback from the ideal corner point as the secondary measure. Missing area repeats across the two scans. The hinge moves the color crossing, so the setback does not. It does not publish a radius. Whitening is paper showing against the same border at mid-edge, read on the same clear scan as the corner. Whitening on a border that is already paper-white is not applicable. A pale patch that is foil glare is withheld. A ding is a local notch in the cut. It is read on the same clear scan as the corner. Fraying is fiber outside the fitted cut. It is read on the same clear scan as the corner. A card-colored strand counts when it runs at least 0.3 mm. A pale or tan fiber counts when it continues past the scanner rise and that beard runs at least 0.20 mm along the corner. One missed sample does not break the beard. Length 0 means neither is present. The clean controls set that floor: their longest pale speck is 0.05 mm. A side the centering key has withheld does not grow a corner grade. TD-12 is excluded. TD-14 through TD-21 are an unapproved worn and control review. TD-18 and TD-21 are the clean controls. Flatbed backs of TD-01 through TD-11 and Karros are a separate unapproved corner review. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9. A quad that is not card-sized, or an unclear step with no missing card, stays withheld. Unapproved until the owner checks the overlay. No 0–10 corner score is assigned. This review does not change grading.",
+  "definition": "A corner is the cut, where two card edges meet. It is not the printed frame. Rounding is the arc past the measured 10–90% edge rise. The radius comes from the tip setback and from a circle fit to the silhouette. They must agree within 0.1 mm. The hinge is image-top. A corner is read from the scan in which that corner faces image-bottom, rule 2026.10.13-shadow-free-v1. Top corners come from the 180 scan. Bottom corners come from the upright scan. The other scan stays on the sheet. A setback inside the scanner limit, with missing area under 0.20 mm², is a result, reported as sharp with that limit stated. The limit is the larger 10–90% rise of the two edges at that corner. Radius 0 is not published. A corner that is not a clean arc publishes the area of card missing as the primary measure and the setback from the ideal corner point as the secondary measure. Missing area repeats across the two scans. The hinge moves the color crossing, so the setback does not. It does not publish a radius. Whitening is paper showing against the same border at mid-edge, read on the same clear scan as the corner. Whitening on a border that is already paper-white is not applicable. A pale patch that is foil glare is withheld. A ding is a local notch in the cut. It is read on the same clear scan as the corner. Fraying is fiber outside the fitted cut. It is read on the same clear scan as the corner. A card-colored strand counts when it runs at least 0.3 mm. A pale or tan fiber counts when it continues past the scanner rise and that beard runs at least 0.20 mm along the corner. One missed sample does not break the beard. The outward walk reaches 2.0 mm. It used to stop at 0.85 mm, which published a longer hair as 0.840 mm. Length 0 means neither is present. The clean controls set that floor: their longest pale speck is 0.05 mm. Softness is how far along the cut, from the tip, the face 0.22 mm or 0.40 mm inside the cut fails to match that same edge. The edge color is the median of samples every 0.2 mm from 10 mm to 14 mm. The longer run is published, in millimetres. A short length means the corner matches its own edge. It is a result. No soft cutoff is assigned. A side the centering key has withheld does not grow a corner grade. TD-12 is excluded. TD-14 through TD-21 are an unapproved worn and control review. TD-18 and TD-21 are the clean controls. Flatbed backs of TD-01 through TD-11 and Karros are a separate unapproved corner review. The two BGS slabs are reference labels only. They stay sealed, stay out of the answer key, and are an order check between corners 9.5 and corners 9. A quad that is not card-sized, or an unclear step with no missing card, stays withheld. Unapproved until the owner checks the overlay. No 0–10 corner score is assigned. This review does not change grading.",
   "excluded": [
     "TD-12"
   ],
@@ -169,6 +169,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
+            },
             "riseMm": {
               "bottom": 0.148,
               "right": 0.1
@@ -216,6 +223,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -251,6 +266,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.55,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.276,
@@ -295,6 +317,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.148,
@@ -343,6 +372,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.3,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -378,6 +415,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.276,
@@ -422,6 +466,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.52,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.306,
@@ -470,6 +521,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.05,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -505,6 +564,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.05,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.111,
@@ -549,6 +615,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.35,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.306,
@@ -597,6 +670,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -632,6 +713,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "bottom": 0.111,
@@ -736,6 +824,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
+            },
             "riseMm": {
               "bottom": 0.065,
               "right": 0.038
@@ -783,6 +878,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -818,6 +921,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.8,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.4,
@@ -862,6 +972,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.3,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.065,
@@ -910,6 +1027,14 @@
             "stickOutMm": 0.3,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.3,
+            "edge": "left",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -945,6 +1070,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.4,
@@ -989,6 +1121,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.099,
@@ -1037,6 +1176,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.1,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -1072,6 +1219,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.1,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.342,
@@ -1116,6 +1270,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.099,
@@ -1164,6 +1325,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -1199,6 +1368,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.342,
@@ -1303,6 +1479,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.1,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.171,
               "right": 0.486
@@ -1350,6 +1533,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.1,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -1385,6 +1576,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.121,
@@ -1429,6 +1627,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "bottom": 0.171,
@@ -1477,6 +1682,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -1512,6 +1725,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.4,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.121,
@@ -1556,6 +1776,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.366,
@@ -1604,6 +1831,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -1639,6 +1874,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "bottom": 0.171,
@@ -1683,6 +1925,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.366,
@@ -1731,6 +1980,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.05,
+            "edge": "right",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -1766,6 +2023,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.05,
+              "edge": "right",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.171,
@@ -1870,6 +2134,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.1,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.179,
               "right": 0.262
@@ -1917,6 +2188,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.1,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -1952,6 +2231,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "top": 0.189,
@@ -1996,6 +2282,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.513,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.75,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.179,
@@ -2044,6 +2337,14 @@
             "stickOutMm": 0.513,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.75,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -2079,6 +2380,13 @@
               "lengthMm": 0.4,
               "stickOutMm": 0.202,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "top": 0.189,
@@ -2123,6 +2431,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.186,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "top": 0.102,
@@ -2171,6 +2486,14 @@
             "stickOutMm": 0.153,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -2206,6 +2529,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.153,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "bottom": 0.137,
@@ -2250,6 +2580,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "top": 0.102,
@@ -2298,6 +2635,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -2333,6 +2678,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "bottom": 0.137,
@@ -2437,6 +2789,13 @@
               "stickOutMm": 0.65,
               "edge": "right"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.2,
+              "edge": "bottom",
+              "depthMm": 0.4
+            },
             "riseMm": {
               "bottom": 0.236,
               "right": 0.431
@@ -2484,6 +2843,14 @@
             "stickOutMm": 0.65,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.2,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -2519,6 +2886,13 @@
               "lengthMm": 0.9,
               "stickOutMm": 0.65,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.5,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.129,
@@ -2563,6 +2937,13 @@
               "lengthMm": 2.15,
               "stickOutMm": 0.7,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.15,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.236,
@@ -2611,6 +2992,14 @@
             "stickOutMm": 0.7,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.15,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -2646,6 +3035,13 @@
               "lengthMm": 1.05,
               "stickOutMm": 0.1,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.65,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.129,
@@ -2690,6 +3086,13 @@
               "lengthMm": 0.4,
               "stickOutMm": 0.45,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.298,
@@ -2738,6 +3141,14 @@
             "stickOutMm": 0.567,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.15,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -2773,6 +3184,13 @@
               "lengthMm": 0.35,
               "stickOutMm": 0.567,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.15,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.062,
@@ -2817,6 +3235,13 @@
               "lengthMm": 0.8,
               "stickOutMm": 0.45,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.7,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.298,
@@ -2865,6 +3290,14 @@
             "stickOutMm": 0.25,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.65,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -2900,6 +3333,13 @@
               "lengthMm": 2.35,
               "stickOutMm": 0.25,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.65,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.062,
@@ -3004,6 +3444,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.4,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.006,
               "right": 0.18
@@ -3051,6 +3498,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.4,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -3086,6 +3541,13 @@
               "lengthMm": 0.7,
               "stickOutMm": 0.05,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.14,
@@ -3130,6 +3592,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.35,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.006,
@@ -3178,6 +3647,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.35,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -3213,6 +3690,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.14,
@@ -3255,6 +3739,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -3300,6 +3791,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -3335,6 +3834,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.014,
@@ -3377,6 +3883,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -3422,6 +3935,14 @@
             "stickOutMm": 0.7,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -3457,6 +3978,13 @@
               "lengthMm": 2.5,
               "stickOutMm": 0.7,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.014,
@@ -3561,6 +4089,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.15,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.199,
               "right": 0.246
@@ -3608,6 +4143,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.15,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -3641,6 +4184,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -3682,6 +4232,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "bottom": 0.199,
@@ -3730,6 +4287,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -3763,6 +4328,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -3804,6 +4376,13 @@
               "lengthMm": 1.45,
               "stickOutMm": 0.6,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.046,
@@ -3852,6 +4431,14 @@
             "stickOutMm": 0.58,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.3,
+            "edge": "left",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -3887,6 +4474,13 @@
               "lengthMm": 1.35,
               "stickOutMm": 0.58,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.3,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.066,
@@ -3931,6 +4525,13 @@
               "lengthMm": 1.55,
               "stickOutMm": 0.46,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.046,
@@ -3979,6 +4580,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.05,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -4014,6 +4623,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.05,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.066,
@@ -4118,6 +4734,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.25,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.247,
               "right": 0.188
@@ -4165,6 +4788,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.25,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -4198,6 +4829,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -4239,6 +4877,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.1,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.247,
@@ -4287,6 +4932,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.1,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -4322,6 +4975,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.182,
@@ -4366,6 +5026,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.38,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.229,
@@ -4414,6 +5081,14 @@
             "stickOutMm": null,
             "approved": false
           },
+          "softness": {
+            "withheld": true,
+            "reason": "weak-edge",
+            "softMm": null,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -4447,6 +5122,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -4488,6 +5170,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.4,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.229,
@@ -4536,6 +5225,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.4,
+            "edge": "right",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -4571,6 +5268,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "right",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.398,
@@ -4675,6 +5379,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.2,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.395,
               "right": 0.245
@@ -4722,6 +5433,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.2,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -4757,6 +5476,13 @@
               "lengthMm": 0.8,
               "stickOutMm": 0.05,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.85,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.235,
@@ -4801,6 +5527,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.1,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.395,
@@ -4849,6 +5582,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.1,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -4884,6 +5625,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.235,
@@ -4928,6 +5676,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "right",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.248,
@@ -4976,6 +5731,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.7,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -5011,6 +5774,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.7,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.383,
@@ -5055,6 +5825,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.248,
@@ -5103,6 +5880,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.35,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -5138,6 +5923,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.35,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.383,
@@ -5242,6 +6034,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.85,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.092,
               "right": 0.295
@@ -5289,6 +6088,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.85,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -5324,6 +6131,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.9,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.182,
@@ -5368,6 +6182,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.05,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.092,
@@ -5416,6 +6237,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.05,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -5451,6 +6280,13 @@
               "lengthMm": 0.4,
               "stickOutMm": 0.159,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.35,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.182,
@@ -5495,6 +6331,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.55,
+              "edge": "right",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.18,
@@ -5543,6 +6386,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.3,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -5578,6 +6429,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.177,
@@ -5622,6 +6480,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.5,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.18,
@@ -5670,6 +6535,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.4,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -5705,6 +6578,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.177,
@@ -5809,6 +6689,13 @@
               "stickOutMm": 0.34,
               "edge": "right"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.225,
               "right": 0.019
@@ -5856,6 +6743,14 @@
             "stickOutMm": 0.34,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -5891,6 +6786,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.227,
@@ -5935,6 +6837,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.75,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.225,
@@ -5983,6 +6892,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.75,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -6018,6 +6935,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.227,
@@ -6062,6 +6986,13 @@
               "lengthMm": 0.45,
               "stickOutMm": 0.4,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.144,
@@ -6110,6 +7041,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.3,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -6145,6 +7084,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.101,
@@ -6189,6 +7135,13 @@
               "lengthMm": 1.65,
               "stickOutMm": 0.1,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.8,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.144,
@@ -6237,6 +7190,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.3,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -6272,6 +7233,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.3,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.101,
@@ -6376,6 +7344,13 @@
               "stickOutMm": 0.3,
               "edge": "right"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.1,
+              "edge": "bottom",
+              "depthMm": 0.4
+            },
             "riseMm": {
               "bottom": 0.239,
               "right": 0.06
@@ -6423,6 +7398,14 @@
             "stickOutMm": 0.3,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.1,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -6458,6 +7441,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.58,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.25,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.189,
@@ -6502,6 +7492,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.4,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.239,
@@ -6550,6 +7547,14 @@
             "stickOutMm": 0.4,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "left",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -6585,6 +7590,13 @@
               "lengthMm": 0.45,
               "stickOutMm": 0.76,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.189,
@@ -6629,6 +7641,13 @@
               "lengthMm": 0.5,
               "stickOutMm": 0.1,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.155,
@@ -6677,6 +7696,14 @@
             "stickOutMm": 0.1,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "left",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -6712,6 +7739,13 @@
               "lengthMm": 0.65,
               "stickOutMm": 0.1,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.096,
@@ -6754,8 +7788,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 0.4,
-              "stickOutMm": 0.84,
+              "stickOutMm": 1.32,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.65,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.155,
@@ -6804,6 +7845,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.4,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -6839,6 +7888,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.096,
@@ -6943,6 +7999,13 @@
               "stickOutMm": 0.526,
               "edge": "bottom"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.177,
               "right": 0.372
@@ -6990,6 +8053,14 @@
             "stickOutMm": 0.526,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -7025,6 +8096,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.181,
@@ -7069,6 +8147,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.2,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.177,
@@ -7117,6 +8202,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.2,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -7152,6 +8245,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.181,
@@ -7196,6 +8296,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.097,
@@ -7244,6 +8351,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.75,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -7279,6 +8394,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.75,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.371,
@@ -7321,8 +8443,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 0.25,
-              "stickOutMm": 0.84,
+              "stickOutMm": 1.4,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.097,
@@ -7371,6 +8500,14 @@
             "stickOutMm": 0.25,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.85,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -7406,6 +8543,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.25,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.85,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.371,
@@ -7513,6 +8657,13 @@
               "stickOutMm": 0.7,
               "edge": "right"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.2,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.375,
               "right": 0.043
@@ -7560,6 +8711,14 @@
             "stickOutMm": 0.7,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.2,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -7595,6 +8754,13 @@
               "lengthMm": 1.6,
               "stickOutMm": 0.2,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.203,
@@ -7639,6 +8805,13 @@
               "lengthMm": 0.6,
               "stickOutMm": 0.393,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.05,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.375,
@@ -7687,6 +8860,14 @@
             "stickOutMm": 0.393,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.05,
+            "edge": "left",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -7722,6 +8903,13 @@
               "lengthMm": 0.9,
               "stickOutMm": 0.1,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.3,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.203,
@@ -7766,6 +8954,13 @@
               "lengthMm": 1.4,
               "stickOutMm": 0.5,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.15,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.162,
@@ -7814,6 +9009,14 @@
             "stickOutMm": 0.45,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.15,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -7849,6 +9052,13 @@
               "lengthMm": 0.6,
               "stickOutMm": 0.45,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.15,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.197,
@@ -7894,6 +9104,13 @@
               "stickOutMm": 0.1,
               "edge": "top"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.2,
+              "edge": "top",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "top": 0.162,
               "left": 0.284
@@ -7938,7 +9155,15 @@
             "withheld": false,
             "reason": null,
             "lengthMm": 0.65,
-            "stickOutMm": 0.84,
+            "stickOutMm": 1.24,
+            "approved": false
+          },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.3,
+            "edge": "right",
+            "depthMm": 0.22,
             "approved": false
           },
           "up": {
@@ -7974,8 +9199,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 0.65,
-              "stickOutMm": 0.84,
+              "stickOutMm": 1.24,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.197,
@@ -8083,6 +9315,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.7,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.17,
               "right": 0.27
@@ -8130,6 +9369,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.7,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -8165,6 +9412,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.254,
@@ -8209,6 +9463,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.35,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.17,
@@ -8257,6 +9518,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.35,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -8292,6 +9561,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.35,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.254,
@@ -8336,6 +9612,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.264,
@@ -8384,6 +9667,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.4,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -8419,6 +9710,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.4,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.395,
@@ -8463,6 +9761,13 @@
               "lengthMm": 1.2,
               "stickOutMm": 0.05,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.264,
@@ -8511,6 +9816,14 @@
             "stickOutMm": 0.1,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.1,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -8546,6 +9859,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.1,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.1,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.395,
@@ -8653,6 +9973,13 @@
               "stickOutMm": 0.7,
               "edge": "right"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.348,
               "right": 0.415
@@ -8700,6 +10027,14 @@
             "stickOutMm": 0.7,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.4,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -8735,6 +10070,13 @@
               "lengthMm": 1.05,
               "stickOutMm": 0.25,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.181,
@@ -8779,6 +10121,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.35,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.348,
@@ -8827,6 +10176,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.35,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -8862,6 +10219,13 @@
               "lengthMm": 2.55,
               "stickOutMm": 0.35,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.25,
+              "edge": "right",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.181,
@@ -8906,6 +10270,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.2,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.3,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.213,
@@ -8954,6 +10325,14 @@
             "stickOutMm": 0.55,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.6,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -8989,6 +10368,13 @@
               "lengthMm": 0.6,
               "stickOutMm": 0.55,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.6,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.239,
@@ -9033,6 +10419,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.5,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.213,
@@ -9081,6 +10474,14 @@
             "stickOutMm": 0.7,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1,
+            "edge": "right",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -9116,6 +10517,13 @@
               "lengthMm": 0.75,
               "stickOutMm": 0.7,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1,
+              "edge": "right",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.239,
@@ -9223,6 +10631,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.078,
               "right": 0.146
@@ -9270,6 +10685,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.3,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -9305,6 +10728,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.3,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.029,
@@ -9349,6 +10779,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.1,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.078,
@@ -9397,6 +10834,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.1,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -9432,6 +10877,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.56,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.029,
@@ -9476,6 +10928,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.158,
@@ -9524,6 +10983,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.35,
+            "edge": "left",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -9559,6 +11026,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.35,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.1,
@@ -9603,6 +11077,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.158,
@@ -9651,6 +11132,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.35,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -9686,6 +11175,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.35,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.1,
@@ -9793,6 +11289,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.8,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.075,
               "right": 0.223
@@ -9840,6 +11343,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.8,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -9875,6 +11386,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.234,
@@ -9919,6 +11437,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.95,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.075,
@@ -9967,6 +11492,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.95,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -10002,6 +11535,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.25,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.234,
@@ -10046,6 +11586,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.56,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.107,
@@ -10094,6 +11641,14 @@
             "stickOutMm": 0.26,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.6,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -10129,6 +11684,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.26,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.6,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.064,
@@ -10173,6 +11735,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.107,
@@ -10221,6 +11790,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.8,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -10256,6 +11833,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.8,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.064,
@@ -10363,6 +11947,13 @@
               "stickOutMm": 0.54,
               "edge": "right"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.344,
               "right": 0.309
@@ -10410,6 +12001,14 @@
             "stickOutMm": 0.54,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -10445,6 +12044,13 @@
               "lengthMm": 0.5,
               "stickOutMm": 0.36,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.9,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.276,
@@ -10489,6 +12095,13 @@
               "lengthMm": 0.25,
               "stickOutMm": 0.62,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.344,
@@ -10537,6 +12150,14 @@
             "stickOutMm": 0.62,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -10572,6 +12193,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.6,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.276,
@@ -10616,6 +12244,13 @@
               "lengthMm": 0.85,
               "stickOutMm": 0.25,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.165,
@@ -10664,6 +12299,14 @@
             "stickOutMm": 0.7,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.65,
+            "edge": "left",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -10699,6 +12342,13 @@
               "lengthMm": 0.65,
               "stickOutMm": 0.7,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.65,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.085,
@@ -10744,6 +12394,13 @@
               "stickOutMm": 0.55,
               "edge": "top"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.4
+            },
             "riseMm": {
               "top": 0.165,
               "left": 0.282
@@ -10788,7 +12445,15 @@
             "withheld": false,
             "reason": null,
             "lengthMm": 1.45,
-            "stickOutMm": 0.84,
+            "stickOutMm": 1.26,
+            "approved": false
+          },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.55,
+            "edge": "bottom",
+            "depthMm": 0.22,
             "approved": false
           },
           "up": {
@@ -10824,8 +12489,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 1.45,
-              "stickOutMm": 0.84,
+              "stickOutMm": 1.26,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.55,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.085,
@@ -10933,6 +12605,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "right",
+              "depthMm": 0.4
+            },
             "riseMm": {
               "bottom": 0.402,
               "right": 0.447
@@ -10980,6 +12659,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.3,
+            "edge": "right",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -11015,6 +12702,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.75,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.12,
@@ -11059,6 +12753,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.25,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.402,
@@ -11107,6 +12808,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.25,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -11142,6 +12851,13 @@
               "lengthMm": 1.05,
               "stickOutMm": 0.35,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.6,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.12,
@@ -11186,6 +12902,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.45,
+              "edge": "right",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.353,
@@ -11234,6 +12957,14 @@
             "stickOutMm": null,
             "approved": false
           },
+          "softness": {
+            "withheld": true,
+            "reason": "weak-edge",
+            "softMm": null,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -11267,6 +12998,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -11308,6 +13046,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.85,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.353,
@@ -11356,6 +13101,14 @@
             "stickOutMm": null,
             "approved": false
           },
+          "softness": {
+            "withheld": true,
+            "reason": "weak-edge",
+            "softMm": null,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -11389,6 +13142,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -11495,6 +13255,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
+            },
             "riseMm": {
               "bottom": 0.328,
               "right": 0.13
@@ -11542,6 +13309,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -11577,6 +13352,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.249,
@@ -11621,6 +13403,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.15,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.328,
@@ -11669,6 +13458,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.15,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -11704,6 +13501,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.249,
@@ -11748,6 +13552,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.7,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.17,
@@ -11796,6 +13607,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.05,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -11831,6 +13650,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.05,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.27,
@@ -11875,6 +13701,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.17,
@@ -11923,6 +13756,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.05,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -11958,6 +13799,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.05,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.27,
@@ -12062,6 +13910,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
+            },
             "riseMm": {
               "bottom": 0.383,
               "right": 0.191
@@ -12109,6 +13964,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -12144,6 +14007,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.101,
@@ -12188,6 +14058,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.383,
@@ -12236,6 +14113,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -12271,6 +14156,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.35,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.101,
@@ -12315,6 +14207,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.381,
@@ -12363,6 +14262,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -12398,6 +14305,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.214,
@@ -12442,6 +14356,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.381,
@@ -12490,6 +14411,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.05,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -12525,6 +14454,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.05,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.214,
@@ -12629,6 +14565,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
+            },
             "riseMm": {
               "bottom": 0.24,
               "right": 0.122
@@ -12676,6 +14619,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -12711,6 +14662,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.15,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.199,
@@ -12755,6 +14713,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "bottom": 0.24,
@@ -12803,6 +14768,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -12838,6 +14811,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.35,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.199,
@@ -12882,6 +14862,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.465,
@@ -12930,6 +14917,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -12965,6 +14960,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "bottom": 0.289,
@@ -13009,6 +15011,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.465,
@@ -13057,6 +15066,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -13092,6 +15109,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "bottom": 0.289,
@@ -13196,6 +15220,13 @@
               "stickOutMm": 0.2,
               "edge": "right"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.15,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.319,
               "right": 0.271
@@ -13243,6 +15274,14 @@
             "stickOutMm": 0.2,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.15,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -13278,6 +15317,13 @@
               "lengthMm": 0.35,
               "stickOutMm": 0.201,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "top": 0.365,
@@ -13322,6 +15368,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.15,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.319,
@@ -13370,6 +15423,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.15,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -13405,6 +15466,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.4,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "top": 0.365,
@@ -13449,6 +15517,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.108,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.201,
@@ -13497,6 +15572,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -13532,6 +15615,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "bottom": 0.124,
@@ -13576,6 +15666,13 @@
               "lengthMm": 0.35,
               "stickOutMm": 0.156,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.3,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.201,
@@ -13624,6 +15721,14 @@
             "stickOutMm": 0.785,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0,
+            "edge": null,
+            "depthMm": null,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -13659,6 +15764,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.785,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "bottom": 0.124,
@@ -13763,6 +15875,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.5,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.041,
               "right": 0.315
@@ -13818,6 +15937,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "right",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -13853,6 +15983,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.7,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.05,
@@ -13897,6 +16034,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.041,
@@ -13953,6 +16097,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -13988,6 +16143,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.5,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.05,
@@ -14032,6 +16194,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.85,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.356,
@@ -14088,6 +16257,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -14123,6 +16303,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.2,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.102,
@@ -14167,6 +16354,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.356,
@@ -14223,6 +16417,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "right",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -14258,6 +16463,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.1,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.102,
@@ -14362,6 +16574,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.5,
+              "edge": "bottom",
+              "depthMm": 0.4
+            },
             "riseMm": {
               "bottom": 0.42,
               "right": 0.262
@@ -14417,6 +16636,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -14452,6 +16682,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.76,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.5,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.196,
@@ -14496,6 +16733,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.75,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.42,
@@ -14552,6 +16796,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -14587,6 +16842,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.95,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.196,
@@ -14631,6 +16893,13 @@
               "lengthMm": 1.55,
               "stickOutMm": 0.2,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.55,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.455,
@@ -14687,6 +16956,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -14722,6 +17002,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.05,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.087,
@@ -14766,6 +17053,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.3,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.455,
@@ -14822,6 +17116,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "right",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -14857,6 +17162,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.95,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.087,
@@ -14961,6 +17273,13 @@
               "stickOutMm": 0.48,
               "edge": "right"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.15,
+              "edge": "right",
+              "depthMm": 0.4
+            },
             "riseMm": {
               "bottom": 0.145,
               "right": 0.149
@@ -15017,6 +17336,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "right",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -15052,6 +17382,13 @@
               "lengthMm": 0.35,
               "stickOutMm": 0.56,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.65,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.22,
@@ -15096,6 +17433,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.1,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.145,
@@ -15153,6 +17497,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "left",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -15186,8 +17541,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 0.4,
-              "stickOutMm": 0.84,
+              "stickOutMm": 1.02,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.7,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.22,
@@ -15232,6 +17594,13 @@
               "lengthMm": 0.35,
               "stickOutMm": 0.74,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.4,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.216,
@@ -15289,6 +17658,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "left",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -15324,6 +17704,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.15,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.116,
@@ -15368,6 +17755,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.1,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.216,
@@ -15425,6 +17819,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -15460,6 +17865,13 @@
               "lengthMm": 0.6,
               "stickOutMm": 0.42,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.1,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.116,
@@ -15564,6 +17976,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.5,
+              "edge": "bottom",
+              "depthMm": 0.4
+            },
             "riseMm": {
               "bottom": 0.157,
               "right": 0.206
@@ -15620,6 +18039,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -15655,6 +18085,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.55,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.252,
@@ -15699,6 +18136,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.3,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.157,
@@ -15756,6 +18200,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -15791,6 +18246,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.9,
+              "edge": "right",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.252,
@@ -15835,6 +18297,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.55,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.195,
@@ -15892,6 +18361,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -15927,6 +18407,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.34,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.25,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.124,
@@ -15971,6 +18458,13 @@
               "lengthMm": 0.4,
               "stickOutMm": 0.1,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.195,
@@ -16028,6 +18522,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -16063,6 +18568,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.124,
@@ -16167,6 +18679,13 @@
               "stickOutMm": 0.7,
               "edge": "right"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.9,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.313,
               "right": 0.125
@@ -16214,6 +18733,14 @@
             "stickOutMm": 0.7,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.9,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -16247,6 +18774,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -16288,6 +18822,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.2,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.313,
@@ -16336,6 +18877,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.2,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -16369,6 +18918,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -16408,6 +18964,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -16453,6 +19016,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.35,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -16488,6 +19059,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.35,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.255,
@@ -16530,6 +19108,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -16575,6 +19160,14 @@
             "stickOutMm": 0.36,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.05,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -16610,6 +19203,13 @@
               "lengthMm": 0.25,
               "stickOutMm": 0.36,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.05,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.255,
@@ -16714,6 +19314,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.05,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.134,
               "right": 0.089
@@ -16761,6 +19368,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.05,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -16794,6 +19409,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -16835,6 +19457,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.134,
@@ -16883,6 +19512,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -16916,6 +19553,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -16955,8 +19599,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 0.9,
-              "stickOutMm": 0.84,
+              "stickOutMm": 1.26,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.026,
@@ -17005,6 +19656,14 @@
             "stickOutMm": 0.05,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -17040,6 +19699,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.05,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.298,
@@ -17084,6 +19750,13 @@
               "lengthMm": 0.55,
               "stickOutMm": 0.46,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.026,
@@ -17132,6 +19805,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -17167,6 +19848,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.298,
@@ -17271,6 +19959,13 @@
               "stickOutMm": 0.36,
               "edge": "bottom"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.079,
               "right": 0.183
@@ -17327,6 +20022,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "right",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -17362,6 +20068,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.236,
@@ -17406,6 +20119,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.079,
@@ -17463,6 +20183,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "left",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -17498,6 +20229,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.65,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.236,
@@ -17542,6 +20280,13 @@
               "lengthMm": 1.3,
               "stickOutMm": 0.1,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.166,
@@ -17599,6 +20344,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "left",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -17634,6 +20390,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.2,
@@ -17678,6 +20441,13 @@
               "lengthMm": 0.35,
               "stickOutMm": 0.1,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.166,
@@ -17735,6 +20505,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -17770,6 +20551,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.2,
@@ -17874,6 +20662,13 @@
               "stickOutMm": 0.74,
               "edge": "right"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "right",
+              "depthMm": 0.4
+            },
             "riseMm": {
               "bottom": 0.213,
               "right": 0.037
@@ -17929,6 +20724,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "right",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -17964,6 +20770,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.55,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.223,
@@ -18008,6 +20821,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.213,
@@ -18064,6 +20884,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "bottom",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -18099,6 +20930,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": {
               "top": 0.223,
@@ -18141,6 +20979,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -18194,6 +21039,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "left",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -18229,6 +21085,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.073,
@@ -18271,6 +21134,13 @@
               "lengthMm": null,
               "stickOutMm": null,
               "edge": null
+            },
+            "softness": {
+              "withheld": true,
+              "reason": "weak-edge",
+              "softMm": null,
+              "edge": null,
+              "depthMm": null
             },
             "riseMm": null,
             "alphaDeg": null
@@ -18324,6 +21194,17 @@
             "sharp": false,
             "label": null
           },
+          "softness": {
+            "withheld": true,
+            "reason": "centering-side-withheld",
+            "softMm": null,
+            "edge": "right",
+            "depthMm": null,
+            "approved": false,
+            "centeringSideWithheld": true,
+            "sharp": false,
+            "label": null
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -18359,6 +21240,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.65,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.073,
@@ -18463,6 +21351,13 @@
               "stickOutMm": 0.46,
               "edge": "bottom"
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.004,
               "right": 0.374
@@ -18510,6 +21405,14 @@
             "stickOutMm": 0.46,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -18545,6 +21448,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.1,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.149,
@@ -18587,8 +21497,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 0.75,
-              "stickOutMm": 0.84,
+              "stickOutMm": 1.38,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.05,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.004,
@@ -18634,7 +21551,15 @@
             "withheld": false,
             "reason": null,
             "lengthMm": 0.75,
-            "stickOutMm": 0.84,
+            "stickOutMm": 1.38,
+            "approved": false
+          },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.05,
+            "edge": "bottom",
+            "depthMm": 0.22,
             "approved": false
           },
           "up": {
@@ -18672,6 +21597,13 @@
               "lengthMm": 1.55,
               "stickOutMm": 0.15,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.149,
@@ -18716,6 +21648,13 @@
               "lengthMm": 0.55,
               "stickOutMm": 0.15,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.293,
@@ -18764,6 +21703,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.75,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -18799,6 +21746,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.75,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.41,
@@ -18841,8 +21795,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 0.6,
-              "stickOutMm": 0.84,
+              "stickOutMm": 0.88,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.293,
@@ -18891,6 +21852,14 @@
             "stickOutMm": 0.48,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -18926,6 +21895,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.48,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.41,
@@ -19030,8 +22006,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 0.9,
-              "stickOutMm": 0.84,
+              "stickOutMm": 1.06,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.226,
@@ -19077,7 +22060,15 @@
             "withheld": false,
             "reason": null,
             "lengthMm": 0.9,
-            "stickOutMm": 0.84,
+            "stickOutMm": 1.06,
+            "approved": false
+          },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
             "approved": false
           },
           "up": {
@@ -19115,6 +22106,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.66,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.318,
@@ -19157,8 +22155,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 0.9,
-              "stickOutMm": 0.84,
+              "stickOutMm": 1.38,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.226,
@@ -19204,7 +22209,15 @@
             "withheld": false,
             "reason": null,
             "lengthMm": 0.9,
-            "stickOutMm": 0.84,
+            "stickOutMm": 1.38,
+            "approved": false
+          },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
             "approved": false
           },
           "up": {
@@ -19242,6 +22255,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.82,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.318,
@@ -19284,8 +22304,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 0.5,
-              "stickOutMm": 0.84,
+              "stickOutMm": 0.88,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.188,
@@ -19334,6 +22361,14 @@
             "stickOutMm": 0.58,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -19369,6 +22404,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.58,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.469,
@@ -19411,8 +22453,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 0.4,
-              "stickOutMm": 0.84,
+              "stickOutMm": 0.94,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.188,
@@ -19461,6 +22510,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -19496,6 +22553,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.469,
@@ -19603,6 +22667,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.25,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.38,
               "right": 0.183
@@ -19650,6 +22721,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.25,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -19685,6 +22764,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.389,
@@ -19729,6 +22815,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.35,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.38,
@@ -19777,6 +22870,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.35,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -19812,6 +22913,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.1,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.389,
@@ -19856,6 +22964,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.04,
@@ -19904,6 +23019,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -19939,6 +23062,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.084,
@@ -19983,6 +23113,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.04,
@@ -20031,6 +23168,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.25,
+            "edge": "right",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -20066,6 +23211,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.25,
+              "edge": "right",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.084,
@@ -20173,6 +23325,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.6,
+              "edge": "right",
+              "depthMm": 0.4
+            },
             "riseMm": {
               "bottom": 0.167,
               "right": 0.127
@@ -20220,6 +23379,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.6,
+            "edge": "right",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -20255,6 +23422,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.05,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.345,
@@ -20299,6 +23473,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.62,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.167,
@@ -20347,6 +23528,14 @@
             "stickOutMm": 0.62,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -20380,8 +23569,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 1.4,
-              "stickOutMm": 0.84,
+              "stickOutMm": 1.52,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.35,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.345,
@@ -20426,6 +23622,13 @@
               "lengthMm": 0.3,
               "stickOutMm": 0.84,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.85,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.145,
@@ -20474,6 +23677,14 @@
             "stickOutMm": 0.78,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.35,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -20509,6 +23720,13 @@
               "lengthMm": 0.4,
               "stickOutMm": 0.78,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.35,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.471,
@@ -20553,6 +23771,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.2,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.145,
@@ -20601,6 +23826,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.1,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -20636,6 +23869,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.1,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.471,
@@ -20743,6 +23983,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.4,
+              "edge": "right",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.146,
               "right": 0.165
@@ -20790,6 +24037,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.4,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -20825,6 +24080,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.8,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.078,
@@ -20869,6 +24131,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.25,
+              "edge": "left",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.146,
@@ -20917,6 +24186,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.25,
+            "edge": "left",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -20952,6 +24229,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.25,
+              "edge": "right",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.078,
@@ -20996,6 +24280,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.2,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.093,
@@ -21044,6 +24335,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.5,
+            "edge": "left",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -21079,6 +24378,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.5,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.319,
@@ -21123,6 +24429,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.093,
@@ -21171,6 +24484,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.9,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -21206,6 +24527,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.9,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.319,
@@ -21313,6 +24641,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.9,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.081,
               "right": 0.2
@@ -21360,6 +24695,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.9,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -21395,6 +24738,13 @@
               "lengthMm": 0.35,
               "stickOutMm": 0.58,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.459,
@@ -21439,6 +24789,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.8,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.081,
@@ -21487,6 +24844,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.8,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -21522,6 +24887,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.459,
@@ -21566,6 +24938,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.58,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.201,
@@ -21614,6 +24993,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.65,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -21649,6 +25036,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.65,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.27,
@@ -21693,6 +25087,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.201,
@@ -21741,6 +25142,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.8,
+            "edge": "right",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -21776,6 +25185,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.8,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.27,
@@ -21880,8 +25296,15 @@
               "withheld": false,
               "reason": null,
               "lengthMm": 1.5,
-              "stickOutMm": 0.84,
+              "stickOutMm": 1.06,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.093,
@@ -21927,7 +25350,15 @@
             "withheld": false,
             "reason": null,
             "lengthMm": 1.5,
-            "stickOutMm": 0.84,
+            "stickOutMm": 1.06,
+            "approved": false
+          },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1,
+            "edge": "bottom",
+            "depthMm": 0.4,
             "approved": false
           },
           "up": {
@@ -21965,6 +25396,13 @@
               "lengthMm": 0.5,
               "stickOutMm": 0.78,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.309,
@@ -22009,6 +25447,13 @@
               "lengthMm": 0.8,
               "stickOutMm": 0.64,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.093,
@@ -22057,6 +25502,14 @@
             "stickOutMm": 0.64,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 1.45,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -22092,6 +25545,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.48,
               "edge": "top"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.4,
+              "edge": "right",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.309,
@@ -22136,6 +25596,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.28,
               "edge": "right"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.45,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.249,
@@ -22184,6 +25651,14 @@
             "stickOutMm": 0.52,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.7,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -22219,6 +25694,13 @@
               "lengthMm": 0.8,
               "stickOutMm": 0.52,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.7,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.136,
@@ -22263,6 +25745,13 @@
               "lengthMm": 0.2,
               "stickOutMm": 0.32,
               "edge": "left"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.249,
@@ -22311,6 +25800,14 @@
             "stickOutMm": 0.42,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.75,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": true,
@@ -22346,6 +25843,13 @@
               "lengthMm": 0.25,
               "stickOutMm": 0.42,
               "edge": "bottom"
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.75,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.136,
@@ -22453,6 +25957,13 @@
               "stickOutMm": 0,
               "edge": null
             },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.3,
+              "edge": "bottom",
+              "depthMm": 0.22
+            },
             "riseMm": {
               "bottom": 0.117,
               "right": 0.326
@@ -22500,6 +26011,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.3,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -22535,6 +26054,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.7,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.195,
@@ -22579,6 +26105,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.25,
+              "edge": "bottom",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.117,
@@ -22627,6 +26160,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.25,
+            "edge": "bottom",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -22662,6 +26203,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.55,
+              "edge": "top",
+              "depthMm": 0.4
             },
             "riseMm": {
               "top": 0.195,
@@ -22706,6 +26254,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.55,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.117,
@@ -22754,6 +26309,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.25,
+            "edge": "left",
+            "depthMm": 0.4,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -22789,6 +26352,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.25,
+              "edge": "left",
+              "depthMm": 0.4
             },
             "riseMm": {
               "bottom": 0.119,
@@ -22833,6 +26403,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 1.1,
+              "edge": "top",
+              "depthMm": 0.22
             },
             "riseMm": {
               "top": 0.117,
@@ -22881,6 +26458,14 @@
             "stickOutMm": 0,
             "approved": false
           },
+          "softness": {
+            "withheld": false,
+            "reason": null,
+            "softMm": 0.1,
+            "edge": "bottom",
+            "depthMm": 0.22,
+            "approved": false
+          },
           "up": {
             "rounding": {
               "withheld": false,
@@ -22916,6 +26501,13 @@
               "lengthMm": 0,
               "stickOutMm": 0,
               "edge": null
+            },
+            "softness": {
+              "withheld": false,
+              "reason": null,
+              "softMm": 0.1,
+              "edge": "bottom",
+              "depthMm": 0.22
             },
             "riseMm": {
               "bottom": 0.119,
