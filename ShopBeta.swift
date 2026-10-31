@@ -347,7 +347,7 @@ struct ShopBetaReportExtras: View {
     @Binding var ledger: ScanLedger
     let serverURL: String
     var onDeleted: () -> Void = {}
-    var onChanged: (ScanLedger) -> Void = {}
+    var onChanged: (ScanLedger) -> Void = { _ in }
     @ObservedObject private var store = ShopBetaStore.shared
     @State private var name = ""
     @State private var year = ""
